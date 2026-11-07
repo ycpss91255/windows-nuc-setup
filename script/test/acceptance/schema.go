@@ -66,5 +66,15 @@ func validateSchema(data []byte) error {
 	if e := json.Unmarshal(m["Totals"], &totals); e != nil {
 		return e
 	}
-	return requiredFields(totals, "SuitesExecuted", "AssertionsExecuted", "AssertionsPassed", "AssertionsFailed", "UnexecutedSuites")
+	for _, n := range []string{"SuitesExecuted", "AssertionsExecuted", "AssertionsPassed", "AssertionsFailed", "UnexecutedSuites"} {
+		v, ok := totals[n]
+		var number int
+		if !ok || string(v) == "null" {
+			return fmt.Errorf("R02 缺少數值統計：%s", n)
+		}
+		if e := json.Unmarshal(v, &number); e != nil || number < 0 {
+			return fmt.Errorf("R02 統計必須是非負整數：%s", n)
+		}
+	}
+	return nil
 }
