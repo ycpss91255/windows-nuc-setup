@@ -18,6 +18,8 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 - [版本發布](#維護者版本發布)
 - [目錄索引](#模組資料夾索引)
 
+根目錄 README 是使用入口；[第三方來源與授權](doc/THIRD_PARTY.md)及[版本紀錄](doc/changelog/CHANGELOG.md)集中於 doc。AGENTS.md 留在根目錄供開發工具自動發現維護規範，不是一般操作說明；第三方 LICENSE 保持上游原位。
+
 ## 專案架構與依賴方向
 
 本專案對齊 base 將「交付給使用者的執行程式」與「維護儲存庫的工具」分開；Windows 執行樹保留 `core`／`modules`，不將 Linux／Docker 專用的 `dist` 照字面搬入。
@@ -62,7 +64,7 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 
 ## 概覽與適用範圍
 
-Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不納入 Git，從原始碼取得後須依 [來源包準備說明](#從原始碼準備完整工具包) 補齊再檢查。第三方來源及授權見 [THIRD_PARTY.md](THIRD_PARTY.md)。公開來源的網路 Sites 預設為空集合；請在本機維護個人規則。
+Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不納入 Git，從原始碼取得後須依 [來源包準備說明](#從原始碼準備完整工具包) 補齊再檢查。第三方來源及授權見 [第三方來源與授權](doc/THIRD_PARTY.md)。公開來源的網路 Sites 預設為空集合；請在本機維護個人規則。
 
 本工具依上方前提自動選用 Generic 或 NUC8 設定檔，Windows 模組亦提供獨立入口。依目前階段先執行 Init，再執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
 
@@ -371,7 +373,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\Export-
 - 自有程式對外使用的授權；目前沒有擅自加入 MIT 或其他授權。
 - 若要提供完整二進位下載包，先確認各第三方再散布權限；不能直接把忽略中的驅動和 EXE 全數上傳。
 
-第三方來源與各自授權見 [THIRD_PARTY.md](THIRD_PARTY.md)。儲存庫可設定 remote 並依維護者授權發布；請以目前 Git remote 與 GitHub 狀態為準。
+第三方來源與各自授權見 [第三方來源與授權](doc/THIRD_PARTY.md)。儲存庫可設定 remote 並依維護者授權發布；請以目前 Git remote 與 GitHub 狀態為準。
 
 ## Windows CI
 
@@ -413,6 +415,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\test\powershell\system
 每次 CI 將各套件 log 與 summary 上傳為 windows-test-reports artifact，保留 7 天。只上傳明確的 CI 報告資料夾，不上傳測試 fixture、帳號 answer XML、每機 Reports 或秘密。Actions 本身執行 log 的保留天數另由儲存庫設定控制，不是 YAML artifact 保留期。
 
 實機 Setup-Result.json、Setup-Progress.json、Acceptance-Result.json 與驗證結果是續跑或排錯資料，原有 Git 忽略規則保留；CI 不清理這些檔案。設定未完成時不要刪除 Setup-Result.json。雲端通過僅代表來源／隔離測試成功，不表示 NUC 硬體或 OOBE 已通過實機驗收。
+
+目前尚未取得合適的 Windows 11 x64 可丟棄測試環境，依使用者決定暫緩 System／完整安裝 E2E；未執行不等於通過。合併仍要求 PR 與 ci-rollup，暫不將尚無環境的 system-e2e 設為必要檢查。v0.2.0 保持預覽版及未完成完整驗證的聲明。
 
 ## 維護者版本發布
 
