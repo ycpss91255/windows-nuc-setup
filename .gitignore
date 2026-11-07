@@ -1,0 +1,109 @@
+# 工具與驅動二進位由既有下載/雜湊流程管理，不提交 Git。
+/Drivers/
+/Driver/
+*.zip
+*.bin
+*.7z
+*.rar
+*.exe
+*.dll
+*.msi
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+*.cab
+*.iso
+*.pdb
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.webp
+*.ttf
+*.woff
+*.woff2
+
+# 各電腦執行產物、備份與快取不得進入可重用的工具版本。
+/Package-Hashes.json
+*-Result.json
+*-Verification.json
+*-Progress.json
+*-Previous-*.json
+*-Actual-*.json
+*-Before-*.reg
+*-Before-*.txt
+*-After.txt
+*-Console*.txt
+*-Parse.txt
+*.log
+*.tmp
+*.bak
+*.old
+[Ll]ogs/
+[Cc]ache/
+DriverLogs/
+DriverCache/
+LegacyLogs/
+RegistryBackups/
+[Oo]utputs/
+[Rr]eports/
+[Tt]emp/
+[Tt]mp/
+Verification-Result.json
+Acceptance-Result.json
+
+# 私密連線資料不提交。站點範本與空設定框架可追蹤。
+.ssh/
+known_hosts*
+id_rsa*
+id_ed25519*
+id_ecdsa*
+*.key
+*.pem
+*.pfx
+*.p12
+.env
+.env.*
+*credentials*
+*passwords*
+
+# Git 自身的資料庫不進入工作樹版本。
+.git/
+
+# CustomHostsSync 每機狀態、擁有者與備份，禁止因複製執行目錄而誤提交。
+# sites.json、程式來源與測試檔仍可追蹤。
+/CustomHostsSync/runtime.json
+/CustomHostsSync/owner.json
+/CustomHostsSync/status.json
+/CustomHostsSync/last-error.json
+/CustomHostsSync/last-error.txt
+/CustomHostsSync/watcher-last-error.json
+/CustomHostsSync/watcher-last-error.txt
+/CustomHostsSync/watcher-fatal-error.json
+/CustomHostsSync/watcher-fatal-error.txt
+/CustomHostsSync/hosts*.backup
+/CustomHostsSync/ssh-config-before-*.backup
+
+# Modular package binary payload and per-machine hosts runtime.
+/Modules/Drivers/Payload/*
+!/Modules/Drivers/Payload/manifest.json
+/Modules/SSH/CustomHostsSync/runtime.json
+/Modules/SSH/CustomHostsSync/owner.json
+/Modules/SSH/CustomHostsSync/status.json
+/Modules/SSH/CustomHostsSync/*error*
+/Modules/SSH/CustomHostsSync/*.backup
+
+# Init 本機機密暫存：只追蹤可重用腳本、測試及說明。
+/Modules/Init/answer.xml
+/Modules/Init/state.json
+/Modules/Init/cleanup-result.json
+NUC-Init/
+
+# Win11Debloat 上游原始資產；不是安裝程式或每機資料。
+!/Modules/Debloat/Win11Debloat/Assets/Images/menu.png
+!/Modules/Debloat/Win11Debloat/Assets/Start/start2.bin
+
+# CI output is short-lived; never commit generated reports.
+/TestResults/

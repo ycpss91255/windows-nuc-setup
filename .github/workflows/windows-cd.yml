@@ -1,0 +1,67 @@
+name: Windows 版本發布
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: 發布前 Windows 驗證
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - name: 取得版本來源
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: 檢查版本標籤
+        shell: powershell
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ($env:RELEASE_TAG -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw '版本標籤必須是 v主版.次版.修訂，例如 v1.0.0。' }
+      - name: 執行隔離測試
+        shell: powershell
+        run: .\Tests\Run-CI.ps1 -ReportDirectory "$env:RUNNER_TEMP\release-ci-report"
+      - name: 保留測試報告七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: 發布前測試報告-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-ci-report
+          retention-days: 7
+          if-no-files-found: ignore
+
+  release:
+    name: 建立來源版本包與 GitHub Release
+    needs: validate
+    runs-on: windows-2022
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: 取得已驗證來源
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: 打包並發布
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $artifact = .\Core\Build-SourceRelease.ps1 -Version $env:RELEASE_TAG -Revision $env:SOURCE_COMMIT -OutputDirectory "$env:RUNNER_TEMP\source-release"
+          & gh release create $env:RELEASE_TAG $artifact.ZipPath $artifact.ChecksumPath --verify-tag --title "Windows NUC 設定工具 $env:RELEASE_TAG" --notes-file $artifact.NotesPath
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub Release 發布失敗；不會覆寫既有版本。' }
+          "### 版本發布完成`n- 版本：$env:RELEASE_TAG`n- 提交：$($artifact.Commit)`n- SHA256：$($artifact.SHA256)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

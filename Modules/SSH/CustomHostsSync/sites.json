@@ -1,0 +1,9 @@
+{
+  "Outputs": {
+    "SSH": true,
+    "Hosts": true
+  },
+  "PollSeconds": 10,
+  "Sites": [],
+  "Version": 1
+}

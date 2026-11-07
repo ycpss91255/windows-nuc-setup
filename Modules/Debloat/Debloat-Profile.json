@@ -1,0 +1,17 @@
+﻿{
+  "Source": "https://github.com/Raphire/Win11Debloat",
+  "Commit": "5d88bfe9ef2be5a8a643166a6400eb78a30c46ec",
+  "AppCount": 96,
+  "Features": [
+    "DisableSuggestions",
+    "DisableLockscreenTips",
+    "DisableEdgeAds",
+    "DisableSettings365Ads",
+    "DisableStartRecommended",
+    "DisableRecall",
+    "DisableEdgeAI",
+    "DisablePaintAI",
+    "DisableNotepadAI",
+    "DisableBing"
+  ]
+}
