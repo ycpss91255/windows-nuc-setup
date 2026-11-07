@@ -7,6 +7,7 @@ function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{N
 $root=[IO.Path]::GetFullPath($PackageRoot).TrimEnd('\')+'\'
 # Windows resolves case-insensitively; verify the portable Git names explicitly.
 $tracked=if(Test-Path -LiteralPath (Join-Path $PackageRoot '.git')){@(& git -C $PackageRoot -c core.quotePath=false ls-files)}else{@(Get-ChildItem $PackageRoot -Recurse -File|ForEach-Object {$_.FullName.Substring($PackageRoot.TrimEnd('\').Length+1).Replace('\','/')})}
+foreach($license in @('vendor/golang.org/x/net/LICENSE','vendor/golang.org/x/net/PATENTS')){Assert ($tracked -ccontains $license) ('official HTML parser license retains upstream spelling: '+$license)}
 foreach($path in $tracked){
  if($path -cmatch '^modules/debloat/win11debloat/'){continue}
  Assert ((Split-Path $path -Leaf) -cmatch '^[a-z0-9_.]+$') ('owned filename is lowercase snake_case: '+$path)
