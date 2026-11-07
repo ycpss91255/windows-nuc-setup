@@ -23,7 +23,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 檢查版本標籤
-        shell: powershell
+        shell: pwsh
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
@@ -53,7 +53,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 打包並發布
-        shell: powershell
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
