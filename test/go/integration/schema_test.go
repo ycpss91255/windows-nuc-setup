@@ -34,7 +34,14 @@ func TestXMLNamespacesAndNullTotals(t *testing.T) {
 	}
 }
 
-func TestXMLRejectsSecondRoot(t *testing.T){m:=files(t,os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"));r:=decode(t,m);m["unit.svg"]=append(m["unit.svg"],[]byte(`<svg xmlns="http://www.w3.org/2000/svg"/>`)...);if _,e:=a.ValidateReport(reader(m),r.Commit,r.RunUrl,false);e==nil{t.Fatal("second XML root accepted")}}
+func TestXMLRejectsSecondRoot(t *testing.T) {
+	m := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+	r := decode(t, m)
+	m["unit.svg"] = append(m["unit.svg"], []byte(`<svg xmlns="http://www.w3.org/2000/svg"/>`)...)
+	if _, e := a.ValidateReport(reader(m), r.Commit, r.RunUrl, false); e == nil {
+		t.Fatal("second XML root accepted")
+	}
+}
 
 func TestMissingBooleanEvidenceRejected(t *testing.T) {
 	original := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))

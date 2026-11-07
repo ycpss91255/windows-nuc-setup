@@ -12,9 +12,13 @@ import (
 
 func xmlNamespace(data []byte, namespace string) error {
 	d := xml.NewDecoder(bytes.NewReader(data))
+	depth, roots := 0, 0
 	for {
 		token, e := d.Token()
 		if e == io.EOF {
+			if roots != 1 || depth != 0 {
+				return fmt.Errorf("R04/R05 XML 必須恰有一個根節點")
+			}
 			return nil
 		}
 		if e != nil {
@@ -22,6 +26,22 @@ func xmlNamespace(data []byte, namespace string) error {
 		}
 		if start, ok := token.(xml.StartElement); ok && start.Name.Space != namespace {
 			return fmt.Errorf("R04/R05 XML 節點命名空間不符：%s", start.Name.Local)
+		}
+		switch value := token.(type) {
+		case xml.StartElement:
+			if depth == 0 {
+				roots++
+				if roots > 1 {
+					return fmt.Errorf("R04/R05 XML 包含多個根節點")
+				}
+			}
+			depth++
+		case xml.EndElement:
+			depth--
+		case xml.CharData:
+			if depth == 0 && strings.TrimSpace(string(value)) != "" {
+				return fmt.Errorf("R04/R05 XML 根節點外包含資料")
+			}
 		}
 	}
 }
