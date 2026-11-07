@@ -1,5 +1,12 @@
 ﻿# 迭代紀錄
 
+## 2026-11-07 — 統一 Windows 設定工具名稱與底線發布格式
+
+- 對外名稱改為「Windows 設定工具」，儲存庫名稱為 windows_setup；來源發布包使用 windows_setup_vX.Y.Z_source.zip，ZIP 根目錄為 windows_setup/。
+- 同步 README、操作與發布文件、CD 版本標題及封裝測試；本機資料夾可以改名，不更改既有腳本識別、ProgramData 狀態路徑或續跑紀錄。
+- 明確區分通用 Windows 模組與現有 NUC8i7HV/HN 一鍵硬體設定檔。保留主流程及驅動主機板限制，沒有宣稱其他硬體已支援。
+- Windows PowerShell 5.1 隔離測試通過：Layout 297、Init 29、輸入法 19、來源發布 12、Hosts/SSH 9 項及語法檢查；未執行實機設定，未更動舊 USB。
+- 更新本機 Package-Hashes.json，包含既有 Autologon 與驅動檔案，排除 Git、報告及雜湊清單本身。
 ## 2026-11-07 — 公開來源規則與版本發布流程
 
 - 公開來源的網路 Sites 預設為空集合，移除特定場域的別名例外；保留 global 規則與 Hosts／SSH 各自獨立的同步功能，使用者可在本機設定實際站點。

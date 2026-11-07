@@ -1,10 +1,10 @@
-﻿# NUC Windows 重裝後完整操作步驟
+﻿# Windows 設定工具：重裝後完整操作步驟
 
-Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不納入 Git，從原始碼取得後須依 [GitHub 準備說明](Docs/GITHUB.md) 補齊再檢查。第三方來源及授權見 [THIRD_PARTY.md](THIRD_PARTY.md)。本儲存庫尚未發布；現有網路規則及提交歷史仍須在公開前做隱私處理。
+Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不納入 Git，從原始碼取得後須依 [GitHub 準備說明](Docs/GITHUB.md) 補齊再檢查。第三方來源及授權見 [THIRD_PARTY.md](THIRD_PARTY.md)。公開來源的網路 Sites 預設為空集合；請在本機維護個人規則。
 
-適用於本工具包支援的 Intel NUC8i7HV／HN 電腦。依目前階段先執行 Init，再執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
+工具名稱為 Windows 設定工具，包含可獨立執行的 Windows 設定模組；目前一鍵流程與內建驅動設定檔仍限定 Intel NUC8i7HV／HN，主機板檢查會拒絕其他機型，尚未完成所有硬體通用化。依目前階段先執行 Init，再執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
 
-Downloads 內的 `Windows-NUC-Setup` 是自包含主版本。要換電腦使用時，完整複製這個資料夾（包含內建驅動）到任意可寫入、非桌面的路徑即可，不強制放在 Downloads。USB 只是可選的搬運媒介；舊 USB 副本不會自動更新，也不作為本輪主版本。
+目前 Downloads 內的 `Windows-NUC-Setup` 是自包含主版本；資料夾可以改名（例如 `windows_setup`），腳本依所在位置解析。要換電腦使用時，完整複製這個資料夾（包含內建驅動）到任意可寫入、非桌面的路徑即可，不強制放在 Downloads。USB 只是可選的搬運媒介；舊 USB 副本不會自動更新，也不作為本輪主版本。
 
 完整流程需要你允許管理員權限、輸入現有帳號密碼，以及依提示手動重新開機，並非完全無人值守。腳本不會自行重新開機或關機。
 
@@ -16,7 +16,7 @@ Downloads 內的 `Windows-NUC-Setup` 是自包含主版本。要換電腦使用�
 
 1. 保持離線，按 `Ctrl+Shift+F3`（部分鍵盤需加 Fn），Windows 會重新啟動進入「稽核模式」。這一步不會重新安裝 Windows。若已按 Shift+F10 開啟命令窗，可先關閉它再按快捷鍵。
 2. 進入內建 Administrator 桌面後，按「取消」關閉自動出現的「系統準備工具」視窗，避免兩個 Sysprep 同時執行。
-3. 打開已完整複製的 Windows-NUC-Setup 資料夾，雙擊 `Init.cmd`。依畫面確認這是剛安裝系統的稽核模式，再輸入要建立的本機帳號、密碼與確認密碼。
+3. 打開已完整複製的 windows_setup 資料夾，雙擊 `Init.cmd`。依畫面確認這是剛安裝系統的稽核模式，再輸入要建立的本機帳號、密碼與確認密碼。
 4. Init 使用 Windows answer file 建立本機管理員並準備返回 OOBE。成功後依提示手動重新開機。不要在此稽核帳號執行 Windows.cmd。
 5. 完成仍顯示的地區、隱私等設定，以新帳號登入。此流程不替你同意授權或隱私選項。
 
@@ -40,10 +40,10 @@ Init 成功後，依下方步驟執行 Windows.cmd。SSH 為可重複執行模�
 
 ## 2. 完整複製工具包
 
-從主版本的 Downloads 複製整個 `Windows-NUC-Setup` 資料夾到目標電腦。可放在該電腦的 Downloads 或其他可寫入位置，不限磁碟代號，也不強制資料夾位於某個使用者的家目錄。
+從主版本的 Downloads 複製整個 `windows_setup` 資料夾到目標電腦。可放在該電腦的 Downloads 或其他可寫入位置，不限磁碟代號，也不強制資料夾位於某個使用者的家目錄。
 
 ```text
-Windows-NUC-Setup\
+windows_setup\
 ├─ Init.cmd                    初始帳號／SSH
 ├─ Windows.cmd                 正式帳號桌面設定
 ├─ README.md                   本文件
@@ -90,7 +90,7 @@ Windows-NUC-Setup\
 
 ## 5. 執行重開機後驗收
 
-1. 開啟這臺電腦先前執行的同一份 `Windows-NUC-Setup` 資料夾。
+1. 開啟這臺電腦先前執行的同一份 `windows_setup` 資料夾。
 2. 在此資料夾的終端執行 `.\Windows.cmd -AfterRestart`，允許管理員權限；也可雙擊 `Core\Verify-AfterRestart.cmd`。
 3. 等待本輪結束。這個入口會重試同一臺電腦、同一帳號先前失敗且可重試的模組，重新掃描更新，再做清理及驗證。
 4. 若更新或驗收提示仍需重新開機，等本輪結束後手動重開，再執行一次 `Windows.cmd -AfterRestart`。

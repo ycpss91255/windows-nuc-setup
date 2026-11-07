@@ -1,7 +1,9 @@
-﻿新版入口：Init.cmd（帳號與 SSH 初始化）；Windows.cmd（登入後 19 個模組）。完整新流程見根目錄 README.md。
+﻿產品名稱：Windows 設定工具。通用模組可獨立執行；目前一鍵預設及內建驅動仍限定 NUC8i7HV/HN，其他主機板會被拒絕，並非所有硬體已驗證。
+
+新版入口：Init.cmd（帳號與 SSH 初始化）；Windows.cmd（登入後 19 個模組）。完整新流程見根目錄 README.md。
 內部依功能存於 Modules；共用流程存於 Core；整體結果存於 Reports。
 
-NUC8i7HV/HN Windows 一鍵設定工具
+Windows 設定工具（目前預設 NUC8i7HV/HN 硬體設定檔）
 更新：2026-11-07，共19個模組
 
 執行前
@@ -9,7 +11,7 @@ NUC8i7HV/HN Windows 一鍵設定工具
 - 使用者名稱、家目錄與 SID 依目前帳號取得，不固定 nuc。請勿以另一個管理員帳號代替目標使用者執行。
 - 完整流程需要連網下載 Windows Update，以及尚未安裝的 OpenSSH 元件。
 - 請先設定每臺電腦唯一的名稱，例如 NUC-001、NUC-002。
-- Downloads 的 Windows-NUC-Setup 是自包含主版本；整包複製到任意可寫入、非桌面路徑即可使用，不強制在 Downloads。
+- 目前 Downloads 的 Windows-NUC-Setup 是自包含主版本；資料夾可改名為 windows_setup；整包複製到任意可寫入、非桌面路徑即可使用，不強制在 Downloads。
 - 4 個驅動封存檔與 manifest.json 已在 Modules\Drivers\Payload，不依賴外部 Driver 資料夾。請保留整個目錄與隱藏的 .git。
 - 桌面清理會永久刪除使用者桌面和共用桌面的普通檔案、資料夾及捷徑。執行前請自行取走需要的資料。
 - 四個桌面圖示範本以繁體中文 Windows、1920×1080、100% 縮放為準。

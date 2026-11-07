@@ -2,7 +2,7 @@
 
 ## 兩種取得方式
 
-目前 Downloads 的完整 `Windows-NUC-Setup` 資料夾包含驅動與必要工具，可依根目錄 README 整包複製使用。
+目前 Downloads 的完整工具包資料夾（現名 `Windows-NUC-Setup`，可改名）包含驅動與必要工具，可依根目錄 README 整包複製使用。
 
 Git 儲存庫則只保存程式、文件、範本、測試及必要的上游來源資產。**從 GitHub clone 或下載原始碼 ZIP，不等於取得完整可執行工具包。** GitHub 上的程式也不會自動下載所有二進位。
 

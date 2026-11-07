@@ -27,18 +27,18 @@ foreach($required in @('Init.cmd','Windows.cmd','README.md','Docs/GITHUB.md')){
 }
 $output=[IO.Path]::GetFullPath($OutputDirectory)
 if(-not(Test-Path -LiteralPath $output)){New-Item -ItemType Directory -Path $output|Out-Null}
-$stem='Windows-NUC-Setup-'+$Version+'-source'
+$stem='windows_setup_'+$Version+'_source'
 $zip=Join-Path $output ($stem+'.zip')
 $checksum=Join-Path $output ($stem+'.sha256')
 $notes=Join-Path $output 'RELEASE-NOTES.md'
 foreach($destination in @($zip,$checksum,$notes)){if(Test-Path -LiteralPath $destination){throw ('目的檔案已存在，未覆寫：'+$destination)}}
-& git -C $PackageRoot archive --format=zip ('--prefix=Windows-NUC-Setup/') ('--output='+$zip) $commit
+& git -C $PackageRoot archive --format=zip ('--prefix=windows_setup/') ('--output='+$zip) $commit
 if($LASTEXITCODE -ne 0){throw '來源 ZIP 建立失敗。'}
 $hash=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 $utf8=New-Object Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($checksum,($hash+'  '+[IO.Path]::GetFileName($zip)+"`n"),$utf8)
 $body=@"
-# Windows NUC 設定工具 $Version
+# Windows 設定工具 $Version
 
 發布流程會先執行 Windows CI 的語法、路徑與隔離測試；實際結果以對應 Actions 紀錄為準。本機單獨打包不代表已通過 CI。
 

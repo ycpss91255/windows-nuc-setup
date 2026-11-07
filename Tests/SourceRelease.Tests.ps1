@@ -17,12 +17,13 @@ Invoke-FixtureGit @('commit','--quiet','-m','測試來源')
 [IO.File]::WriteAllText((Join-Path $repo 'local-only.txt'),'untracked fixture')
 $result=& $builder -Version 'v1.2.3' -PackageRoot $repo -OutputDirectory $out
 Assert (Test-Path -LiteralPath $result.ZipPath) '來源 ZIP 已建立'
+Assert ([IO.Path]::GetFileName($result.ZipPath) -eq 'windows_setup_v1.2.3_source.zip') '來源包使用通用 windows_setup 名稱'
 Assert ((Get-FileHash -LiteralPath $result.ZipPath).Hash.ToLowerInvariant() -eq $result.SHA256) 'ZIP SHA256 與結果一致'
 Assert ([IO.File]::ReadAllText($result.ChecksumPath).StartsWith($result.SHA256+'  ')) '校驗清單含正確 SHA256'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip=[IO.Compression.ZipFile]::OpenRead($result.ZipPath)
 try{$entries=@($zip.Entries|ForEach-Object {$_.FullName})}finally{$zip.Dispose()}
-Assert ('Windows-NUC-Setup/Init.cmd' -in $entries) 'ZIP 有單一完整工具包根目錄'
+Assert ('windows_setup/Init.cmd' -in $entries) 'ZIP 有單一完整工具包根目錄'
 Assert (-not($entries -match 'local-only|\.git/')) '不包含未追蹤檔案與 Git metadata'
 Assert ($result.FileCount -eq 4) '僅打包指定提交的四個來源檔'
 Assert ([IO.File]::ReadAllText($result.NotesPath).Contains('來源包')) '版本說明清楚標示來源包'

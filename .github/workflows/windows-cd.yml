@@ -1,4 +1,4 @@
-name: Windows 版本發布
+﻿name: Windows 版本發布
 
 on:
   push:
@@ -62,6 +62,6 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $artifact = .\Core\Build-SourceRelease.ps1 -Version $env:RELEASE_TAG -Revision $env:SOURCE_COMMIT -OutputDirectory "$env:RUNNER_TEMP\source-release"
-          & gh release create $env:RELEASE_TAG $artifact.ZipPath $artifact.ChecksumPath --verify-tag --title "Windows NUC 設定工具 $env:RELEASE_TAG" --notes-file $artifact.NotesPath
+          & gh release create $env:RELEASE_TAG $artifact.ZipPath $artifact.ChecksumPath --verify-tag --title "Windows 設定工具 $env:RELEASE_TAG" --notes-file $artifact.NotesPath
           if ($LASTEXITCODE -ne 0) { throw 'GitHub Release 發布失敗；不會覆寫既有版本。' }
           "### 版本發布完成`n- 版本：$env:RELEASE_TAG`n- 提交：$($artifact.Commit)`n- SHA256：$($artifact.SHA256)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
