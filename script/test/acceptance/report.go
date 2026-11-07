@@ -1,12 +1,30 @@
 package acceptance
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 )
+
+func xmlNamespace(data []byte, namespace string) error {
+	d := xml.NewDecoder(bytes.NewReader(data))
+	for {
+		token, e := d.Token()
+		if e == io.EOF {
+			return nil
+		}
+		if e != nil {
+			return e
+		}
+		if start, ok := token.(xml.StartElement); ok && start.Name.Space != namespace {
+			return fmt.Errorf("R04/R05 XML 節點命名空間不符：%s", start.Name.Local)
+		}
+	}
+}
 
 type Reader func(string) ([]byte, error)
 type Assertion struct {
@@ -52,6 +70,9 @@ func BadgeStatus(r Report, name string) string {
 	return status
 }
 func ValidateSVG(data []byte, r Report, name string) error {
+	if e := xmlNamespace(data, "http://www.w3.org/2000/svg"); e != nil {
+		return e
+	}
 	var s struct {
 		XMLName xml.Name
 		Height  string `xml:"height,attr"`
@@ -161,6 +182,9 @@ func ValidateReport(read Reader, sha, run string, main bool) (Report, error) {
 	}
 	data, e = get("junit.xml")
 	if e != nil {
+		return r, e
+	}
+	if e = xmlNamespace(data, ""); e != nil {
 		return r, e
 	}
 	if e = xml.Unmarshal(data, &junit); e != nil {
