@@ -5,7 +5,9 @@
 [![Unit](https://ycpss91255.github.io/windows_setup/main/unit.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
 [![Integration](https://ycpss91255.github.io/windows_setup/main/integration.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
 [![System 狀態](https://ycpss91255.github.io/windows_setup/main/system.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
-[![Coverage 狀態](https://ycpss91255.github.io/windows_setup/main/coverage.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
+[![PowerShell Coverage 狀態](https://ycpss91255.github.io/windows_setup/main/coverage.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
+
+[![Go statement coverage](https://ycpss91255.github.io/windows_setup/main/go_coverage.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/main/index.html)
 
 [最新已發布 main 報表](https://ycpss91255.github.io/windows_setup/) · [Actions 與七天報告附件](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
 
@@ -516,7 +518,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_
 
 正式測試證據只上傳去識別的 `public` 報表子目錄，附件保留 7 天；原始程序 log 留在 runner 暫存，不公開至 Pages。main 推送會更新公開 HTML／SVG（包含測試失敗的有效報表），PR 只有短期附件；main 首頁呈現最新分支報表；版本頁由各 Release 保存的品質 JSON 快照重建，保留原 Version／Commit／MeasuredAt。舊版缺少快照時顯示 Unknown，不拿新測試補寫舊版證據。實機 reports 仍獨立保留，不納入 Git 或 Pages。
 
-Coverage 顯示 `NotMeasured`：目前沒有對 PowerShell 原始碼作行／分支執行量測，斷言數不是覆蓋率。base 的 coverage badge 來源是實際 kcov 報告，發布徽章目前仍是 release 手動生成；本專案採相同的證據原則，沒有照搬 Bash 工具或宣稱已具備相同覆蓋率能力。System／完整 E2E 保持 `Deferred / NotRun`，不計入已通過項目。
+Go 徽章顯示最近一次成功部署 main 的實際 **statement coverage**，不是手填百分比或全儲存庫覆蓋率。量測涵蓋所有自有 Go 正式套件及 CLI；完整測試使用 `-coverpkg=./script/test/...`，命令列子程序另外 instrumentation，合併原始計數後以 `Covered × 100 >= TotalStatements × 80` 判定 CI 門檻，不以四捨五入後的顯示值過關。第三方 vendor、測試程式、PowerShell 與 Windows 系統操作不在 Go 分母內。
+
+[Go 量測 JSON](https://ycpss91255.github.io/windows_setup/main/go_coverage.json)與[原始合併 profile](https://ycpss91255.github.io/windows_setup/main/go_coverage.out)可下載核對數量、套件範圍、提交、執行來源、量測時間及 SHA256。新量測成功部署前，不宣稱公開頁已達門檻；徽章與來源以已部署產物為準。歷史 Release 沒有 Go 量測時維持未量測，不回填目前結果；既有不可變 Release 附件格式不變。
+
+PowerShell `Coverage` 與既有 `coverage.svg` 仍顯示 `NotMeasured`：目前沒有對 PowerShell 原始碼作行／分支執行量測，斷言數不是覆蓋率。沿用 base 由真實量測產生徽章的原則及 flat-square 外觀，不把 Go 百分比套用為 PowerShell 或整體覆蓋率。System／完整 E2E 保持 `Deferred / NotRun`，不計入已通過項目。
 
 ### 測試分層與本機入口
 
@@ -564,9 +570,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\docker\docker.p
 
 直接執行 Go 測試時，在完整 checkout 根目錄使用 `go test -mod=vendor -count=1 ./...`，並將 `WINDOWS_SETUP_ARTIFACT_DIR` 指向 PS5.1 產生的 public 報告、`WINDOWS_SETUP_PORTAL_FIXTURE_DIR` 指向 `script/test/create_portal_fixture.ps1` 產生的 portal 目錄。兩者缺少即失敗，不以跳過掩蓋缺證據；上述 Docker `test` 入口會自動準備這些輸入。Go 單元及整合測試包含原有 21 項驗收契約與新增解析／命令列邊界案例，結果獨立於 PS5.1 報表數量。
 
-容器映像提供 Windows PowerShell 5.1、固定版本且核對雜湊的 MinGit 與 Go 1.27.3。一般本機未設定 GitHub 執行來源時，PS5.1 仍測試目前真實 checkout，保留其 Clean／Dirty 狀態；Go 需求合約使用另外明確標示 Synthetic 的暫存樣本，不改寫或冒充本機正式報告。CI 則必須以本次真實報告驗收；GitHub 提交、儲存庫、執行 ID、ref 類型與 ref 名稱這五項只要部分存在或格式錯誤就停止，不會降級成合成證據通過。
+容器映像提供 Windows PowerShell 5.1、固定版本且核對雜湊的 MinGit 與 Go 1.27.3。一般本機未設定 GitHub 執行來源時，PS5.1 仍測試目前真實 checkout，保留其 Clean／Dirty 狀態；Go 需求合約使用另外明確標示 Synthetic 的暫存樣本，不改寫或冒充本機正式報告。本機模式不產生已通過 80% 的 CI 覆蓋率證據。CI 則必須以本次真實報告驗收，執行 Go 量測並通過 80% 門檻；GitHub 提交、儲存庫、執行 ID、ref 類型與 ref 名稱這五項只要部分存在或格式錯誤就停止，不會降級成合成證據通過。
 
-CI 的 `docker-tests` 使用真正的 `windows-2022` runner 執行 Docker build/run；容器內執行全部 PS5.1 單元／隔離整合測試，再產生明確的合成首頁樣本並執行 Go 需求正負例與產物驗收。主機另核對容器報告中的提交、執行來源、測試狀態與環境，不以主機驗收代替容器內 Go 執行。PS5.1 報表的套件／斷言統計不把 Go 驗收數量混入；Go 結果與實際退出碼另列於 Docker 工作日誌。`ci-rollup` 同時要求主機測試、需求驗收及 Docker 測試成功。在 [Actions](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml) 開啟該次執行，於 Artifacts 下載 `docker-test-reports-執行ID-重試次數`，解壓後開 `index.html`；這是容器的獨立 public 報告，只保留七天。原始 logs 不上傳。Pages 仍展示 Windows runner 的報告，與明確標記 Windows container 的短期報告分開；Docker 門檻未通過時不發布新的 Pages 報表，避免混淆兩個環境的證據。
+CI 的 `docker-tests` 使用真正的 `windows-2022` runner 執行 Docker build/run；容器內執行全部 PS5.1 單元／隔離整合測試，再產生明確的合成首頁樣本並執行 Go 需求正負例、全套 Go 覆蓋率量測與產物驗收。主機另核對容器報告中的提交、執行來源、測試狀態與環境，不以主機驗收代替容器內 Go 執行。PS5.1 報表的套件／斷言統計不把 Go 驗收數量混入；Go 結果與實際退出碼另列於 Docker 工作日誌。`ci-rollup` 同時要求主機測試、需求驗收及 Docker 測試成功。在 [Actions](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml) 開啟該次執行，於 Artifacts 下載 `docker-test-reports-執行ID-重試次數`，解壓後開 `index.html`；這是容器的獨立 public 報告，只保留七天。原始 logs 不上傳。Pages 仍展示 Windows runner 的報告，與明確標記 Windows container 的短期報告分開；Docker 門檻未通過時不發布新的 Pages 報表，避免混淆兩個環境的證據。
 
 ### 實機 system 驗收與完整安裝驗證
 
