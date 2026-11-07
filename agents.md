@@ -38,3 +38,10 @@
 - core／modules 是 Windows 交付執行樹；script/test、script/release、script/package 是倉庫維護工具；test/powershell 只放分層案例。
 - 依賴只能由維護工具與案例指向 runtime；runtime 不得引用 script、test、.github。不要求一般使用者安裝倉庫測試或發布工具。
 - 新建自有目錄使用小寫與底線（例如 driver_logs）。ProgramData 既有 NUC8-Setup、NUC-Init、CustomHostsSync 及排程工作識別保留，避免破壞續跑與既有部署；第三方目錄不自行改寫。
+
+## 使用者指定的實作與驗收流程
+- 所有實作交由子代理執行；主代理負責驗證與協調。
+- 全部變更 freeze 後，由主代理與未參與實作的獨立代理依完整需求重新審查，包含原始碼、產物與公開部署，不沿用舊版 PASS 當作新版通過。
+- 發現問題交回實作代理修正，再由主代理與獨立代理重新完整審查；兩者通過才能宣告本輪 goal 完成。
+- CI 需求門檻和部署後 HTTPS 驗收自動執行；人工視覺與完整 Windows System／E2E 未執行時必須明示，不用程式關鍵字檢查替代。
+- 本輪完成後主動尋找具體優化，依使用者已要求的後續流程另開 goal 處理；不得因此把尚未完成的本輪需求標為完成。

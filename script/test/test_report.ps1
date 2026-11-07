@@ -54,14 +54,16 @@ function Write-TestReports {
  $md+=@('','Version: '+$Version+' / '+$RefType+' '+$RefName+' / Commit: '+$report.Commit+' / source: '+$SourceState+' / TestScope: '+$Layer+' / MeasuredAt: '+$MeasuredAt+' / Environment: '+$report.Environment,'')
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'summary.md'),($md -join "`n"),$encoding)
  $conclusion=if(-not $ok){'本次測試未通過'}elseif($Layer -ne 'All'){'僅所選層級通過，未執行的層級沒有結論'}else{'單元與隔離整合測試通過；完整安裝尚未驗證'}
- $body='<h1>Windows 設定工具 · 品質報表</h1><h2>'+[Net.WebUtility]::HtmlEncode($conclusion)+'</h2>'
- $body+='<p><strong>'+[Net.WebUtility]::HtmlEncode($RefType+' '+$RefName)+'</strong> · 宣告版本 '+[Net.WebUtility]::HtmlEncode($Version)+'</p><p>此工具提供 Windows 初始化與設定；GitHub 下載是來源包，需另備 Autologon，驅動包可選且僅支援對應 NUC 機型。</p>'
+ $body='<h1>Windows 設定工具｜本次檢查明細</h1><h2>'+[Net.WebUtility]::HtmlEncode($conclusion)+'</h2><p>檢查範圍是程式邏輯，以及隔離環境中的模組配合；完整 Windows 安裝、重開機與真實硬體設定尚未實測。</p><p><a href="https://github.com/ycpss91255/windows_setup/blob/main/readme.md">查看 USB 安裝與使用步驟</a></p>'
+ $scopeText=if($RefType -eq 'Release'){'已發布版本 '+$Version}else{'目前分支 '+$RefName+' 的程式檢查，不是舊發布版本的測試結果'}
+ $body+='<p><strong>'+[Net.WebUtility]::HtmlEncode($scopeText)+'</strong><br>程式提交：'+[Net.WebUtility]::HtmlEncode($report.Commit.Substring(0,[Math]::Min(7,$report.Commit.Length)))+' · 檢查時間（UTC）：'+[Net.WebUtility]::HtmlEncode($MeasuredAt)+'</p><p>此工具提供 Windows 初始化與設定；GitHub 下載是來源包，需另備 Autologon，驅動包可選且僅支援對應 NUC 機型。</p>'
  if($RefType -eq 'Release'){$body+='<p><a href="https://github.com/ycpss91255/windows_setup/releases/tag/'+$Version+'">此版本 Release 說明與附件</a> · <a href="https://github.com/ycpss91255/windows_setup/archive/refs/tags/'+$Version+'.zip">下載此版本原始碼 ZIP（非完整安裝包）</a></p>'}
- $body+='<p><a href="https://github.com/ycpss91255/windows_setup/releases">版本說明與來源下載</a> · <a href="summary.json">完整 JSON 證據</a> · <a href="junit.xml">JUnit 結果</a> · <a href="summary.md">文字摘要</a></p>'
- $body+='<dl><dt>Version</dt><dd>'+[Net.WebUtility]::HtmlEncode($Version)+'</dd><dt>Commit</dt><dd>'+[Net.WebUtility]::HtmlEncode($report.Commit)+'</dd><dt>TestScope</dt><dd>'+[Net.WebUtility]::HtmlEncode($Layer)+' · Unit / Integration</dd><dt>MeasuredAt (UTC)</dt><dd>'+[Net.WebUtility]::HtmlEncode($MeasuredAt)+'</dd><dt>Environment / Source</dt><dd>'+[Net.WebUtility]::HtmlEncode($Environment+' / '+$SourceState)+'</dd></dl>'
+ if($RefType -ne 'Release' -and $report.Commit -match '^[a-fA-F0-9]{40}$'){$body+='<p><a href="https://github.com/ycpss91255/windows_setup/archive/'+$report.Commit+'.zip">下載本次提交原始碼（需另備工具）</a>：不含 Autologon 或獨立驅動包。</p>'}
+ $body+='<p><a href="summary.json">完整 JSON 證據</a> · <a href="junit.xml">JUnit 結果</a> · <a href="summary.md">文字摘要</a></p>'
+ $body+='<details><summary>技術資訊與來源提交</summary><dl><dt>程式版本宣告值（分支報告不代表同名發布版已驗證）</dt><dd>'+[Net.WebUtility]::HtmlEncode($Version)+'</dd><dt>來源提交（Commit）</dt><dd>'+[Net.WebUtility]::HtmlEncode($report.Commit)+'</dd><dt>測試範圍</dt><dd>'+[Net.WebUtility]::HtmlEncode($Layer)+' · Unit / Integration</dd><dt>檢查時間（UTC）</dt><dd>'+[Net.WebUtility]::HtmlEncode($MeasuredAt)+'</dd><dt>環境與來源狀態</dt><dd>'+[Net.WebUtility]::HtmlEncode($Environment+' / '+$SourceState)+'</dd></dl></details>'
  if($report.RunUrl){$body+='<p><a href="'+$report.RunUrl+'">此提交的 GitHub Actions 執行紀錄</a></p>'}
- $body+='<h2>本次變更</h2><ul>';if(@($Changes).Count){foreach($change in $report.Changes){$body+='<li>'+[Net.WebUtility]::HtmlEncode($change)+'</li>'}}else{$body+='<li>Unknown：沒有提供對應版本的變更摘要。</li>'};$body+='</ul>'
- $body+='<h2>已知限制與比較</h2><ul><li>System / 完整安裝 E2E：Deferred / NotRun，尚無新裝至重開機的完整驗證。</li><li>Coverage：NotMeasured，尚未量測程式碼執行覆蓋率。</li><li>Test Diff：Unknown，沒有已驗證的基準比較，不表示零退步；Flaky：Unknown，不表示零不穩定測試。</li><li>Windows 部署：N/A，本頁發布不等於已在你的電腦完成安裝。</li></ul><h2>技術詳情</h2>'
+ $body+='<details><summary>本次維護變更摘要</summary><ul>';if(@($Changes).Count){foreach($change in $report.Changes){$body+='<li>'+[Net.WebUtility]::HtmlEncode($change)+'</li>'}}else{$body+='<li>目前沒有這個版本的變更摘要。</li>'};$body+='</ul></details>'
+ $body+='<h2>尚未驗證的部分</h2><ul><li>完整安裝：尚未在全新 Windows 上走完初始化、套用設定與重開機驗收。</li><li>程式碼覆蓋率：尚未量測，沒有可提供的百分比。</li><li>版本差異與測試穩定性：尚無足夠紀錄可判斷，不代表沒有退步或不穩定情況。</li><li>這份報告不代表已在你的電腦完成安裝。</li></ul><h2>各項檢查結果</h2>'
  foreach($check in $safe){$body+='<details><summary>'+[Net.WebUtility]::HtmlEncode($check.Layer+' · '+$check.Name+' · '+$check.Status)+'</summary><p>'+[Net.WebUtility]::HtmlEncode([string]$check.DurationSeconds)+' 秒</p><ul>';foreach($assertion in $check.Assertions){$body+='<li>'+$(if($assertion.Passed){'PASS'}else{'FAIL'})+' · '+[Net.WebUtility]::HtmlEncode($assertion.Name)+'</li>'};$body+='</ul></details>'}
  $html='<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Windows 測試報表</title><style>body{font:16px system-ui;max-width:1100px;margin:32px auto;padding:0 20px;color:#17202a;background:#f7f9fb}details{background:white;padding:16px;margin:16px 0;border:1px solid #dde3ea;border-radius:8px}li{margin:5px 0}</style><body>'+$body+'</body></html>'
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'index.html'),$html,$encoding)
@@ -75,11 +77,14 @@ function Write-TestReports {
  }
  $xml.Save((Join-Path $OutputDirectory 'junit.xml'))
  foreach($badge in @('unit','integration','system','coverage')){
-  $label=$badge+' '+$RefType;$color='#777';$status='not measured'
-  if($badge -in @('unit','integration')){$rows=@($safe|Where-Object {$_.Layer -eq $badge -and $_.Executed});$status=if(-not $rows.Count){'not run'}elseif(@($rows|Where-Object {-not $_.Passed}).Count){'failed'}else{'passed'};$color=if($status -eq 'passed'){'#22863a'}elseif($status -eq 'failed'){'#b31d28'}else{'#777'}}
-  if($badge -eq 'system'){$status='deferred / not run'}
+  $label=$badge+' '+$RefType.ToLowerInvariant();$color='#9f9f9f';$status='not measured'
+  if($badge -in @('unit','integration')){$rows=@($safe|Where-Object {$_.Layer -eq $badge -and $_.Executed});$status=if(-not $rows.Count){'not run'}elseif(@($rows|Where-Object {-not $_.Passed}).Count){'failed'}else{'passed'};$color=if($status -eq 'passed'){'#4c1'}elseif($status -eq 'failed'){'#e05d44'}else{'#9f9f9f'}}
+  if($badge -eq 'system'){$status='not run'}
   $title=[Security.SecurityElement]::Escape($label+': '+$status)
-  $svg='<svg xmlns="http://www.w3.org/2000/svg" width="360" height="24" role="img" aria-label="'+$title+'"><title>'+$title+'</title><rect width="160" height="24" fill="#444"/><rect x="160" width="200" height="24" fill="'+$color+'"/><g fill="white" font-family="Verdana,sans-serif" font-size="12" text-anchor="middle"><text x="80" y="16">'+$label+'</text><text x="260" y="16">'+$status+'</text></g></svg>'
+  # Match base/script/release/coverage_badge.sh flat-square geometry without external fonts/services.
+  $labelWidth=$label.Length*7+12;$valueWidth=$status.Length*7+12;$width=$labelWidth+$valueWidth
+  $labelX=[Math]::Floor($labelWidth/2);$valueX=$labelWidth+[Math]::Floor($valueWidth/2)
+  $svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+$width+'" height="20" role="img" aria-label="'+$title+'"><title>'+$title+'</title><rect width="'+$labelWidth+'" height="20" fill="#555"/><rect x="'+$labelWidth+'" width="'+$valueWidth+'" height="20" fill="'+$color+'"/><g fill="#fff" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11" text-anchor="middle"><text x="'+$labelX+'" y="14">'+$label+'</text><text x="'+$valueX+'" y="14">'+$status+'</text></g></svg>'
   [IO.File]::WriteAllText((Join-Path $OutputDirectory ($badge+'.svg')),$svg,$encoding)
  }
  return [pscustomobject]$report

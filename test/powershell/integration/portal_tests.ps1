@@ -32,7 +32,7 @@ $mainDir=Join-Path $fixture 'main'
 $null=Write-TestReports -Checks $checks -OutputDirectory $mainDir -Layer All -Commit ('e'*40) -RunUrl 'https://github.com/example/repo/actions/runs/43' -SourceState Clean -Version v1.0.1 -Environment 'Windows fixture / PowerShell 5.1' -RefType Branch -RefName main -MeasuredAt '2026-11-07T01:00:00Z' -Changes @('new main')
 $portal1=Join-Path $fixture 'portal1'; & (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $portal1 -MainSnapshotPath (Join-Path $mainDir 'summary.json')|Out-Null
 Assert ((Get-FileHash (Join-Path $portal1 'versions/v1.0.0/index.html')).Hash -eq (Get-FileHash (Join-Path $a.AssetDirectory 'index.html')).Hash) 'historical renderer bytes preserved without regeneration'
-Assert ((Get-Content (Join-Path $portal1 'versions/v0.1.0/index.html') -Raw).Contains('Unknown')) 'old release without evidence remains Unknown'
+Assert (((Get-Content (Join-Path $portal1 'versions.json') -Raw -Encoding UTF8|ConvertFrom-Json)|Where-Object Version -eq 'v0.1.0').Status -eq 'Unknown') 'old release without evidence retains Unknown data status'
 $null=Write-TestReports -Checks $checks -OutputDirectory $mainDir -Layer All -Commit ('f'*40) -RunUrl 'https://github.com/example/repo/actions/runs/44' -SourceState Clean -Version v1.0.1 -Environment 'Windows fixture / PowerShell 5.1' -RefType Branch -RefName main -MeasuredAt '2026-11-07T02:00:00Z' -Changes @('later main')
 $portal2=Join-Path $fixture 'portal2'; & (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $portal2 -MainSnapshotPath (Join-Path $mainDir 'summary.json')|Out-Null
 foreach($version in @('v1.0.0','v1.0.1')){Assert ((Get-FileHash (Join-Path $portal1 ('versions/'+$version+'/index.html'))).Hash -eq (Get-FileHash (Join-Path $portal2 ('versions/'+$version+'/index.html'))).Hash) ('latest update preserves distinct-version renderer bytes: '+$version)}
@@ -101,3 +101,20 @@ foreach($mode in @('success','bad-digest','mutable','string-immutable','missing-
 }
 Remove-Item Function:\gh
 Write-Host ('ALL PASS: '+$count+' portal evidence and comparison assertions; local fixtures only.')
+
+# User-facing conclusions follow real main evidence; JSON keeps machine statuses.
+$landing=Get-Content (Join-Path $portal1 'index.html') -Raw -Encoding UTF8
+Assert ($landing.Contains('目前程式檢查通過') -and $landing.Contains('eeeeeee') -and $landing.Contains('2026-11-07 01:00:00 UTC')) '首頁直接呈現本次通過結論與來源時間'
+Assert ($landing.Contains('完整安裝尚未實測') -and $landing.Contains('blob/main/readme.md') -and $landing.Contains('main/index.html')) '首頁保留未實測限制與操作及明細入口'
+Assert ($landing.Contains('<summary>舊版本與進階比較</summary>') -and $landing.Contains('未保存測試紀錄') -and -not $landing.Contains('Unknown')) '舊版本缺紀錄以中文顯示並放次要折疊區'
+$empty=Get-Content (Join-Path $portal3 'index.html') -Raw -Encoding UTF8
+Assert ($empty.Contains('尚無本次報告') -and -not $empty.Contains('目前程式檢查通過')) '沒有本次證據不顯示通過'
+$failedChecks=$checks|ConvertTo-Json -Depth 12|ConvertFrom-Json
+$failedChecks[0].Status='Failed';$failedChecks[0].Passed=$false;$failedChecks[0].ExitCode=1;$failedChecks[0].Assertions[0].Passed=$false
+$failedDir=Join-Path $fixture 'failed_main'
+$null=Write-TestReports -Checks $failedChecks -OutputDirectory $failedDir -Layer All -Commit ('8'*40) -RunUrl 'https://github.com/example/repo/actions/runs/45' -SourceState Clean -Version v1.0.1 -Environment 'Windows fixture / PowerShell 5.1' -RefType Branch -RefName main -MeasuredAt '2026-11-07T03:00:00Z'
+$emptyCatalog=Join-Path $fixture 'empty_catalog.json';[IO.File]::WriteAllText($emptyCatalog,'[]')
+$failedPortal=Join-Path $fixture 'failed_portal'
+& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $emptyCatalog -OutputDirectory $failedPortal -MainSnapshotPath (Join-Path $failedDir 'summary.json')|Out-Null
+Assert ((Get-Content (Join-Path $failedPortal 'index.html') -Raw -Encoding UTF8).Contains('目前程式檢查未通過')) '最新檢查失敗在首頁清楚顯示'
+Write-Host ('UX preview: '+(Join-Path $portal1 'index.html'))

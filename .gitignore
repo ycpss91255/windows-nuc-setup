@@ -111,3 +111,7 @@ NUC-Init/
 
 # Legacy manifest remains ignored during upgrades.
 /Package-Hashes.json
+
+# Python verification tools never commit bytecode.
+__pycache__/
+*.py[cod]

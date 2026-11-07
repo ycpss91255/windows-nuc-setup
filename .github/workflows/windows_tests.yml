@@ -1,4 +1,4 @@
-﻿name: Windows 測試
+name: Windows 測試
 
 on:
   push:
@@ -6,6 +6,10 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
 
 permissions:
   contents: read
@@ -29,6 +33,18 @@ jobs:
       - name: 執行 Windows PowerShell 5.1 隔離測試
         run: |
           & .\script\test\run_ci.ps1 -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results')
+      - name: 產生明確標示的合成首頁驗收樣本
+        if: always()
+        run: |
+          & .\script\test\create_portal_fixture.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'requirements-fixture')
+      - name: 保留合成驗收樣本七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: requirements-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/requirements-fixture/portal/
+          retention-days: 7
+          if-no-files-found: error
       - name: 測試報告短期保留七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -38,10 +54,39 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  requirements-gate:
+    name: requirements-gate
+    if: always() && needs.isolated-tests.result != 'cancelled'
+    needs: [isolated-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 取得本次來源
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 下載同次 PS5.1 真實報告
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: acceptance-artifact
+      - name: 下載本次實際產生的合成首頁樣本
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: requirements-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: acceptance-fixture
+      - name: 執行需求驗收與破壞性負例
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python test/python/integration/requirements_tests.py --artifact-dir acceptance-artifact --portal-fixture-dir acceptance-fixture
+          python script/test/requirements_gate.py --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
+
   ci-rollup:
     name: ci-rollup
     if: always()
-    needs: [isolated-tests]
+    needs: [isolated-tests, requirements-gate]
     runs-on: windows-2022
     timeout-minutes: 5
     steps:
@@ -49,8 +94,9 @@ jobs:
         shell: pwsh
         env:
           TEST_RESULT: ${{ needs.isolated-tests.result }}
+          REQUIREMENTS_RESULT: ${{ needs.requirements-gate.result }}
         run: |
-          if ($env:TEST_RESULT -ne 'success') { throw '必要測試失敗、取消或跳過，不能合併或發布。' }
+          if ($env:TEST_RESULT -ne 'success' -or $env:REQUIREMENTS_RESULT -ne 'success') { throw '必要測試失敗、取消或跳過，不能合併或發布。' }
 
   release:
     name: 發布 GitHub 來源版本
@@ -96,8 +142,8 @@ jobs:
 
   build-portal:
     name: 建立 main 與不可變版本品質索引
-    if: always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
-    needs: [isolated-tests, release]
+    if: always() && needs.requirements-gate.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
+    needs: [isolated-tests, requirements-gate, release]
     runs-on: windows-2022
     timeout-minutes: 15
     permissions:
@@ -163,3 +209,22 @@ jobs:
       - name: 發布 Pages
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+  verify-deployment:
+    name: 公開部署需求驗收
+    needs: [publish-reports]
+    if: github.ref == 'refs/heads/main' && needs.publish-reports.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    permissions:
+      contents: read
+    steps:
+      - name: 取得本次驗收程式與 README
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 匿名核對公開網站與本次來源
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python script/test/verify_deployment.py --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
