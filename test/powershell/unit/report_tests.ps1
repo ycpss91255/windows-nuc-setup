@@ -69,3 +69,11 @@ Assert (@($badgeWidths|Select-Object -Unique).Count -gt 1 -and ($badgeWidths|Mea
 Assert ($passedBadge.svg.rect[1].fill -eq '#4c1' -and $failedBadge.svg.rect[1].fill -eq '#e05d44') '通過與失敗使用 base 色階且保留原測試狀態'
 [xml]$coverageBadge=Get-Content (Join-Path $fixture 'coverage.svg') -Raw -Encoding UTF8
 Assert ($coverageBadge.svg.rect[1].fill -eq '#9f9f9f' -and $coverageBadge.svg.'aria-label'.Contains('not measured') -and -not $coverageBadge.OuterXml.Contains('%')) 'Coverage 未量測使用中性灰色而非假百分比'
+
+Assert ($html.Contains('archive/'+('a'*40)+'.zip') -and -not $html.Contains('href="https://github.com/ycpss91255/windows_setup/releases"')) '分支報告下載指向本次提交，不導向舊發布版'
+Assert ($html.Contains('完整 Windows 安裝、重開機與真實硬體設定尚未實測') -and $html.Contains('blob/main/readme.md')) '明細首屏保留未實測界限與目前使用步驟'
+
+$changeOutput=Join-Path $fixture 'maintenance_changes'
+$changeReport=Write-TestReports -Checks $checks -OutputDirectory $changeOutput -Changes @('版本比較缺證據時明示 Unknown')
+$changeHtml=Get-Content (Join-Path $changeOutput 'index.html') -Raw -Encoding UTF8
+Assert ($changeReport.Changes[0].Contains('Unknown') -and $changeHtml -match '(?s)<details><summary>本次維護變更摘要</summary>.*?Unknown.*?</details>') '維護術語只在折疊摘要呈現，原始變更證據保持不變'
