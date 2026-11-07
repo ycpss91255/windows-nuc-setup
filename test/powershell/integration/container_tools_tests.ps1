@@ -7,7 +7,7 @@ function Refuse([scriptblock]$Action,[string]$Message){$caught=$false;try{& $Act
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ("container 中文 ' "+[guid]::NewGuid().ToString('N'))
 $source=Join-Path $fixture 'source';$reports=Join-Path $fixture 'reports'
 New-Item -ItemType Directory (Join-Path $source '.git'),(Join-Path $source 'dockerfile'),(Join-Path $source 'script/docker') -Force|Out-Null
-foreach($file in @('dockerfile/windows_tests.dockerfile','script/docker/install_min_git.ps1','script/docker/install_python.ps1','script/docker/container_test.ps1','.dockerignore','compose.yaml')){Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $source $file)}
+foreach($file in @('dockerfile/windows_tests.dockerfile','script/docker/install_min_git.ps1','script/docker/install_go.ps1','script/docker/container_test.ps1','.dockerignore','compose.yaml')){Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $source $file)}
 $first=Get-ContainerContext $source $reports
 $again=Get-ContainerContext $source $reports
 Assert ($first.Image -ceq $again.Image -and $first.Project -ceq $again.Project) 'same toolchain inputs select the same exact image and project'
@@ -47,12 +47,12 @@ foreach($mode in @('process','hyperv')){
 $local=Get-ContainerAcceptancePlan -ReportDirectory $reports -FixtureDirectory $fixture -Commit '' -Repository '' -RunId '' -RefType '' -RefName ''
 Assert ($local.Mode -eq 'LocalSynthetic' -and $local.ArtifactDirectory -eq (Join-Path $fixture 'synthetic_snapshot') -and -not $local.ArtifactDirectory.StartsWith($reports)) 'local no-CI mode uses private labeled synthetic evidence without overwriting actual report'
 $actual=Get-ContainerAcceptancePlan -ReportDirectory $reports -FixtureDirectory $fixture -Commit ('a'*40) -Repository 'example/repo' -RunId '123' -RefType 'branch' -RefName 'feature/test'
-Assert ($actual.Mode -eq 'CIActual' -and $actual.ArtifactDirectory -eq (Join-Path $reports 'public') -and $actual.RunUrl -eq 'https://github.com/example/repo/actions/runs/123') 'CI mode binds Python acceptance to actual report and supplied execution identity'
+Assert ($actual.Mode -eq 'CIActual' -and $actual.ArtifactDirectory -eq (Join-Path $reports 'public') -and $actual.RunUrl -eq 'https://github.com/example/repo/actions/runs/123') 'CI mode binds Go acceptance to actual report and supplied execution identity'
 Refuse {Get-ContainerAcceptancePlan $reports $fixture ('a'*40) '' ''} 'partial CI metadata cannot downgrade to synthetic validation'
 Refuse {Get-ContainerAcceptancePlan $reports $fixture 'invalid' 'example/repo' '123'} 'malformed CI commit cannot become evidence'
-function python.exe {$global:LASTEXITCODE=19}
-Refuse {Invoke-ContainerPython -Arguments @('fixture.py')} 'Python failure is not swallowed by container orchestration'
-Remove-Item Function:/python.exe
+function go.exe {$global:LASTEXITCODE=19}
+Refuse {Invoke-ContainerGo -Arguments @('run','fixture.go')} 'Go failure is not swallowed by container orchestration'
+Remove-Item Function:/go.exe
 Refuse {Get-ContainerAcceptancePlan $reports $fixture ('a'*40) 'example/repo' '123' '' ''} 'CI identity without ref metadata cannot silently become local branch evidence'
 # Exercise real Windows executable lookup with the image's PATH, without running setup.
 $dockerfile=[IO.File]::ReadAllText((Join-Path $root 'dockerfile/windows_tests.dockerfile'))
@@ -64,10 +64,10 @@ try{
  Assert ([bool](Get-Command powershell.exe -CommandType Application -ErrorAction Stop)) 'image PATH preserves actual Windows PowerShell discovery'
  Assert ([bool](Get-Command cmd.exe -CommandType Application -ErrorAction Stop)) 'image PATH preserves actual Windows command processor discovery'
 }finally{$env:Path=$originalPath}
-# Go migration: exercise the process boundary with a fake executable, never Python.
+# Go migration: exercise the process boundary with a fake executable, never Go.
 function go.exe {$script:goArguments=@($args);$global:LASTEXITCODE=0;Write-Output 'go-result'}
-Assert ((Invoke-ContainerGo -Arguments @('test','-count=1','./test/go/...')) -eq 'go-result') 'Go acceptance executes the Go toolchain and returns its actual output'
-Assert (($script:goArguments -join '|') -eq 'test|-count=1|./test/go/...') 'Go test arguments retain uncached execution and package selection'
+Assert ((Invoke-ContainerGo -Arguments @('test','-count=1','./...')) -eq 'go-result') 'Go acceptance executes the Go toolchain and returns its actual output'
+Assert (($script:goArguments -join '|') -eq 'test|-count=1|./...') 'Go test arguments retain uncached execution and package selection'
 function go.exe {$global:LASTEXITCODE=23}
 Refuse {Invoke-ContainerGo -Arguments @('run','./script/test/requirements_gate')} 'Go acceptance cannot swallow a nonzero process result'
 Remove-Item Function:/go.exe

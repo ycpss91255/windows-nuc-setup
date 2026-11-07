@@ -26,7 +26,7 @@ try {
  if($Action -eq 'test'){
   Invoke-ContainerDocker -Arguments ($compose+@('run','--rm','--no-deps','-T','tools'))
  }else{
-  Invoke-ContainerDocker -Arguments ($compose+@('run','--rm','--no-deps','tools','powershell.exe','-NoLogo','-NoProfile','-NoExit','-Command','git.exe config --global --add safe.directory C:/workspace; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; Set-Location C:/workspace'))
+  Invoke-ContainerDocker -Arguments ($compose+@('run','--rm','--no-deps','tools','powershell.exe','-NoLogo','-NoProfile','-NoExit','-Command','git.exe config --global --add safe.directory C:/workspace; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; . C:/workspace/script/docker/acceptance.ps1; Initialize-ContainerGoEnvironment -SourceRoot C:/workspace -CacheRoot (Join-Path $env:TEMP (''container_go_''+[guid]::NewGuid().ToString(''N''))); Set-Location C:/workspace'))
  }
  exit 0
 }catch{
