@@ -28,3 +28,25 @@ $coverage.TotalStatements=10;$coverage.Percent=70;$coverage.CoveredStatements=7
 $arguments.OutputDirectory=Join-Path $fixture 'below_threshold'
 $null=Write-TestReports @arguments -GoCoverage $coverage
 Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_coverage.svg'))).Contains('#e05d44')) 'below-threshold measured result stays visible as failed coverage'
+
+# Attach real file bytes and preserve them through the actual main portal renderer.
+$producer=Join-Path $fixture 'producer';New-Item -ItemType Directory $producer|Out-Null
+$profile=Join-Path $producer 'go_coverage.out'
+[IO.File]::WriteAllText($profile,"mode: atomic`nwindows_setup/script/test/acceptance/report.go:1.1,1.2 8 1`nwindows_setup/script/test/acceptance/report.go:2.1,2.2 2 0`n",[Text.UTF8Encoding]::new($false))
+$coverage.CoveredStatements=8;$coverage.Percent=80;$coverage.ProfileSHA256=(Get-FileHash $profile -Algorithm SHA256).Hash.ToLowerInvariant()
+[IO.File]::WriteAllText((Join-Path $producer 'go_coverage.json'),($coverage|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
+$arguments.OutputDirectory=Join-Path $fixture 'attach';$null=Write-TestReports @arguments
+$attach=Join-Path $root 'script/test/attach_go_coverage.ps1'
+& $attach -PublicDirectory $arguments.OutputDirectory -CoverageDirectory $producer
+$joined=Get-Content (Join-Path $arguments.OutputDirectory 'summary.json') -Raw|ConvertFrom-Json
+Assert ($joined.GoCoverage.ProfileSHA256 -eq $coverage.ProfileSHA256 -and $joined.MeasuredAt -eq $arguments.MeasuredAt) 'attachment binds actual profile without changing original PowerShell measurement time'
+Assert ((Get-FileHash (Join-Path $arguments.OutputDirectory 'go_coverage.out')).Hash -eq (Get-FileHash $profile).Hash) 'published profile bytes match measured source file'
+$catalog=Join-Path $fixture 'catalog.json';[IO.File]::WriteAllText($catalog,'[]')
+$portal=Join-Path $fixture 'portal'
+& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $portal -MainSnapshotPath (Join-Path $arguments.OutputDirectory 'summary.json') -RequireGoCoverage|Out-Null
+Assert ((Get-FileHash (Join-Path $portal 'main/go_coverage.out')).Hash -eq (Get-FileHash $profile).Hash -and (Test-Path (Join-Path $portal 'main/go_coverage.svg'))) 'main portal preserves dedicated Go coverage artifacts'
+Refuse {& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory (Join-Path $fixture 'missing') -MainSnapshotPath (Join-Path $fixture 'legacy/summary.json') -RequireGoCoverage} 'current main publication cannot silently omit measured Go coverage'
+$before=(Get-FileHash (Join-Path $arguments.OutputDirectory 'summary.json')).Hash
+[IO.File]::AppendAllText($profile,'tampered')
+Refuse {& $attach -PublicDirectory $arguments.OutputDirectory -CoverageDirectory $producer} 'tampered raw profile cannot be attached'
+Assert ((Get-FileHash (Join-Path $arguments.OutputDirectory 'summary.json')).Hash -eq $before) 'failed attachment leaves original report untouched'
