@@ -14,6 +14,7 @@ func TestCoverageUnionAndExactThreshold(t *testing.T) {
 	if e != nil || m.Covered != 10 || m.TotalStatements != 10 || m.Percent != 100 {
 		t.Fatalf("duplicate blocks must union, not inflate: %+v %v", m, e)
 	}
+	if _,e:=a.EvaluateCoverage([][]byte{first,append(second,[]byte(files[0]+":3.1,4.1 1 1\n")...)},files);e==nil{t.Fatal("CLI profile added blocks absent from authoritative test baseline")}
 	m, e = a.EvaluateCoverage([][]byte{first}, files)
 	if e != nil || m.Covered != 8 || m.TotalStatements != 10 {
 		t.Fatalf("exact 80 must pass: %+v %v", m, e)
