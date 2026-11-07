@@ -1,0 +1,165 @@
+﻿name: Windows 測試
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  isolated-tests:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: 取得原始碼
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: 執行 Windows PowerShell 5.1 隔離測試
+        run: |
+          & .\script\test\run_ci.ps1 -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results')
+      - name: 測試報告短期保留七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/NUC-CI-Results/public/
+          retention-days: 7
+          if-no-files-found: warn
+
+  ci-rollup:
+    name: ci-rollup
+    if: always()
+    needs: [isolated-tests]
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - name: 確認全部必要測試成功
+        shell: pwsh
+        env:
+          TEST_RESULT: ${{ needs.isolated-tests.result }}
+        run: |
+          if ($env:TEST_RESULT -ne 'success') { throw '必要測試失敗、取消或跳過，不能合併或發布。' }
+
+  release:
+    name: 發布 GitHub 來源版本
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [ci-rollup]
+    runs-on: windows-2022
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: 取得完整已驗證歷史
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 驗證版本並產生當版說明
+        shell: powershell
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          . .\script\release\release.ps1
+          Assert-ReleaseOnMain -PackageRoot $PWD.Path -Revision $env:SOURCE_COMMIT
+          $release = .\script\release\build_source_release.ps1 -Version $env:RELEASE_TAG -Revision $env:SOURCE_COMMIT -OutputDirectory "$env:RUNNER_TEMP\release-notes"
+          "prerelease=$($release.Prerelease.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+        id: release
+      - name: 下載同一次執行的去識別品質證據
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-public
+      - name: 草稿附齊品質證據後發布不可變版本
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          $arguments = @{PublicDirectory="$env:RUNNER_TEMP\release-public";Version=$env:RELEASE_TAG;Commit=$env:SOURCE_COMMIT;NotesPath="$env:RUNNER_TEMP\release-notes\release_notes.md";Repository=$env:GH_REPO;Prerelease=($env:IS_PRERELEASE -eq 'true')}
+          .\script\report\publish_quality_release.ps1 @arguments
+
+  build-portal:
+    name: 建立 main 與不可變版本品質索引
+    if: always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
+    needs: [isolated-tests, release]
+    runs-on: windows-2022
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+
+    concurrency:
+      group: pages-report
+      cancel-in-progress: false
+    steps:
+      - name: 取得受保護 main 的報表產生器
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: 核對版本品質附件並本地產生索引
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_REF: ${{ github.ref }}
+          CURRENT_RUN: ${{ github.run_id }}
+        run: |
+          $parameters = @{Repository=$env:GH_REPO;OutputDirectory="$env:RUNNER_TEMP\portal-inputs"}
+          if ($env:EVENT_REF -eq 'refs/heads/main') {$parameters.MainRunId=$env:CURRENT_RUN}
+          $inputs = .\script\report\get_portal_inputs.ps1 @parameters
+          .\script\report\build_portal.ps1 -CatalogPath $inputs.CatalogPath -MainSnapshotPath $inputs.MainSnapshotPath -OutputDirectory "$env:RUNNER_TEMP\quality-portal"
+      - name: 保存去識別 portal 供 Linux 部署
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: quality-portal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/quality-portal/
+          retention-days: 7
+          if-no-files-found: error
+
+  publish-reports:
+    name: 發布 Pages 品質入口
+    needs: [build-portal]
+    if: always() && needs.build-portal.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages-deployment
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 下載已驗證的品質入口
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: quality-portal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: portal
+      - name: 準備 Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: portal
+          retention-days: 7
+      - name: 發布 Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

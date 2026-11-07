@@ -26,7 +26,7 @@
 *.woff2
 
 # 各電腦執行產物、備份與快取不得進入可重用的工具版本。
-/Package-Hashes.json
+/package_hashes.json
 *-Result.json
 *-Verification.json
 *-Progress.json
@@ -108,3 +108,6 @@ NUC-Init/
 
 # CI output is short-lived; never commit generated reports.
 /test_results/
+
+# Legacy manifest remains ignored during upgrades.
+/Package-Hashes.json

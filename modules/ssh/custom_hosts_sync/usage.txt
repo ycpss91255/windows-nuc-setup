@@ -1,0 +1,89 @@
+﻿Hosts／SSH 依網路自動匯入
+
+這是空白框架：有網路判斷規則，但沒有預填任何真實主機 IP、帳號或金鑰。
+主工具的一鍵流程第04模組會安裝；亦可雙擊 modules\ssh\apply_hosts_sync.cmd 單獨安裝。
+程式取得目前本機使用者的家目錄與 SID，不固定任何帳號名稱。
+
+你可以只用 hosts、只用 SSH，或兩者一起用。
+- hosts：讓 ping／瀏覽器／其他程式知道某個名稱對應哪個 IP。
+- SSH：讓 ssh 別名知道連哪臺主機、用哪個遠端帳號；HostName 可直接填 IP，不必搭配 hosts。
+- 搭配使用：hosts 定義名稱，SSH 的 HostName 引用這個名稱。
+兩者共用網路判斷，但來源與輸出各自獨立。某一邊資料錯誤不會阻止另一邊的有效更新。
+
+規則在哪裡？
+在檔案總管位址列輸入：%USERPROFILE%\.config\hosts
+開啟 sites.json。Outputs 決定啟用哪種輸出：
+  "Outputs": { "Hosts": true, "SSH": true }
+只用 SSH 時把 Hosts 改成 false；只用 hosts 時把 SSH 改成 false。
+false 表示停止管理該輸出，保留目前的輸出檔，不會自動刪掉先前已匯入的內容。
+如果要清掉某站目前的匯入內容，先把該站 Enabled 改為 false，讓對應輸出同步一次，再停用輸出。
+
+新增一個站點，例如 home：
+1. 在 sites.json 的 Sites 陣列中新增下列物件；注意前後物件之間要有逗號。
+   { "Id": "home", "Enabled": true, "Rules": [ { "SSID": ["MyWiFi"] } ] }
+   MyWiFi 是示範名稱，請換成實際 Wi-Fi 名稱。
+2. 要用 SSH 時，在 %USERPROFILE%\.ssh\config.d 新增 home.conf。
+   要用 hosts 時，在 %USERPROFILE%\.config\hosts\hosts.d 新增 home.hosts。
+   只需要其中一種時，只建立那個檔案即可，不必成對。
+3. 等待約10秒，背景程式會重新讀取規則與來源。新增站點數量不限定數量，不必改腳本或重裝。
+
+只用 SSH 的 home.conf 範例（僅說明，不會自動寫入來源）：
+  Host home-server
+      HostName 192.0.2.10
+      User your_remote_user
+之後輸入 ssh home-server。遠端帳號是伺服器上的帳號，不一定等於 Windows 目前帳號。
+192.0.2.10 是文件示範用 IP，請換成實際位址；your_remote_user 也要換成實際遠端帳號。
+
+只用 hosts 的 home.hosts 範例（同樣僅說明）：
+  192.0.2.10 home-server
+之後可 ping home-server；這個範例 IP 不是你的真實設備。
+
+兩者搭配的方式：home.hosts 保持上面一行，home.conf 改成：
+  Host home-ssh
+      HostName home-server
+      User your_remote_user
+
+已有站點只新增 SSH 主機：只改對應的 .conf，不必改 sites.json。
+不要手改 .ssh\active-sites.conf，它是自動產生的；.ssh\config 的全域 Include 由安裝程式處理。
+
+規則可用條件
+- SSID：真正的 Wi-Fi SSID，例如 ["MyWiFi"]。
+- NetworkProfile：Windows「網路設定檔名稱」，不是 SSID，例如 ["我的網路 2"]。
+- IPv4Cidr：IPv4 網段，例如 ["192.0.2.0/24"]。
+- AdapterName：網卡的完整名稱，例如 ["example_eth"]。
+- AdapterNameRegex / AdapterDescriptionRegex：網卡名稱／描述的正規表示式，可辨識 VPN。
+- PrefixLength：網卡實際 IPv4 前綴長度，例如 24。
+同一個 Rules 物件中的條件要在同一張網卡上同時成立；Rules 陣列內各物件則是任一成立即可。
+SSID 可能受 Windows 位置權限限制而無法讀取。程式不會更改位置權限，也不會拿網路設定檔名稱冒充 SSID。
+遇到這種情況可改用 NetworkProfile 或 IPv4Cidr，狀態檔會顯示警告。
+
+公開範本的 Sites 預設為空，請依自己的網路新增規則；不含任何真實場域資料。
+站點 Id 用1至64個英數小寫、底線或連字號，以英數開頭；global 與 Windows 保留名稱不可用。
+同一站點的檔名必須等於 Id，例如 home.hosts 與 home.conf。
+global.hosts／global.conf 永遠匯入；已設定站點中的 ip.global.* 別名也保持匯入。
+未匹配任何站點時只匯入 global；多個網路同時匹配時合併匯入。
+移除站點只停止匯入，來源檔不會刪除。缺少某種來源檔不會讓另一種輸出失敗。
+
+立即同步與檢查
+- modules\ssh\sync_hosts.cmd：只立即同步 hosts 輸出，不改變 Outputs 開關。
+- modules\ssh\sync_ssh.cmd：只立即同步 SSH 輸出，不改變 Outputs 開關。
+- modules\ssh\sync_hosts.cmd -VerifyOnly / modules\ssh\sync_ssh.cmd -VerifyOnly：只檢查該輸出，不寫入。
+- modules\ssh\apply_hosts_sync.cmd -VerifyOnly：檢查所有啟用的輸出。
+獨立入口會要求管理員權限。背景工作仍依 Outputs 設定繼續管理各自啟用的輸出。
+每台僅允許一個 Windows 使用者擁有這套 hosts 同步，另一帳號重裝會明確拒絕，以免爭用系統 hosts。
+
+背景執行與紀錄
+排程名稱：CustomHostsSync。以 SYSTEM 在開機時啟動，安裝後會立即啟動。
+程式／紀錄：%ProgramData%\CustomHostsSync。程式只允許系統／管理員修改，來源檔由使用者自行編輯。
+status.json：每種輸出的成功／失敗、目前站點、來源雜湊、最後檢查時間及警告。
+last-error.json：最近尚未恢復的同步錯誤；成功的完整同步會清除它。
+watcher-fatal-error.json：背景工作無法啟動的錯誤。
+hosts.original.backup / hosts.previous.backup：首次及最近變更前的 hosts 備份。
+PollSeconds 預設10，可設定5至300秒。未改變內容時不重寫 hosts 或 active-sites.conf。
+只修改 Windows hosts 的 # BEGIN custom-hosts 到 # END custom-hosts 區塊，其餘內容保留。
+規則 JSON 無效時兩邊都保持上次有效輸出；單一輸出資料無效時只保留那一邊，另一邊仍可更新。
+程式不執行 SSH 來源中的 Match exec 或任何連線；.conf 的完整 SSH 語意仍由 OpenSSH 在實際連線時判斷。
+既有主 config 中直接寫的 Host 或其他 Include 仍保留，但不受這個站點匯入框架限制，狀態會提醒。
+
+
+目前使用者的 .ssh\readme.md 與 .config\hosts\readme.md 提供各檔用途與修改方式；既有自訂 README 保留。Hosts 資料夾位置維持 .config\hosts，不搬移或改名。
