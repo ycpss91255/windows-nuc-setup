@@ -416,6 +416,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\test\powershell\system
 
 實機 Setup-Result.json、Setup-Progress.json、Acceptance-Result.json 與驗證結果是續跑或排錯資料，原有 Git 忽略規則保留；CI 不清理這些檔案。設定未完成時不要刪除 Setup-Result.json。雲端通過僅代表來源／隔離測試成功，不表示 NUC 硬體或 OOBE 已通過實機驗收。
 
+目前尚未取得合適的 Windows 11 x64 可丟棄測試環境，依使用者決定暫緩 System／完整安裝 E2E；未執行不等於通過。合併仍要求 PR 與 ci-rollup，暫不將尚無環境的 system-e2e 設為必要檢查。v0.2.0 保持預覽版及未完成完整驗證的聲明。
+
 ## 維護者版本發布
 
 版本發布參考 base 的 PR、CI gate 與標籤流程；Windows 測試及來源檢查保留本專案的實作。不是每次合併都自動增加 patch 版本。維護者先選擇版本、整理使用者可見的變更，再經 PR、CI 與標籤發布。
