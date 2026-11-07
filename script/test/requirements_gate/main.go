@@ -22,8 +22,15 @@ func run() error {
 	if _, e := a.ValidateSource(*root); e != nil {
 		return e
 	}
-	_, e := a.ValidateReport(func(n string) ([]byte, error) { return os.ReadFile(filepath.Join(*dir, n)) }, *sha, *run, false)
-	return e
+	read := func(n string) ([]byte, error) { return os.ReadFile(filepath.Join(*dir, n)) }
+	if _, e := a.ValidateReport(read, *sha, *run, false); e != nil {
+		return e
+	}
+	files, e := a.OwnedGoFiles(*root)
+	if e != nil {
+		return e
+	}
+	return a.ValidateGoCoverageReport(read, files, *sha, *run, false)
 }
 func main() {
 	if e := run(); e != nil {

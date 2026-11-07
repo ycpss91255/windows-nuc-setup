@@ -40,6 +40,13 @@ func run() error {
 	if e != nil {
 		return e
 	}
+	files, e := a.OwnedGoFiles(".")
+	if e != nil {
+		return e
+	}
+	if e = a.ValidateGoCoverageReport(func(n string) ([]byte, error) { return read("main/" + n) }, files, *sha, *run, true); e != nil {
+		return e
+	}
 	badges := regexp.MustCompile(`https://github\.com/[^/]+/[^/]+/actions/workflows/[^/]+/badge\.svg`).FindAllString(string(b), -1)
 	if len(badges) != 1 {
 		return fmt.Errorf("R05 缺少唯一 GitHub CI 徽章")
