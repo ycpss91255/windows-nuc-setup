@@ -96,9 +96,53 @@ func TestCLICommands(t *testing.T) {
 			t.Fatalf("actual CLI coverage counters missing: %v", e)
 		}
 	})
-	t.Run("coverage_producer_real_compiler_profile",func(t *testing.T){
-	 source:=t.TempDir();write:=func(n,s string){p:=filepath.Join(source,n);os.MkdirAll(filepath.Dir(p),0700);if e:=os.WriteFile(p,[]byte(s),0600);e!=nil{t.Fatal(e)}};write("go.mod","module windows_setup\n\ngo 1.27.3\n");write("script/test/sample/sample.go","package sample\nfunc Sum(a,b int) int{return a+b}\n");write("script/test/sample/sample_test.go","package sample\nimport \"testing\"\nfunc TestSum(t *testing.T){if Sum(1,2)!=3{t.Fatal(\"sum\")}}\n")
-	 command:=func(exe string,args ...string)string{c:=exec.Command(exe,args...);c.Dir=source;b,e:=c.CombinedOutput();if e!=nil{t.Fatalf("fixture command: %s %v",b,e)};return strings.TrimSpace(string(b))};command("git","init","-q");command("git","add",".");command("git","-c","user.name=Synthetic fixture","-c","user.email=fixture@example.invalid","commit","-qm","Synthetic coverage fixture");sha:=command("git","rev-parse","HEAD");profile:=filepath.Join(t.TempDir(),"unit.out");command(goexe,"test","-count=1","-coverpkg=./script/test/...","-coverprofile="+profile,"./...")
-	 m:=synthetic(t,files(t,os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR")),true,"Branch");q:=decode(t,m);old:=q.Commit;q.Commit=sha;q.RunUrl="https://github.com/example/fixture/actions/runs/1";save(m,q);m["summary.md"]=[]byte(strings.ReplaceAll(string(m["summary.md"]),old,sha));reportDir:=t.TempDir();for n,b:=range m{os.WriteFile(filepath.Join(reportDir,n),b,0600)};out:=filepath.Join(t.TempDir(),"coverage");b,e:=run("run","./script/test/go_coverage","--unit-profile",profile,"--cli-profile",profile,"--source-root",source,"--report-dir",reportDir,"--output-dir",out);if e!=nil{t.Fatalf("real compiler profile producer: %s %v",b,e)};for _,n:=range []string{"go_coverage.json","go_coverage.out"}{if _,e:=os.Stat(filepath.Join(out,n));e!=nil{t.Fatal(e)}}
+	t.Run("coverage_producer_real_compiler_profile", func(t *testing.T) {
+		source := t.TempDir()
+		write := func(n, s string) {
+			p := filepath.Join(source, n)
+			os.MkdirAll(filepath.Dir(p), 0700)
+			if e := os.WriteFile(p, []byte(s), 0600); e != nil {
+				t.Fatal(e)
+			}
+		}
+		write("go.mod", "module windows_setup\n\ngo 1.27.3\n")
+		write("script/test/sample/sample.go", "package sample\nfunc Sum(a,b int) int{return a+b}\n")
+		write("script/test/sample/sample_test.go", "package sample\nimport \"testing\"\nfunc TestSum(t *testing.T){if Sum(1,2)!=3{t.Fatal(\"sum\")}}\n")
+		command := func(exe string, args ...string) string {
+			c := exec.Command(exe, args...)
+			c.Dir = source
+			b, e := c.CombinedOutput()
+			if e != nil {
+				t.Fatalf("fixture command: %s %v", b, e)
+			}
+			return strings.TrimSpace(string(b))
+		}
+		command("git", "init", "-q")
+		command("git", "add", ".")
+		command("git", "-c", "user.name=Synthetic fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "Synthetic coverage fixture")
+		sha := command("git", "rev-parse", "HEAD")
+		profile := filepath.Join(t.TempDir(), "unit.out")
+		command(goexe, "test", "-count=1", "-coverpkg=./script/test/...", "-coverprofile="+profile, "./...")
+		m := synthetic(t, files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR")), true, "Branch")
+		q := decode(t, m)
+		old := q.Commit
+		q.Commit = sha
+		q.RunUrl = "https://github.com/example/fixture/actions/runs/1"
+		save(m, q)
+		m["summary.md"] = []byte(strings.ReplaceAll(string(m["summary.md"]), old, sha))
+		reportDir := t.TempDir()
+		for n, b := range m {
+			os.WriteFile(filepath.Join(reportDir, n), b, 0600)
+		}
+		out := filepath.Join(t.TempDir(), "coverage")
+		b, e := run("run", "./script/test/go_coverage", "--unit-profile", profile, "--cli-profile", profile, "--source-root", source, "--report-dir", reportDir, "--output-dir", out)
+		if e != nil {
+			t.Fatalf("real compiler profile producer: %s %v", b, e)
+		}
+		for _, n := range []string{"go_coverage.json", "go_coverage.out"} {
+			if _, e := os.Stat(filepath.Join(out, n)); e != nil {
+				t.Fatal(e)
+			}
+		}
 	})
 }
