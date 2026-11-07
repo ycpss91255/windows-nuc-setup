@@ -56,4 +56,5 @@ func TestCLICommands(t *testing.T) {
 			t.Fatalf("%s %v", b, e)
 		}
 	})
+	t.Run("instrumented_cli_evidence",func(t *testing.T){dir:=os.Getenv("GOCOVERDIR");if dir==""{dir=t.TempDir();t.Setenv("GOCOVERDIR",dir)};b,e:=run("run","./script/test/requirements_gate","--artifact-dir",os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"),"--source-root",root,"--expected-sha",r.Commit,"--expected-run-url",r.RunUrl);if e!=nil{t.Fatalf("CLI prerequisite: %s %v",b,e)};matches,e:=filepath.Glob(filepath.Join(dir,"covcounters.*"));if e!=nil||len(matches)==0{t.Fatalf("actual CLI coverage counters missing: %v",e)}})
 }
