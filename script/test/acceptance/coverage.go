@@ -37,7 +37,7 @@ func EvaluateCoverage(profiles [][]byte, expectedFiles []string) (CoverageMeasur
 		return m, fmt.Errorf("coverage denominator is empty")
 	}
 	pattern := regexp.MustCompile(`^(windows_setup/script/test/[a-z0-9_/]+\.go):([0-9]+\.[0-9]+,[0-9]+\.[0-9]+) ([0-9]+) ([0-9]+)$`)
-	for _, profile := range profiles {
+	for profileIndex, profile := range profiles {
 		lines := strings.Split(strings.TrimSpace(string(profile)), "\n")
 		if len(lines) < 2 || !strings.HasPrefix(lines[0], "mode: ") {
 			return m, fmt.Errorf("invalid coverage profile")
@@ -64,6 +64,9 @@ func EvaluateCoverage(profiles [][]byte, expectedFiles []string) (CoverageMeasur
 			}
 			id := match[1] + ":" + match[2]
 			old, exists := blocks[id]
+			if profileIndex > 0 && !exists {
+				return m, fmt.Errorf("CLI profile contains a block absent from compiler baseline")
+			}
 			if exists && old.statements != n {
 				return m, fmt.Errorf("contradictory statement denominator")
 			}
