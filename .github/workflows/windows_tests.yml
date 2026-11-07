@@ -212,7 +212,7 @@ jobs:
   verify-deployment:
     name: 公開部署需求驗收
     needs: [publish-reports]
-    if: github.ref == 'refs/heads/main' && needs.publish-reports.result == 'success'
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.publish-reports.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 7
     permissions:
