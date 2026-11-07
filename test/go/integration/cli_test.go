@@ -28,6 +28,7 @@ func TestCLICommands(t *testing.T) {
 			t.Fatalf("%s %v", b, e)
 		}
 	})
+	t.Run("local_report_empty_run_url",func(t *testing.T){m:=files(t,os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"));q:=decode(t,m);q.RunUrl="";save(m,q);dir:=t.TempDir();for n,b:=range m{if e:=os.WriteFile(filepath.Join(dir,n),b,0600);e!=nil{t.Fatal(e)}};b,e:=run("run","./script/test/requirements_gate","--artifact-dir",dir,"--source-root",root,"--expected-sha",q.Commit,"--expected-run-url","");if e!=nil||!strings.Contains(b,"需求驗收通過"){t.Fatalf("local no-CI evidence rejected: %s %v",b,e)}})
 	t.Run("wrong_sha_exit", func(t *testing.T) {
 		b, e := run("run", "./script/test/requirements_gate", "--artifact-dir", os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"), "--source-root", root, "--expected-sha", strings.Repeat("0", 40), "--expected-run-url", r.RunUrl)
 		if e == nil || !strings.Contains(b, "需求驗收失敗") {
