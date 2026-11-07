@@ -30,3 +30,9 @@ function Write-GoCoverageView {
  $svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+($left+$right)+'" height="20" role="img" aria-label="'+$title+'"><title>'+$title+'</title><rect width="'+$left+'" height="20" fill="#555"/><rect x="'+$left+'" width="'+$right+'" height="20" fill="'+$color+'"/><g fill="#fff" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11" text-anchor="middle"><text x="'+[Math]::Floor($left/2)+'" y="14">'+$label+'</text><text x="'+($left+[Math]::Floor($right/2))+'" y="14">'+$value+'</text></g></svg>'
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'go_coverage.svg'),$svg,$encoding)
 }
+
+function Assert-GoCoverageProfile {
+ param($Coverage,[string]$Directory)
+ $profile=Join-Path $Directory 'go_coverage.out'
+ if(-not(Test-Path -LiteralPath $profile -PathType Leaf) -or (Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash.ToLowerInvariant() -cne $Coverage.ProfileSHA256){throw 'Go 原始覆蓋率 profile 缺少或 SHA256 不符。'}
+}

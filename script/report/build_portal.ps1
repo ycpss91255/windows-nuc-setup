@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$CatalogPath,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$MainSnapshotPath)
+param([Parameter(Mandatory=$true)][string]$CatalogPath,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$MainSnapshotPath,[switch]$RequireGoCoverage)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../test/test_report.ps1')
 . (Join-Path $PSScriptRoot 'portal.ps1')
@@ -33,11 +33,16 @@ foreach($entry in $catalog){
  $versions.Add([pscustomobject]@{Version=$entry.Version;Commit=$entry.Commit;Status=$state;Reason=$reason;Path=('versions/'+$entry.Version+'/index.html');ReleaseUrl=$entry.ReleaseUrl;MeasuredAt=$(if($evidence){$evidence.Snapshot.MeasuredAt}else{'Unknown'});Digest=$entry.SnapshotDigest})
 }
 $mainStatus='Unknown'
+if($RequireGoCoverage -and (-not $MainSnapshotPath -or -not(Test-Path -LiteralPath $MainSnapshotPath -PathType Leaf))){throw 'main 發布必須提供 Go 覆蓋率報告。'}
 if($MainSnapshotPath -and (Test-Path -LiteralPath $MainSnapshotPath)){
  $main=Get-Content -LiteralPath $MainSnapshotPath -Raw -Encoding UTF8|ConvertFrom-Json
  Assert-TestReportSnapshot -Report $main
  if($main.RefType -cne 'Branch' -or $main.RefName -cne 'main' -or $main.SourceState -cne 'Clean' -or $main.RequestedLayer -cne 'All'){throw 'main 品質來源標記不符。'}
+ $hasGo=$null -ne $main.PSObject.Properties['GoCoverage']
+ if($RequireGoCoverage -and -not $hasGo){throw 'main 發布缺少 Go 覆蓋率。'}
+ if($hasGo){Assert-GoCoverageProfile -Coverage $main.GoCoverage -Directory (Split-Path -Parent $MainSnapshotPath)}
  Write-SnapshotView $main (Join-Path $output 'main');$mainStatus='Available'
+ if($hasGo){Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $MainSnapshotPath) 'go_coverage.out') -Destination (Join-Path $output 'main/go_coverage.out')}
 }
 $pairs=Join-Path $output 'comparisons';New-Item -ItemType Directory $pairs|Out-Null
 foreach($a in $versions){foreach($b in $versions){$comparison=Compare-TestSnapshots $snapshots[$a.Version] $snapshots[$b.Version];[IO.File]::WriteAllText((Join-Path $pairs ($a.Version+'--'+$b.Version+'.json')),($comparison|ConvertTo-Json -Depth 10),$utf8)}}
