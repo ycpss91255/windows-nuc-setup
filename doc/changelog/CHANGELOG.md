@@ -2,6 +2,22 @@
 
 本文件記錄使用者可見的行為、相容性及遷移要求。詳細實作與驗證紀錄見中文 Git 提交；發布版本與來源提交以 GitHub Release 為準。
 
+## [Unreleased]
+
+## [v0.2.0] — 2026-11-07
+
+### Changed（變更）
+
+- Windows 主流程以通用 Windows 為預設；驅動移至獨立可攜包，只有相符 NUC 主機板且明確選包才安裝，直接 Enter 預設略過。其他機型不再因 NUC 機型檢查被阻擋。
+- 版本檔、版本準備命令、PR 與 ci-rollup 統一發布流程；標籤須對應 main 歷史、版本檔與 changelog。
+- RC 發布標為預覽版；正式版整合同版 RC 紀錄。使用 GitHub 內建來源下載，不再上傳重複的來源 ZIP 與 SHA256。
+
+- 測試分為 Unit／Integration／System，CI 明示 System／E2E 未執行，避免將隔離測試當作完整安裝驗證。
+- 自有目錄改小寫與底線，更新入口與路徑映射；維護工具分至 script/test、script/release、script/package，交付執行樹不依賴測試或發布工具。新驅動日誌使用 driver_logs；既有 ProgramData／排程識別及第三方原始內容保留。
+
+- 通用流程不代表已在每種硬體完成實機驗收。現有 NUC 驅動僅提供給相符設定檔，其他硬體需使用自己的 Windows Update 或原廠驅動。
+- v0.1.x 既有 Release、來源資產與標籤保持原樣。
+
 ## v0.1.2 — 2026-11-07
 
 ### Changed（變更）

@@ -1,5 +1,5 @@
 # 工具與驅動二進位由既有下載/雜湊流程管理，不提交 Git。
-/Drivers/
+/drivers/
 /Driver/
 *.zip
 *.bin
@@ -44,6 +44,7 @@
 [Ll]ogs/
 [Cc]ache/
 DriverLogs/
+driver_logs/
 DriverCache/
 LegacyLogs/
 RegistryBackups/
@@ -87,23 +88,23 @@ id_ecdsa*
 /CustomHostsSync/ssh-config-before-*.backup
 
 # Modular package binary payload and per-machine hosts runtime.
-/Modules/Drivers/Payload/*
-!/Modules/Drivers/Payload/manifest.json
-/Modules/SSH/CustomHostsSync/runtime.json
-/Modules/SSH/CustomHostsSync/owner.json
-/Modules/SSH/CustomHostsSync/status.json
-/Modules/SSH/CustomHostsSync/*error*
-/Modules/SSH/CustomHostsSync/*.backup
+/modules/drivers/payload/
+
+/modules/ssh/custom_hosts_sync/runtime.json
+/modules/ssh/custom_hosts_sync/owner.json
+/modules/ssh/custom_hosts_sync/status.json
+/modules/ssh/custom_hosts_sync/*error*
+/modules/ssh/custom_hosts_sync/*.backup
 
 # Init 本機機密暫存：只追蹤可重用腳本、測試及說明。
-/Modules/Init/answer.xml
-/Modules/Init/state.json
-/Modules/Init/cleanup-result.json
+/modules/init/answer.xml
+/modules/init/state.json
+/modules/init/cleanup-result.json
 NUC-Init/
 
 # Win11Debloat 上游原始資產；不是安裝程式或每機資料。
-!/Modules/Debloat/Win11Debloat/Assets/Images/menu.png
-!/Modules/Debloat/Win11Debloat/Assets/Start/start2.bin
+!/modules/debloat/win11debloat/Assets/Images/menu.png
+!/modules/debloat/win11debloat/Assets/Start/start2.bin
 
 # CI output is short-lived; never commit generated reports.
-/TestResults/
+/test_results/
