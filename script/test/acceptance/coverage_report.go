@@ -103,5 +103,31 @@ func ValidateGoCoverageReport(read Reader, files []string, sha, run string, requ
 	if s.XMLName.Local != "svg" || s.Height != "20" || s.Width != fmt.Sprint((len(label)+len(value))*7+24) || s.Group.Font != "11" || len(s.Group.Texts) != 2 || s.Group.Texts[0] != label || s.Group.Texts[1] != value || len(s.Rects) != 2 || s.Rects[0].Fill != "#555" || s.Rects[1].Fill != "#4c1" || s.Rects[0].Width != fmt.Sprint(len(label)*7+12) || s.Rects[1].Width != fmt.Sprint(len(value)*7+12) {
 		return fmt.Errorf("Go coverage badge differs from recomputed statement coverage")
 	}
+	html, e := read("index.html")
+	if e != nil {
+		return e
+	}
+	page, e := ParsePage(html)
+	if e != nil {
+		return e
+	}
+	fraction := fmt.Sprintf("%d/%d", c.Covered, c.TotalStatements)
+	for _, text := range []string{"Go 程式敘述覆蓋率", value, fraction + " statements", "全部自有 Go 工具（含 CLI）", "不含 PowerShell 或第三方程式", "PowerShell 覆蓋率", "尚未量測"} {
+		if !strings.Contains(page.Visible, text) {
+			return fmt.Errorf("visible HTML lacks matching Go coverage value or scope: %s", text)
+		}
+	}
+	if !contains(page.VisibleLinks, "go_coverage.json") || !contains(page.VisibleLinks, "go_coverage.out") {
+		return fmt.Errorf("visible HTML lacks exact Go evidence download links")
+	}
+	md, e := read("summary.md")
+	if e != nil {
+		return e
+	}
+	for _, text := range []string{"Go 程式敘述覆蓋率：" + value, "Go statements: " + fraction, "全部自有 Go 工具（含 CLI）", "不含 PowerShell 或第三方程式", "PowerShell 覆蓋率未量測"} {
+		if !strings.Contains(string(md), text) {
+			return fmt.Errorf("Markdown lacks matching Go coverage value or scope: %s", text)
+		}
+	}
 	return nil
 }
