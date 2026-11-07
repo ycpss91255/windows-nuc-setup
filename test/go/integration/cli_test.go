@@ -16,8 +16,33 @@ func TestCLICommands(t *testing.T) {
 		goexe += ".exe"
 	}
 	r := decode(t, files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR")))
+	coverageDir := os.Getenv("WINDOWS_SETUP_CLI_COVERAGE_DIR")
+	if coverageDir == "" {
+		coverageDir = t.TempDir()
+	}
+	if e := os.MkdirAll(coverageDir, 0700); e != nil {
+		t.Fatal(e)
+	}
+	t.Setenv("GOCOVERDIR", coverageDir)
+	binaries := map[string]string{}
+	binaryDir := t.TempDir()
 	run := func(args ...string) (string, error) {
-		c := exec.Command(goexe, args...)
+		if len(args) < 2 || args[0] != "run" {
+			t.Fatal("CLI test requires a package")
+		}
+		pkg := args[1]
+		exe, ok := binaries[pkg]
+		if !ok {
+			exe = filepath.Join(binaryDir, filepath.Base(pkg)+".exe")
+			build := exec.Command(goexe, "build", "-cover", "-coverpkg=./script/test/...", "-o", exe, pkg)
+			build.Dir = root
+			b, e := build.CombinedOutput()
+			if e != nil {
+				t.Fatalf("instrumented CLI build: %s %v", b, e)
+			}
+			binaries[pkg] = exe
+		}
+		c := exec.Command(exe, args[2:]...)
 		c.Dir = root
 		b, e := c.CombinedOutput()
 		return string(b), e
@@ -56,5 +81,19 @@ func TestCLICommands(t *testing.T) {
 			t.Fatalf("%s %v", b, e)
 		}
 	})
-	t.Run("instrumented_cli_evidence",func(t *testing.T){dir:=os.Getenv("GOCOVERDIR");if dir==""{dir=t.TempDir();t.Setenv("GOCOVERDIR",dir)};b,e:=run("run","./script/test/requirements_gate","--artifact-dir",os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"),"--source-root",root,"--expected-sha",r.Commit,"--expected-run-url",r.RunUrl);if e!=nil{t.Fatalf("CLI prerequisite: %s %v",b,e)};matches,e:=filepath.Glob(filepath.Join(dir,"covcounters.*"));if e!=nil||len(matches)==0{t.Fatalf("actual CLI coverage counters missing: %v",e)}})
+	t.Run("instrumented_cli_evidence", func(t *testing.T) {
+		dir := os.Getenv("GOCOVERDIR")
+		if dir == "" {
+			dir = t.TempDir()
+			t.Setenv("GOCOVERDIR", dir)
+		}
+		b, e := run("run", "./script/test/requirements_gate", "--artifact-dir", os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"), "--source-root", root, "--expected-sha", r.Commit, "--expected-run-url", r.RunUrl)
+		if e != nil {
+			t.Fatalf("CLI prerequisite: %s %v", b, e)
+		}
+		matches, e := filepath.Glob(filepath.Join(dir, "covcounters.*"))
+		if e != nil || len(matches) == 0 {
+			t.Fatalf("actual CLI coverage counters missing: %v", e)
+		}
+	})
 }
