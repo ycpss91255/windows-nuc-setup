@@ -37,11 +37,31 @@ func TestGoCoveragePublishedEvidence(t *testing.T) {
 	if e = a.ValidateGoCoverageReport(reader(data), owned, r.Commit, r.RunUrl, true); e != nil {
 		t.Fatal(e)
 	}
-	for _, kind := range []string{"missing", "badge_percent", "summary_disagrees", "stale_run", "profile_hash"} {
+	if _, e = a.ValidateReport(reader(data), r.Commit, r.RunUrl, false); e != nil {
+		t.Fatalf("full report must consume attached coverage: %v", e)
+	}
+	for _, kind := range []string{"missing", "badge_percent", "summary_disagrees", "stale_run", "profile_hash", "missing_json", "missing_profile", "missing_svg", "bad_svg_namespace", "bad_sidecar_json", "bad_summary_json", "release_attachment"} {
 		t.Run(kind, func(t *testing.T) {
 			m := copyFiles(data)
 			run := r.RunUrl
 			switch kind {
+			case "missing_json":
+				delete(m, "go_coverage.json")
+			case "missing_profile":
+				delete(m, "go_coverage.out")
+			case "missing_svg":
+				delete(m, "go_coverage.svg")
+			case "bad_svg_namespace":
+				m["go_coverage.svg"] = []byte(`<svg xmlns="wrong"/>`)
+			case "bad_sidecar_json":
+				m["go_coverage.json"] = []byte(`{`)
+			case "bad_summary_json":
+				m["summary.json"] = []byte(`{`)
+			case "release_attachment":
+				var q map[string]any
+				json.Unmarshal(m["summary.json"], &q)
+				q["RefType"] = "Release"
+				m["summary.json"], _ = json.Marshal(q)
 			case "missing":
 				m = original
 			case "badge_percent":

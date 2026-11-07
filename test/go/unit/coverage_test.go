@@ -45,3 +45,21 @@ func TestGoBadgeExactREADMEURL(t *testing.T) {
 		}
 	}
 }
+
+func TestMalformedCoverageProfilesRejected(t *testing.T) {
+	f := "windows_setup/script/test/a.go"
+	valid := "mode: set\n" + f + ":1.1,2.1 1 1\n"
+	for _, profile := range []string{"", "mode: mystery\n" + f + ":1.1,2.1 1 1\n", "mode: set\nC:/Users/person/private.go:1.1,2.1 1 1\n", "mode: set\n" + f + ":1.1,2.1 99999999999999999999999999 1\n", "mode: set\n" + f + ":1.1,2.1 1 99999999999999999999999999\n", "mode: set\nwindows_setup/script/test/other.go:1.1,2.1 1 1\n"} {
+		if _, e := a.EvaluateCoverage([][]byte{[]byte(profile)}, []string{f}); e == nil {
+			t.Fatalf("malformed profile accepted: %q", profile)
+		}
+	}
+	for _, scope := range [][]string{nil, {"windows_setup/script/test/a_test.go"}, {"external/a.go"}} {
+		if _, e := a.EvaluateCoverage([][]byte{[]byte(valid)}, scope); e == nil {
+			t.Fatal("invalid source scope accepted")
+		}
+	}
+	if _, e := a.EvaluateCoverage([][]byte{[]byte(valid), []byte(strings.ReplaceAll(valid, " 1 1", " 2 1"))}, []string{f}); e == nil {
+		t.Fatal("contradictory statements accepted")
+	}
+}
