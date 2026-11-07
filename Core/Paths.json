@@ -1,4 +1,4 @@
-{
+﻿{
   "Apply-AutologonSettings.ps1": "Modules/Accounts/Apply-AutologonSettings.ps1",
   "Apply-AutologonSettings.cmd": "Modules/Accounts/Apply-AutologonSettings.cmd",
   "Autologon64.exe": "Modules/Accounts/Autologon64.exe",
@@ -65,7 +65,7 @@
   "Run-Setup.cmd": "Core/Run-Setup.cmd",
   "Verify-AfterRestart.cmd": "Core/Verify-AfterRestart.cmd",
   "Verify-Only.cmd": "Core/Verify-Only.cmd",
-  "使用說明.txt": "Docs/使用說明.txt",
+  "使用說明.txt": "README.md",
   "Display-Verification.json": "Modules/Display/Display-Verification.json",
   "Theme-Verification.json": "Modules/Theme/Theme-Verification.json",
   "IconLayout-Result.json": "Modules/Desktop/IconLayout-Result.json",

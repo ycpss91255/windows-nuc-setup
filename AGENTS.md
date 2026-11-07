@@ -8,7 +8,7 @@
 
 ## 每次迭代必做
 1. 先查看 `git status`、最近提交與本次相關模組，保留使用者及其他協作者尚未提交的變更。
-2. 修改後更新 `CHANGELOG.md`，以繁體中文記錄日期、修改理由、影響模組、驗證方式與結果，以及尚未驗證的限制。
+2. 修改後以繁體中文 Git 提交記錄修改理由、影響模組、驗證方式與結果及限制；發布時補充 Release 說明。操作文件集中根目錄 README.md；讀者導向的變更紀錄放 doc/changelog/CHANGELOG.md，遵循同目錄 CONVENTIONS.md，不新增根目錄 CHANGELOG 或重複的 Docs 說明。
 3. 執行與變更相稱的測試。Windows 腳本須可由 Windows PowerShell 5.1 解析；不可把只通過語法檢查描述成已在第二臺全新電腦實跑。
 4. 提交訊息以中文簡述具體結果；若是進行中檢查點，明確註記「進行中」，不要假稱功能完成。
 5. Downloads 的 windows_setup 是自包含的權威主版本，包含 Modules/Drivers/Payload。依使用者最新指示，整包可複製到任意可寫入的非桌面路徑；不實作自動搬移到 Downloads，不綁定使用者或磁碟代號。

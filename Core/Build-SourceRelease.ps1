@@ -22,7 +22,7 @@ foreach($path in $files){
   throw ('拒絕將執行資料、秘密或安裝二進位放入來源版本包：'+$path)
  }
 }
-foreach($required in @('Init.cmd','Windows.cmd','README.md','Docs/GITHUB.md')){
+foreach($required in @('Init.cmd','Windows.cmd','README.md')){
  if($required -notin $files){throw ('來源提交缺少必要檔案：'+$required)}
 }
 $output=[IO.Path]::GetFullPath($OutputDirectory)
@@ -44,11 +44,11 @@ $body=@"
 
 - 來源提交：$commit
 - 下載 source.zip 與對應 SHA256 清單後，先驗證檔案完整性。
-- 這是程式來源包，不含裝置驅動與 Microsoft Autologon EXE；依 Docs/GITHUB.md 補齊必要二進位，再執行完整套件檢查。
+- 這是程式來源包，不含裝置驅動與 Microsoft Autologon EXE；依根目錄 README.md 補齊必要二進位，再執行完整套件檢查。
 - 不包含實機報告、續跑紀錄、密碼或私鑰。
 - CI 不能代替 NUC 硬體、OOBE、驅動與重開機的實機驗證。
 
-完整修改紀錄請查看 CHANGELOG.md。Release 下載檔長期保留；CI 測試報告僅短期保留 7 天。
+版本摘要請查看 doc/changelog/CHANGELOG.md；詳細修改紀錄見中文 Git 提交與 GitHub Release 說明。Release 下載檔長期保留；CI 測試報告僅短期保留 7 天。
 "@
 [IO.File]::WriteAllText($notes,$body,$utf8)
 [pscustomobject]@{Version=$Version;Commit=$commit;FileCount=$files.Count;ZipPath=$zip;ChecksumPath=$checksum;NotesPath=$notes;SHA256=$hash}

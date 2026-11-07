@@ -4,11 +4,11 @@ $builder=Join-Path (Split-Path $PSScriptRoot -Parent) 'Core\Build-SourceRelease.
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('NUC-SourceRelease-Test-'+[guid]::NewGuid().ToString('N'))
 $repo=Join-Path $fixture '中文 來源'
 $out=Join-Path $fixture '發布 檔案'
-New-Item -ItemType Directory -Path (Join-Path $repo 'Docs') -Force|Out-Null
+New-Item -ItemType Directory -Path $repo -Force|Out-Null
 $script:count=0
 function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++;Write-Host ('PASS: '+$Message)}
 function Invoke-FixtureGit([string[]]$Arguments){& git.exe -C $repo @Arguments|Out-Null;if($LASTEXITCODE -ne 0){throw '測試 Git 命令失敗。'}}
-foreach($file in @('Init.cmd','Windows.cmd','README.md','Docs\GITHUB.md')){[IO.File]::WriteAllText((Join-Path $repo $file),'test source')}
+foreach($file in @('Init.cmd','Windows.cmd','README.md')){[IO.File]::WriteAllText((Join-Path $repo $file),'test source')}
 Invoke-FixtureGit @('init','--quiet')
 Invoke-FixtureGit @('config','user.name','CI Fixture')
 Invoke-FixtureGit @('config','user.email','fixture@example.invalid')
@@ -25,7 +25,7 @@ $zip=[IO.Compression.ZipFile]::OpenRead($result.ZipPath)
 try{$entries=@($zip.Entries|ForEach-Object {$_.FullName})}finally{$zip.Dispose()}
 Assert ('windows_setup/Init.cmd' -in $entries) 'ZIP 有單一完整工具包根目錄'
 Assert (-not($entries -match 'local-only|\.git/')) '不包含未追蹤檔案與 Git metadata'
-Assert ($result.FileCount -eq 4) '僅打包指定提交的四個來源檔'
+Assert ($result.FileCount -eq 3) '僅打包指定提交的三個來源檔'
 Assert ([IO.File]::ReadAllText($result.NotesPath).Contains('來源包')) '版本說明清楚標示來源包'
 $caught=$false;try{& $builder -Version '../bad' -PackageRoot $repo -OutputDirectory (Join-Path $fixture 'invalid')|Out-Null}catch{$caught=$true}
 Assert $caught '拒絕無效版本及路徑穿越名稱'

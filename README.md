@@ -1,8 +1,53 @@
-﻿# Windows 設定工具：重裝後完整操作步驟
+﻿# windows_setup
 
-Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不納入 Git，從原始碼取得後須依 [GitHub 準備說明](Docs/GITHUB.md) 補齊再檢查。第三方來源及授權見 [THIRD_PARTY.md](THIRD_PARTY.md)。公開來源的網路 Sites 預設為空集合；請在本機維護個人規則。
+[![Windows CI](https://github.com/ycpss91255/windows_setup/actions/workflows/windows-tests.yml/badge.svg)](https://github.com/ycpss91255/windows_setup/actions/workflows/windows-tests.yml)
 
-工具名稱為 Windows 設定工具，包含可獨立執行的 Windows 設定模組；目前一鍵流程與內建驅動設定檔仍限定 Intel NUC8i7HV／HN，主機板檢查會拒絕其他機型，尚未完成所有硬體通用化。依目前階段先執行 Init，再執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
+Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、模組設定與後續驗收。本文以繁體中文提供完整操作說明；版本摘要見 [變更紀錄](doc/changelog/CHANGELOG.md)，實作與驗證細節以中文 Git 提交及 GitHub Release 為準。
+
+## 目錄
+
+- [快速開始](#快速開始)
+- [執行前提](#執行前提)
+- [概覽與適用範圍](#概覽與適用範圍)
+- [初始安裝操作](#先看目前在哪個階段)
+- [模組與獨立執行](#模組補充說明)
+- [SSH 與 hosts](#ssh-與-hosts-後續維護)
+- [來源包準備](#從原始碼準備完整工具包)
+- [CI 與本機測試](#windows-ci)
+- [版本發布](#維護者版本發布)
+- [目錄索引](#模組資料夾索引)
+
+## 快速開始
+
+先確認已取得完整包，並符合下方機型與系統前提；不要直接在 OOBE 執行 Windows.cmd。
+
+```powershell
+# 正式帳號桌面：完成 SSH 初始化後執行設定
+.\Init.cmd
+.\Windows.cmd
+
+# 依提示手動重開機後，回到同一份工具包續跑
+.\Windows.cmd -AfterRestart
+
+# 僅檢查，不重套設定
+.\Windows.cmd -VerifyOnly
+```
+
+若仍在 Windows 初始設定畫面，先照「初始安裝操作」進入稽核模式，再呼叫 Init，不直接套用上面的桌面流程。
+
+## 執行前提
+
+- 目前一鍵硬體設定檔：Intel NUC8i7HVB／NUC8i7HNB；其他主機板會被拒絕。模組可獨立執行，但不代表所有硬體已驗證。
+- 64 位元 Windows 11 22H2 或更新，專業／企業／教育版；Windows 流程須在正式目標本機管理員桌面執行。
+- 完整工具包必須可寫入，不能放在將被清理的桌面；使用者名稱與磁碟代號動態取得。
+- Windows Update 與未快取的 OpenSSH 元件需要網路。UAC、密碼及提示的重新開機需使用者操作。
+- 桌面清理會刪除一般桌面檔案、資料夾與捷徑；先取走要保留的內容。桌面排列範本以繁體中文、1920×1080、100% 縮放為準。
+
+## 概覽與適用範圍
+
+Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不納入 Git，從原始碼取得後須依 [來源包準備說明](#從原始碼準備完整工具包) 補齊再檢查。第三方來源及授權見 [THIRD_PARTY.md](THIRD_PARTY.md)。公開來源的網路 Sites 預設為空集合；請在本機維護個人規則。
+
+本工具依上方前提選用既有硬體設定檔，Windows 模組亦提供獨立入口。依目前階段先執行 Init，再執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
 
 目前 Downloads 內的 `windows_setup` 是自包含主版本；資料夾可改名，腳本依所在位置解析。要換電腦使用時，完整複製這個資料夾（包含內建驅動）到任意可寫入、非桌面的路徑即可，不強制放在 Downloads。USB 只是可選的搬運媒介；舊 USB 副本不會自動更新，也不作為本輪主版本。
 
@@ -29,6 +74,8 @@ Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不�
 先接上網路，再雙擊 `Init.cmd`，允許管理員權限。這個階段不會重新建立帳號或改密碼；它會安裝／啟用 OpenSSH Server、設定區域網路防火牆，並建立目前使用者的 SSH／hosts 框架。離線且缺少 SSH 安裝元件時會明確失敗，接網後重新執行 Init 即可。
 
 Init 成功後，依下方步驟執行 Windows.cmd。SSH 為可重複執行模組，Windows 第 04 模組也會再次確認，不會因此改用其他帳號。
+
+以下是正式帳號桌面的後續流程。已完成上方 Init 的使用者，不必再建立帳號；直接確認前提並從步驟 2 繼續。
 
 ## 1. 完成 Windows 初始設定
 
@@ -58,10 +105,10 @@ windows_setup\
 │  └─ …                        帳號、記憶體、電源、桌面、輸入法等
 ├─ Reports\                   本機整體進度、結果與紀錄（不納入 Git）
 ├─ Tests\                     不改系統的隔離測試
-└─ Docs\                      詳細功能說明
+└─ doc\changelog\            版本摘要與紀錄規範
 ```
 
-內建驅動位於 `Modules\Drivers\Payload`，包含晶片組、Serial IO、UCM 與 AMD 顯示驅動及雜湊清單；不需要另外找 USB 旁邊的 Driver 資料夾。不要只複製單一 `.cmd`／`.ps1`，也不要漏掉 Payload 或隱藏的 `.git` 版本資料夾。
+內建驅動位於 `Modules\Drivers\Payload`，包含晶片組、Serial IO、UCM 與 AMD 顯示驅動及雜湊清單；不需要另外找 USB 旁邊的 Driver 資料夾。不要只複製單一 `.cmd`／`.ps1`，也不要漏掉 Payload。`.git` 僅在需要維護版本歷史時保留，執行設定不需要它，來源發布包也不包含它。
 
 工具包不要放在桌面或其子資料夾內，以免桌面清理刪到工具包。完整複製到本機後，執行本機這份；不需要 USB 持續連接。若自行選擇直接從外接磁碟執行，該磁碟必須可寫入且全程保持連接。
 
@@ -141,7 +188,7 @@ windows_setup\
 
 第 15 模組會在缺少時新增英文（美國）`en-US`，並確保存在美式鍵盤 `0409:00000409`，再設為預設輸入法；保留中文、其他語言、既有鍵盤與順序，不安裝英文顯示語言包或切換 Windows 介面語言。若只要補英文鍵盤，可雙擊 `Modules\Input\Apply-InputMethodSettings.cmd`；只檢查可在工具包目錄執行 `Modules\Input\Apply-InputMethodSettings.cmd -VerifyOnly`。檢查會同時確認英文語言、美式鍵盤及預設輸入法，結果寫入 `%ProgramData%\NUC8-Setup\InputMethod-Result.json`。
 
-各模組資料夾內另有獨立 `.cmd` 入口，例如 `Modules\Input\Apply-InputMethodSettings.cmd`，詳見 [使用說明.txt](Docs/使用說明.txt)。不要因某一模組失敗就手動更動其他無關模組。
+各模組資料夾內另有獨立 `.cmd` 入口，例如 `Modules\Input\Apply-InputMethodSettings.cmd`，詳見下方模組補充說明。不要因某一模組失敗就手動更動其他無關模組。
 
 ## SSH 與 hosts 後續維護
 
@@ -160,7 +207,7 @@ Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安�
 
 這套工具已在原 NUC 驗證；第二臺全新 Windows 的完整安裝尚未實跑。請以目前這臺電腦的驗收結果為準，不保證不同 Windows 版本、硬體或螢幕得到完全相同的更新版本及刪除數量。
 
-中文迭代紀錄見 [CHANGELOG.md](CHANGELOG.md)。工具包內已建立本機 Git，但執行設定不需要安裝 Git；若要查看歷史，可在工具包目錄執行 `git log -5 --oneline`。每機執行結果不納入 Git，請保留需要的診斷紀錄。
+使用者可見的修改見 [變更紀錄](doc/changelog/CHANGELOG.md)；詳細驗證結果與限制以中文 Git 提交及 GitHub Release 說明記錄。工具包內已建立本機 Git，但執行設定不需要安裝 Git；若要查看歷史，可在工具包目錄執行 `git log -5 --oneline`。每機執行結果不納入 Git，請保留需要的診斷紀錄。
 
 ## 模組資料夾索引
 
@@ -187,12 +234,158 @@ Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安�
 
 主流程結果位於 `Reports`；各模組的執行紀錄位於各自資料夾或畫面提示的 `%ProgramData%\NUC8-Setup`。既有程式碼不再全部平鋪在根目錄，請勿只取出其中一支腳本執行。
 
-## Windows 自動測試與報告保留
+## 模組補充說明
 
-GitHub Actions 使用固定的 Windows Server 2022 runner 與 Windows PowerShell 5.1，在 main 推送、Pull Request 或手動觸發時執行語法、來源結構、Init、輸入法、來源封裝與 Hosts／SSH 規劃隔離測試。CI 不執行初始化、SSH、驅動安裝、Sysprep、桌面清理或重新開機。它不能取代實機 OOBE、驅動、登入與畫面驗收。
+### 各模組行為
 
-測試報告寫在 runner 暫存目錄，Actions artifact 只保留 7 天，不納入 Git。實機 Reports、Setup-Result.json 等仍由原流程使用；CI 不讀取或刪除它們，設定尚未完成時請保留續跑紀錄。詳細測試方式見 Docs/GITHUB.md。
+1. Apply-AutologonSettings：以目前帳號設定自動登入；密碼透過 Microsoft Autologon 儲存，不寫在工具包腳本。
+2. Apply-PagefileSettings：停用磁碟分頁檔；重開機後完全生效。
+3. Apply-PowerSettings：插電時停用自動睡眠和休眠；保留螢幕逾時設定。
+4. Apply-SSHSettings：安裝並啟用 OpenSSH Server；自動啟動，防火牆限制 LocalSubnet。
+5. Install-Drivers：核對機型、驅動 SHA256，安裝適用驅動並檢查異常裝置。
+6. Apply-AMDPrivacySettings：拒絕 AMD Software 地理位置存取。已顯示的提示需手動關閉。
+7. Install-WindowsUpdates：執行本輪 Windows 建議更新，顯示心跳進度並記錄是否需要重開機。
+8. Apply-Debloat：先呼叫 Remove-OneDrive.ps1 解除安裝 OneDrive，再依 Debloat-Apps.txt 清理預裝 App，包含 Xbox App、Game Bar、相關登入與語音元件，以及存在時的 Gaming Services。Windows 不可移除的 XboxGameCallableUI 保留。
+9. Apply-CopilotSettings：移除獨立桌面版 Copilot。
+10. Apply-TaskbarSettings：隱藏搜尋、天氣/小工具與工作檢視；僅釘選 Edge。登入後自動解除暫時釘選原則。
+11. Apply-StartMenuSettings：清空釘選、隱藏推薦及全部應用程式分類區；保留搜尋、帳號和電源。程式本體仍可搜尋啟動。
+12. Apply-DisplaySettings：1920×1080、標準原生100%縮放，關閉自訂縮放。
+13. Apply-DesktopSettings：清空普通桌面項目，顯示本機、網路、控制台、資源回收筒。
+14. Apply-ThemeSettings：Windows/應用程式深色、純黑背景；必要時重新載入 Explorer。
+15. Apply-InputMethodSettings：缺少時新增英文（美國）與美式鍵盤，再設為預設；保留中文及其他語言與鍵盤順序。Win+Space 切換，已開啟視窗可能保留原輸入法，下次登入使用新預設。驗證同時核對 en-US、美式鍵盤與預設值，不只檢查順序或 override。
+16. Apply-TerminalHotkey：Ctrl+Alt+T 開啟 Windows Terminal，以一般使用者權限執行。使用 RegisterHotKey 背景監聽程式，登入時透過 Startup 自動啟動。
 
-## 版本發布（CD）
+17. Apply-ExplorerSettings：設定登錄值與 Shell 即時狀態，重新整理已開啟的檔案總管以顯示一般隱藏檔；受保護系統檔保持隱藏。
 
-維護者推送 v主版.次版.修訂 標籤（例如 v1.0.0）時，Windows 版本發布工作流程先執行同一套隔離測試，全部通過才建立 GitHub Release。版本附件為來源 ZIP 與 SHA256 校驗檔，不包含驅動 ZIP、Autologon EXE、實機報告或私人設定；不是完整離線安裝包。詳細步驟見 Docs/RELEASE.md。
+18. Remove-SetupResidue：清除空的 Windows.old、預設聯絡人/遊戲等空資料夾及具名預設捷徑；含有其他資料時保留並記錄。
+
+19. Desktop-IconLayout：最後套用四個圖示座標，避免先前的檔案總管重新整理影響排列。重開驗收入口也會最後套用此範本。
+
+### 額外入口與快捷鍵排錯
+
+- Modules\Desktop\Save-Desktop-Layout.cmd：圖示移動後，將目前位置儲存成新範本。
+- Modules\Updates\Show-Update-Status.cmd：查看更新進度；關閉進度視窗不會停止更新。
+- Windows.cmd -VerifyOnly：檢查設定、目前顯示比例、圖示座標、開始釘選匯出、App清理、輸入法及快捷鍵程序。
+- Terminal 快捷鍵日誌：%LOCALAPPDATA%\NUC8-Setup\TerminalHotkey\status.log。
+  REGISTERED 表示成功註冊；LAUNCHED 表示收到按鍵並呼叫 Terminal；FAILED 1409 表示快捷鍵衝突，需要排查。
+
+### 主機名稱與區域網路
+
+- 連線時使用自己的帳號與主機名稱，例如 ssh your_user@nuc-001.local；名稱解析與連線須在實機確認。
+- .local 用於同網段 mDNS，訪客網路、隔離網路或跨VLAN可能無法使用。
+- 多臺電腦建議路由器固定 DHCP 租約；需要跨網段時使用區域 DNS，例如 nuc-001.home.arpa。
+- 沒有寫入固定 IP、個人 SSH 私鑰、hosts 站點資料或其他人的 SSH config。
+
+
+## 清理與網路規則補充
+
+OneDrive 獨立入口為 `Modules\Debloat\Remove-OneDrive.cmd`；解除安裝後僅清除空的預設資料夾，不刪除個人或雲端資料。清理模組對 Windows.old、Contacts、Saved Games、Favorites、Links、Searches 只清除符合空目錄條件的項目；含資料或連結時保留。具名預設 Bing 書籤、捷徑與內建搜尋定義可清除，其他自訂內容保留；不可移除及僅 Staged 的 Windows 元件不代表一般已安裝 App 未清理。
+
+Hosts／SSH 獨立入口為 `Modules\SSH\Apply-HostsSync.cmd`、`Sync-Hosts.cmd`、`Sync-SSH.cmd`。目前使用者的 `.config\hosts\sites.json` 支援任意站點，透過 Outputs 分別啟用 Hosts／SSH；每 10 秒重新讀取來源，未變更不重寫。SSID 若受定位權限限制，可用 NetworkProfile 或 IPv4Cidr，不會強制開啟定位。框架沒有實際主機清單或私鑰；詳細範例保留在模組內 `Modules\SSH\CustomHostsSync\使用方式.txt` 與 SSH／hosts README。
+
+`.ssh` 具有 Windows Hidden 屬性；啟用顯示隱藏項目時仍可看見。第 04 模組設定 LocalSubnet 的 IPv4／IPv6 Ping 入站規則，名稱解析與 Ping 分開驗證，沒有關閉防火牆。rsync、SSH-agent、Tab 補全及金鑰部署尚未納入。
+
+## 來源包與完整工具包
+
+### 兩種取得方式
+
+目前 Downloads 的完整工具包資料夾（`windows_setup`）包含驅動與必要工具，可依根目錄 README 整包複製使用。
+
+Git 儲存庫則只保存程式、文件、範本、測試及必要的上游來源資產。**從 GitHub clone 或下載原始碼 ZIP，不等於取得完整可執行工具包。** GitHub 上的程式也不會自動下載所有二進位。
+
+### 從原始碼準備完整工具包
+
+1. 保留整個目錄結構，不只複製 `Init.cmd` 或 `Windows.cmd`。
+2. 準備 `Modules/Accounts/Autologon64.exe`：可從自己已核對的完整包複製，或從 [Microsoft Sysinternals 官方頁](https://learn.microsoft.com/en-us/sysinternals/downloads/autologon) 取得；執行時會驗證 Microsoft 簽章。
+3. 將下列四個檔案放入 `Modules/Drivers/Payload`，與該目錄的 `manifest.json` 並列：
+
+   - `Chipset-Win10_Win11-10.1.19376.8374.zip`
+   - `SerialIO-WIn10_Win11-30.100.1914.3.zip`
+   - `UCM-WIN11-1.0.10.3.zip`
+   - `GFX-Radeon-Win10-23.10.01.46.zip`
+
+   可從自己已核對的完整包複製。若需重新取得，應使用設備／供應商的可信來源；取得的版本必須符合清單。不要為了繞過檢查直接修改 SHA256。換版是獨立維護工作，需要驗證並留下紀錄。
+4. 在工具包目錄執行只讀套件檢查：
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Core\Test-SetupPrerequisites.ps1 -PackageOnly
+   ```
+
+   缺少 EXE、驅動或雜湊不符時會停止並顯示原因。檢查不會建立帳號或套用 Windows 設定。
+5. 通過後依根目錄 [初始設定操作](#先看目前在哪個階段) 執行 Init／Windows 流程。完整 OOBE 實機驗證限制仍適用。
+
+`Package-Hashes.json` 是本機交付包的雜湊快照，不追蹤於 Git；Git clone 不會帶有此檔。前置檢查使用受追蹤的驅動 manifest，不以缺少這份交付快照當成程式損壞。
+
+### 不納入 Git 的內容
+
+- 驅動 ZIP、Autologon EXE、安裝封存檔與其他大型二進位。
+- 各機 `Reports`、進度、結果、快取、備份與執行日誌。
+- `.ssh`、私鑰、known_hosts、密碼、Token、Init answer file、owner/runtime/state 等實機資料。
+- 本機套件雜湊快照與暫存測試副本。
+
+忽略規則不會刪除本機完整包的必要檔案。不要為了讓 Git 工作樹乾淨而刪除驅動或使用者自訂設定。
+
+### 公開來源與授權注意事項
+
+公開版 `Modules/SSH/CustomHostsSync/sites.json` 使用空白 Sites，不帶公司、SSID 或實際網段；個人規則只在各機的使用者設定目錄維護。公開倉庫採乾淨新歷史，不推送曾含私人環境資訊的舊提交。
+
+發布前仍須掃描來源與提交歷史，確認沒有密碼、私鑰、個人網路規則或實機報告。Git 作者資訊應使用適合公開的身分。
+
+- 發布前核對目前 remote 指向的 windows_setup 儲存庫。
+- 自有程式對外使用的授權；目前沒有擅自加入 MIT 或其他授權。
+- 若要提供完整二進位下載包，先確認各第三方再散布權限；不能直接把忽略中的驅動和 EXE 全數上傳。
+
+第三方來源與各自授權見 [THIRD_PARTY.md](THIRD_PARTY.md)。儲存庫可設定 remote 並依維護者授權發布；請以目前 Git remote 與 GitHub 狀態為準。
+
+## Windows CI
+
+工作流程位於 .github/workflows/windows-tests.yml：使用 windows-2022、Windows PowerShell 5.1、唯讀 contents 權限，設定 15 分鐘上限與相同分支舊執行取消。Action 固定到已核對的 commit。main 推送、Pull Request 與 workflow_dispatch 都可觸發。
+
+本機測試指令：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tests\Run-CI.ps1
+```
+
+Tests/Run-CI.ps1 可在本機以 Windows PowerShell 5.1 執行，預設把報告放在新建暫存目錄；不套用任何實際使用者設定。它執行自有 PowerShell 語法檢查、Layout.Tests.ps1 -SourceOnly、Init.Tests.ps1、InputMethod.Tests.ps1、SourceRelease.Tests.ps1、HostsSync.Tests.ps1。SourceOnly 只略過 Git 不含的 Autologon EXE 存在檢查，仍核對所有來源、必要資產、驅動 manifest 與入口。實機 Core/Test-SetupPrerequisites.ps1 -PackageOnly 未降低標準，仍要求 EXE 與四個驅動實體檔案及雜湊正確。
+
+每次 CI 將各套件 log 與 summary 上傳為 windows-test-reports artifact，保留 7 天。只上傳明確的 CI 報告資料夾，不上傳測試 fixture、帳號 answer XML、每機 Reports 或秘密。Actions 本身執行 log 的保留天數另由儲存庫設定控制，不是 YAML artifact 保留期。
+
+實機 Setup-Result.json、Setup-Progress.json、Acceptance-Result.json 與驗證結果是續跑或排錯資料，原有 Git 忽略規則保留；CI 不清理這些檔案。設定未完成時不要刪除 Setup-Result.json。雲端通過僅代表來源／隔離測試成功，不表示 NUC 硬體或 OOBE 已通過實機驗收。
+
+## 維護者版本發布
+
+CI 在提交、Pull Request 或手動觸發時執行 Windows PowerShell 5.1 的語法、路徑與隔離測試，不設定實際帳號、不安裝驅動，也不執行 Sysprep。
+
+CD 由 `v主版.次版.修訂` 標籤觸發，例如 `v1.0.0`。它先執行相同 CI；成功後才建立該提交的來源 ZIP、SHA256 清單及中文 GitHub Release。無效標籤或測試失敗都不發布。既有版本不會被覆寫。
+
+### 發布方式
+
+確認 main 的 CI 通過、準備中文 Git 提交與版本說明，並完成 [公開來源與授權注意事項](#公開來源與授權注意事項) 後，在要發布的提交執行：
+
+```powershell
+git tag -a v1.0.0 -m "發布 v1.0.0：Windows 初始化與模組設定"
+git push origin v1.0.0
+```
+
+標籤會觸發 GitHub 上的「Windows 版本發布」流程。版本號應逐次增加，不要移動或重用已發布的標籤。此文件只是操作說明，建立工作流程不代表已建立任何版本標籤。
+
+### 下載內容與保留期限
+
+來源包命名為 `windows_setup_vX.Y.Z_source.zip`，ZIP 根目錄是 `windows_setup/`，版本標題為「Windows 設定工具」。儲存庫名稱為 `windows_setup`。目前一鍵流程仍使用 NUC8i7HV／HN 硬體設定檔；改名不會擴大硬體支援範圍。
+
+- Release ZIP 只含該提交的 Git 來源，不包含 `.git`、驅動 ZIP、Autologon EXE、實機 Reports 或密碼暫存；打包器會拒絕已被錯誤追蹤的這些檔案。
+- 依 [來源包準備說明](#從原始碼準備完整工具包) 補齊二進位後才是完整安裝工具包，不能把來源 ZIP 當成完整離線安裝包。
+- Release ZIP 與 SHA256 是版本交付物，會持續保留，除非維護者手動刪除該版本。
+- CI／CD 測試報告作為 Actions artifact 保留 7 天，不提交進 Git。實機續跑紀錄不受 Actions 清理影響。
+- CD 只發布版本檔，不會連線或部署到任何電腦；OOBE、驅動、自動登入及硬體功能仍須實機驗證。
+
+### 本機試打包
+
+對已提交、且不包含私密資料的來源可執行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Core\Build-SourceRelease.ps1 -Version v1.0.0 -OutputDirectory "$env:TEMP\windows_setup_source_release_check"
+```
+
+這只產生本機版本檔，不建立標籤、不推送、不發布；目的檔已存在時會停止，避免覆寫。
