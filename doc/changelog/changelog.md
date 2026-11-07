@@ -6,6 +6,8 @@
 
 ### Added（新增）
 
+- main 報表新增獨立 Go 程式敘述覆蓋率、徽章與可下載原始 profile／JSON，涵蓋全部自有 Go 工具及 CLI，CI 以真實計數要求至少 80%。PowerShell 仍未量測，歷史 Release 不回填，System／完整 E2E 不計入。
+
 - 新增 Windows Docker 開發與全套隔離測試入口，真容器測試及其報告需求驗收納入 ci-rollup；容器證據獨立短留七天，不冒充 Windows 桌面或完整安裝 E2E。
 
 
