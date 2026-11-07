@@ -70,9 +70,14 @@ func TestCLICommands(t *testing.T) {
 		}
 	})
 	t.Run("wrong_sha_exit", func(t *testing.T) {
+		before, _ := filepath.Glob(filepath.Join(coverageDir, "covcounters.*"))
 		b, e := run("run", "./script/test/requirements_gate", "--artifact-dir", os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"), "--source-root", root, "--expected-sha", strings.Repeat("0", 40), "--expected-run-url", r.RunUrl)
 		if e == nil || !strings.Contains(b, "需求驗收失敗") {
 			t.Fatalf("%s %v", b, e)
+		}
+		after, _ := filepath.Glob(filepath.Join(coverageDir, "covcounters.*"))
+		if len(after) <= len(before) {
+			t.Fatal("exit 1 CLI did not write its own new coverage counter")
 		}
 	})
 	t.Run("https_only", func(t *testing.T) {
@@ -143,6 +148,27 @@ func TestCLICommands(t *testing.T) {
 			if _, e := os.Stat(filepath.Join(out, n)); e != nil {
 				t.Fatal(e)
 			}
+		}
+		for _, kind := range []string{"missing_flags", "existing_output", "inside_source", "missing_profile", "missing_report"} {
+			t.Run(kind, func(t *testing.T) {
+				args := []string{"run", "./script/test/go_coverage", "--unit-profile", profile, "--cli-profile", profile, "--source-root", source, "--report-dir", reportDir, "--output-dir", filepath.Join(t.TempDir(), "new")}
+				switch kind {
+				case "missing_flags":
+					args = args[:2]
+				case "existing_output":
+					args[len(args)-1] = out
+				case "inside_source":
+					args[len(args)-1] = filepath.Join(source, "output")
+				case "missing_profile":
+					args[3] = filepath.Join(t.TempDir(), "missing.out")
+				case "missing_report":
+					args[9] = t.TempDir()
+				}
+				b, e := run(args...)
+				if e == nil || !strings.Contains(b, "Go coverage failed") {
+					t.Fatalf("producer error not propagated: %s %v", b, e)
+				}
+			})
 		}
 	})
 }
