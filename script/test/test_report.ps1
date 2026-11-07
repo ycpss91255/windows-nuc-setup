@@ -55,7 +55,7 @@ function Write-TestReports {
  $md=@('# Windows 測試報表','','僅單元與隔離整合測試；System／完整 E2E 暫緩且未執行。程式碼覆蓋率未量測。','','| 層級 | 測試套件 | 狀態 | 斷言通過／實際執行 | 秒 |','| --- | --- | --- | --- | --- |')
  foreach($check in $safe){$passed=@($check.Assertions|Where-Object Passed).Count;$md+='| '+$check.Layer+' | '+$check.Name.Replace('|','/')+' | '+$check.Status+' | '+$passed+'/'+$check.Assertions.Count+' | '+$check.DurationSeconds+' |'}
  $md+=@('','Version: '+$Version+' / '+$RefType+' '+$RefName+' / Commit: '+$report.Commit+' / source: '+$SourceState+' / TestScope: '+$Layer+' / MeasuredAt: '+$MeasuredAt+' / Environment: '+$report.Environment,'')
- if($null -ne $GoCoverage){$md[2]=$md[2].Replace('程式碼覆蓋率未量測。','PowerShell 覆蓋率未量測。');$md+=@('','Go 程式敘述覆蓋率：'+(Get-GoCoveragePercentText $GoCoverage)+'；範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。','Go statements: '+$GoCoverage.CoveredStatements+'/'+$GoCoverage.TotalStatements+'；門檻 '+$GoCoverage.Threshold+'%')}
+ if($null -ne $GoCoverage){$md[2]=$md[2].Replace('程式碼覆蓋率未量測。','PowerShell 覆蓋率未量測。');$md+=@('','Go 程式敘述覆蓋率：'+(Get-GoCoveragePercentText $GoCoverage)+'；範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。','Go statements: '+$GoCoverage.Covered+'/'+$GoCoverage.TotalStatements+'；門檻 '+$GoCoverage.Threshold+'%')}
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'summary.md'),($md -join "`n"),$encoding)
  $conclusion=if(-not $ok){'本次測試未通過'}elseif($Layer -ne 'All'){'僅所選層級通過，未執行的層級沒有結論'}else{'單元與隔離整合測試通過；完整安裝尚未驗證'}
  $body='<h1>Windows 設定工具｜本次檢查明細</h1><h2>'+[Net.WebUtility]::HtmlEncode($conclusion)+'</h2><p>檢查範圍是程式邏輯，以及隔離環境中的模組配合；完整 Windows 安裝、重開機與真實硬體設定尚未實測。</p><p><a href="https://github.com/ycpss91255/windows_setup/blob/main/readme.md">查看 USB 安裝與使用步驟</a></p>'
@@ -71,7 +71,7 @@ function Write-TestReports {
  foreach($check in $safe){$body+='<details><summary>'+[Net.WebUtility]::HtmlEncode($check.Layer+' · '+$check.Name+' · '+$check.Status)+'</summary><p>'+[Net.WebUtility]::HtmlEncode([string]$check.DurationSeconds)+' 秒</p><ul>';foreach($assertion in $check.Assertions){$body+='<li>'+$(if($assertion.Passed){'PASS'}else{'FAIL'})+' · '+[Net.WebUtility]::HtmlEncode($assertion.Name)+'</li>'};$body+='</ul></details>'}
  if($null -ne $GoCoverage){
   $body=$body.Replace('程式碼覆蓋率：尚未量測，沒有可提供的百分比。','PowerShell 覆蓋率：尚未量測；Go 工具另列量測數值。')
-  $body+='<h2>Go 程式敘述覆蓋率</h2><p><strong>'+(Get-GoCoveragePercentText $GoCoverage)+'</strong> · '+$GoCoverage.CoveredStatements+'/'+$GoCoverage.TotalStatements+' statements；門檻 '+$GoCoverage.Threshold+'%。範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。</p><p><a href="go_coverage.json">Go 量測資料</a> · <a href="go_coverage.out">原始 Go 覆蓋率</a></p>'
+  $body+='<h2>Go 程式敘述覆蓋率</h2><p><strong>'+(Get-GoCoveragePercentText $GoCoverage)+'</strong> · '+$GoCoverage.Covered+'/'+$GoCoverage.TotalStatements+' statements；門檻 '+$GoCoverage.Threshold+'%。範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。</p><p><a href="go_coverage.json">Go 量測資料</a> · <a href="go_coverage.out">原始 Go 覆蓋率</a></p>'
   Write-GoCoverageView -Coverage $GoCoverage -RefType $RefType -OutputDirectory $OutputDirectory
  }
  $html='<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Windows 測試報表</title><style>body{font:16px system-ui;max-width:1100px;margin:32px auto;padding:0 20px;color:#17202a;background:#f7f9fb}details{background:white;padding:16px;margin:16px 0;border:1px solid #dde3ea;border-radius:8px}li{margin:5px 0}</style><body>'+$body+'</body></html>'
