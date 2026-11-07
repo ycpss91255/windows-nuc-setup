@@ -31,12 +31,8 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	rel, e := filepath.Rel(source, out)
-	if e != nil {
+	if e = a.CoverageOutputLocation(source, out); e != nil {
 		return e
-	}
-	if rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return fmt.Errorf("coverage output must be outside read-only source")
 	}
 	if _, e = os.Stat(out); !os.IsNotExist(e) {
 		return fmt.Errorf("coverage output must be a new directory")
