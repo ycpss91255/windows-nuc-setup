@@ -1,4 +1,5 @@
 ﻿#Requires -Version 5.1
+. (Join-Path $PSScriptRoot 'go_coverage.ps1')
 function Protect-ReportText([string]$Text){
  foreach($value in @($env:USERPROFILE,$env:TEMP,$env:TMP,$env:GITHUB_WORKSPACE)|Where-Object {$_}){$Text=$Text.Replace($value,'[local]')}
  $Text=[regex]::Replace($Text,'(?i)[A-Z]:[\\/][^\r\n|]*','[local path]')
@@ -25,6 +26,7 @@ function Assert-TestReportSnapshot {
   foreach($assertion in @($check.Assertions)){if($assertion.Name -isnot [string] -or $assertion.Passed -isnot [bool]){throw '斷言資料不合法。'}}
   if($check.Status -eq 'Passed' -and $check.Layer -in @('Unit','Integration') -and (-not @($check.Assertions).Count -or @($check.Assertions|Where-Object {-not $_.Passed}).Count)){throw '通過的測試缺少完整成功斷言。'}
  }
+ if($Report.PSObject.Properties['GoCoverage']){Assert-GoCoverage -Coverage $Report.GoCoverage -Report $Report}
  $allAssertions=@($Report.Checks|ForEach-Object {$_.Assertions})
  $expected=@{SuitesExecuted=@($Report.Checks|Where-Object Executed).Count;AssertionsExecuted=$allAssertions.Count;AssertionsPassed=@($allAssertions|Where-Object Passed).Count;AssertionsFailed=@($allAssertions|Where-Object {-not $_.Passed}).Count;UnexecutedSuites=@($Report.Checks|Where-Object {-not $_.Executed}).Count}
  foreach($key in $expected.Keys){if($key -notin $Report.Totals.PSObject.Properties.Name -or $Report.Totals.$key -ne $expected[$key]){throw ('報表統計不一致：'+$key)}}
@@ -35,7 +37,7 @@ function Assert-TestReportSnapshot {
  }
 }
 function Write-TestReports {
- param([Parameter(Mandatory=$true)][object[]]$Checks,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$Layer='All',[string]$Commit=$env:GITHUB_SHA,[string]$RunUrl,[ValidateSet('Clean','Dirty','Unknown')][string]$SourceState='Unknown',[string]$Version='Unknown',[string]$Environment='Unknown',[ValidateSet('Branch','Release')][string]$RefType='Branch',[string]$RefName='Unknown',[string]$MeasuredAt=([DateTime]::UtcNow.ToString('o')),[string[]]$Changes=@())
+ param([Parameter(Mandatory=$true)][object[]]$Checks,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$Layer='All',[string]$Commit=$env:GITHUB_SHA,[string]$RunUrl,[ValidateSet('Clean','Dirty','Unknown')][string]$SourceState='Unknown',[string]$Version='Unknown',[string]$Environment='Unknown',[ValidateSet('Branch','Release')][string]$RefType='Branch',[string]$RefName='Unknown',[string]$MeasuredAt=([DateTime]::UtcNow.ToString('o')),[string[]]$Changes=@(),$GoCoverage)
  $encoding=New-Object Text.UTF8Encoding($false)
  New-Item -ItemType Directory -Path $OutputDirectory -Force|Out-Null
  $safe=@(foreach($check in $Checks){
@@ -44,6 +46,7 @@ function Write-TestReports {
  })
  $ok=@($safe|Where-Object {$_.Executed -and -not $_.Passed}).Count -eq 0
  $report=[ordered]@{SchemaVersion=1;Version=(Protect-ReportText $Version);Environment=(Protect-ReportText $Environment);RefType=$RefType;RefName=(Protect-ReportText $RefName);MeasuredAt=$MeasuredAt;Changes=@($Changes|Select-Object -First 20|ForEach-Object {Protect-ReportText $_});ComparisonStatus='Unknown';FlakyStatus='Unknown';Success=$ok;Scope='Unit and isolated integration; system/E2E deferred, coverage not measured';RequestedLayer=$Layer;SourceState=$SourceState;Commit=$(if($Commit -match '^[a-fA-F0-9]{40}$'){$Commit}else{'local-unversioned'});RunUrl=$(if($RunUrl -match '^https://github.com/[^/]+/[^/]+/actions/runs/[0-9]+$'){$RunUrl}else{''});GeneratedAt=$MeasuredAt;Coverage='NotMeasured';Checks=$safe}
+ if($null -ne $GoCoverage){$report.GoCoverage=$GoCoverage;$report.Scope='Unit and isolated integration; system/E2E deferred; PowerShell coverage not measured; Go statement coverage measured separately'}
  $allAssertions=@($safe|ForEach-Object {$_.Assertions})
  $report.Totals=[pscustomobject]@{SuitesExecuted=@($safe|Where-Object Executed).Count;AssertionsExecuted=$allAssertions.Count;AssertionsPassed=@($allAssertions|Where-Object Passed).Count;AssertionsFailed=@($allAssertions|Where-Object {-not $_.Passed}).Count;UnexecutedSuites=@($safe|Where-Object {-not $_.Executed}).Count}
  Assert-TestReportSnapshot -Report ([pscustomobject]$report)
@@ -52,6 +55,7 @@ function Write-TestReports {
  $md=@('# Windows 測試報表','','僅單元與隔離整合測試；System／完整 E2E 暫緩且未執行。程式碼覆蓋率未量測。','','| 層級 | 測試套件 | 狀態 | 斷言通過／實際執行 | 秒 |','| --- | --- | --- | --- | --- |')
  foreach($check in $safe){$passed=@($check.Assertions|Where-Object Passed).Count;$md+='| '+$check.Layer+' | '+$check.Name.Replace('|','/')+' | '+$check.Status+' | '+$passed+'/'+$check.Assertions.Count+' | '+$check.DurationSeconds+' |'}
  $md+=@('','Version: '+$Version+' / '+$RefType+' '+$RefName+' / Commit: '+$report.Commit+' / source: '+$SourceState+' / TestScope: '+$Layer+' / MeasuredAt: '+$MeasuredAt+' / Environment: '+$report.Environment,'')
+ if($null -ne $GoCoverage){$md[2]=$md[2].Replace('程式碼覆蓋率未量測。','PowerShell 覆蓋率未量測。');$md+=@('','Go 程式敘述覆蓋率：'+(Get-GoCoveragePercentText $GoCoverage)+'；範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。','Go statements: '+$GoCoverage.CoveredStatements+'/'+$GoCoverage.TotalStatements+'；門檻 '+$GoCoverage.Threshold+'%')}
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'summary.md'),($md -join "`n"),$encoding)
  $conclusion=if(-not $ok){'本次測試未通過'}elseif($Layer -ne 'All'){'僅所選層級通過，未執行的層級沒有結論'}else{'單元與隔離整合測試通過；完整安裝尚未驗證'}
  $body='<h1>Windows 設定工具｜本次檢查明細</h1><h2>'+[Net.WebUtility]::HtmlEncode($conclusion)+'</h2><p>檢查範圍是程式邏輯，以及隔離環境中的模組配合；完整 Windows 安裝、重開機與真實硬體設定尚未實測。</p><p><a href="https://github.com/ycpss91255/windows_setup/blob/main/readme.md">查看 USB 安裝與使用步驟</a></p>'
@@ -65,6 +69,11 @@ function Write-TestReports {
  $body+='<details><summary>本次維護變更摘要</summary><ul>';if(@($Changes).Count){foreach($change in $report.Changes){$body+='<li>'+[Net.WebUtility]::HtmlEncode($change)+'</li>'}}else{$body+='<li>目前沒有這個版本的變更摘要。</li>'};$body+='</ul></details>'
  $body+='<h2>尚未驗證的部分</h2><ul><li>完整安裝：尚未在全新 Windows 上走完初始化、套用設定與重開機驗收。</li><li>程式碼覆蓋率：尚未量測，沒有可提供的百分比。</li><li>版本差異與測試穩定性：尚無足夠紀錄可判斷，不代表沒有退步或不穩定情況。</li><li>這份報告不代表已在你的電腦完成安裝。</li></ul><h2>各項檢查結果</h2>'
  foreach($check in $safe){$body+='<details><summary>'+[Net.WebUtility]::HtmlEncode($check.Layer+' · '+$check.Name+' · '+$check.Status)+'</summary><p>'+[Net.WebUtility]::HtmlEncode([string]$check.DurationSeconds)+' 秒</p><ul>';foreach($assertion in $check.Assertions){$body+='<li>'+$(if($assertion.Passed){'PASS'}else{'FAIL'})+' · '+[Net.WebUtility]::HtmlEncode($assertion.Name)+'</li>'};$body+='</ul></details>'}
+ if($null -ne $GoCoverage){
+  $body=$body.Replace('程式碼覆蓋率：尚未量測，沒有可提供的百分比。','PowerShell 覆蓋率：尚未量測；Go 工具另列量測數值。')
+  $body+='<h2>Go 程式敘述覆蓋率</h2><p><strong>'+(Get-GoCoveragePercentText $GoCoverage)+'</strong> · '+$GoCoverage.CoveredStatements+'/'+$GoCoverage.TotalStatements+' statements；門檻 '+$GoCoverage.Threshold+'%。範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。</p><p><a href="go_coverage.json">Go 量測資料</a> · <a href="go_coverage.out">原始 Go 覆蓋率</a></p>'
+  Write-GoCoverageView -Coverage $GoCoverage -RefType $RefType -OutputDirectory $OutputDirectory
+ }
  $html='<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Windows 測試報表</title><style>body{font:16px system-ui;max-width:1100px;margin:32px auto;padding:0 20px;color:#17202a;background:#f7f9fb}details{background:white;padding:16px;margin:16px 0;border:1px solid #dde3ea;border-radius:8px}li{margin:5px 0}</style><body>'+$body+'</body></html>'
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'index.html'),$html,$encoding)
  $xml=New-Object Xml.XmlDocument;$tests=$xml.CreateElement('testsuites');[void]$xml.AppendChild($tests)
