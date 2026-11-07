@@ -40,11 +40,39 @@ function Test-SetupChecksPassed {
  param([object[]]$Checks)
  return (@($Checks|Where-Object {$_.Status -ne 'Skipped' -and -not $_.Passed}).Count -eq 0)
 }
+function New-SetupDriverSelection {
+ param([Parameter(Mandatory=$true)][string]$PackageRoot,[Parameter(Mandatory=$true)][string]$DriverPackagePath)
+ $base=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($PackageRoot).TrimEnd('\')+'\'
+ $selected=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DriverPackagePath).TrimEnd('\')
+ $relative=''
+ if([IO.Path]::GetPathRoot($base) -ieq [IO.Path]::GetPathRoot($selected)){
+  $relative=[Uri]::UnescapeDataString(([Uri]$base).MakeRelativeUri([Uri]($selected+'\')).ToString()).Replace('/','\').TrimEnd('\')
+  if(-not $relative){$relative='.'}
+ }
+ [pscustomobject]@{SchemaVersion=1;RelativePath=$relative;AbsolutePath=$selected;PackageSHA256=(Get-FileHash -LiteralPath (Join-Path $selected 'package.json') -Algorithm SHA256 -ErrorAction Stop).Hash;ManifestSHA256=(Get-FileHash -LiteralPath (Join-Path $selected 'manifest.json') -Algorithm SHA256 -ErrorAction Stop).Hash}
+}
 function Get-SetupSavedDriverSelection {
- param([string]$ResultPath,[string]$Computer=$env:COMPUTERNAME,[string]$UserSID)
+ param([string]$ResultPath,[string]$Computer=$env:COMPUTERNAME,[string]$UserSID,[string]$PackageRoot=(Split-Path -Parent $PSScriptRoot))
  if(-not(Test-Path -LiteralPath $ResultPath -PathType Leaf)){return ''}
  if(-not $UserSID){$UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}
  $saved=Get-Content -LiteralPath $ResultPath -Raw -ErrorAction Stop|ConvertFrom-Json
- if($saved.Computer -eq $Computer -and $saved.UserSID -eq $UserSID -and $saved.HardwareProfile.DriverPackagePath){return [string]$saved.HardwareProfile.DriverPackagePath}
- return ''
+ if($saved.Computer -ne $Computer -or $saved.UserSID -ne $UserSID){return ''}
+ if(-not $saved.HardwareProfile.DriverPackagePath){return ''}
+ $selection=$saved.HardwareProfile.DriverSelection
+ if(-not $selection){
+  # Older records never guess a new disk letter. Explicit reselection upgrades the record.
+  $legacy=[string]$saved.HardwareProfile.DriverPackagePath
+  if(-not [IO.Path]::IsPathRooted($legacy) -or -not(Test-Path -LiteralPath $legacy -PathType Container)){throw '舊驅動選擇路徑已失效，請以 Windows.cmd 重新指定獨立驅動包。'}
+  return $legacy
+ }
+ if($selection.SchemaVersion -ne 1 -or $selection.PackageSHA256 -notmatch '^[a-fA-F0-9]{64}$' -or $selection.ManifestSHA256 -notmatch '^[a-fA-F0-9]{64}$'){throw '驅動續跑紀錄格式不合法，請重新選擇驅動包。'}
+ if($selection.RelativePath){
+  if([IO.Path]::IsPathRooted($selection.RelativePath) -or $selection.RelativePath.Contains(':')){throw '驅動相對位置不可指定磁碟代號。'}
+  $candidate=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $PackageRoot $selection.RelativePath))
+ }else{$candidate=[string]$selection.AbsolutePath}
+ if(-not [IO.Path]::IsPathRooted($candidate) -or -not(Test-Path -LiteralPath $candidate -PathType Container)){throw '找不到原選擇的獨立驅動包。請保持主包與驅動包相對位置，或以 Windows.cmd 重新選擇；不會搜尋其他磁碟。'}
+ foreach($item in @(@('package.json','PackageSHA256'),@('manifest.json','ManifestSHA256'))){
+  if((Get-FileHash -LiteralPath (Join-Path $candidate $item[0]) -Algorithm SHA256 -ErrorAction Stop).Hash -ne $selection.($item[1])){throw '驅動包身分與原選擇不同，拒絕續跑；請重新選擇並驗證。'}
+ }
+ return $candidate
 }

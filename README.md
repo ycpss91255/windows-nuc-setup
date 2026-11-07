@@ -2,10 +2,10 @@
 
 [![Windows CI](https://github.com/ycpss91255/windows_setup/actions/workflows/windows-tests.yml/badge.svg)](https://github.com/ycpss91255/windows_setup/actions/workflows/windows-tests.yml)
 
-[![Unit](https://ycpss91255.github.io/windows_setup/unit.svg)](https://ycpss91255.github.io/windows_setup/)
-[![Integration](https://ycpss91255.github.io/windows_setup/integration.svg)](https://ycpss91255.github.io/windows_setup/)
-[![System 狀態](https://ycpss91255.github.io/windows_setup/system.svg)](https://ycpss91255.github.io/windows_setup/)
-[![Coverage 狀態](https://ycpss91255.github.io/windows_setup/coverage.svg)](https://ycpss91255.github.io/windows_setup/)
+[![Unit](https://ycpss91255.github.io/windows_setup/main/unit.svg)](https://ycpss91255.github.io/windows_setup/)
+[![Integration](https://ycpss91255.github.io/windows_setup/main/integration.svg)](https://ycpss91255.github.io/windows_setup/)
+[![System 狀態](https://ycpss91255.github.io/windows_setup/main/system.svg)](https://ycpss91255.github.io/windows_setup/)
+[![Coverage 狀態](https://ycpss91255.github.io/windows_setup/main/coverage.svg)](https://ycpss91255.github.io/windows_setup/)
 
 [最新已發布 main 報表](https://ycpss91255.github.io/windows_setup/) · [Actions 與七天報告附件](https://github.com/ycpss91255/windows_setup/actions/workflows/windows-tests.yml)
 
@@ -18,6 +18,7 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 - [快速開始](#快速開始)
 - [執行前提](#執行前提)
 - [概覽與適用範圍](#概覽與適用範圍)
+- [準備 USB](#準備-usb)
 - [初始安裝操作](#先看目前在哪個階段)
 - [模組與獨立執行](#模組補充說明)
 - [SSH 與 hosts](#ssh-與-hosts-後續維護)
@@ -46,27 +47,25 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 自有目錄使用小寫與底線，新驅動安裝日誌位於 `modules\drivers/driver_logs`。為保留已部署電腦的續跑資料，`%ProgramData%\NUC8-Setup`、`NUC-Init`、`CustomHostsSync` 及既有排程工作名稱維持相容；這些是系統既存識別，不是新增的儲存庫目錄。第三方 `win11debloat` 內部目錄及內容保持上游原樣。
 ## 快速開始
 
-先確認已取得所選功能需要的檔案，並符合下方系統前提；不要直接在 OOBE 執行 Windows.cmd。
+主要使用方式是把完整工具包放在可寫入的 USB，從 Windows 初始設定一路使用到重開機後驗收；不必先複製到 Downloads，也不必由 agent 遙控。
 
-```powershell
-# 正式帳號桌面：完成 SSH 初始化後執行設定
-.\Init.cmd
-.\Windows.cmd
+1. 先按下方「準備 USB」放好完整 `windows_setup`，需要 NUC 驅動才另帶獨立驅動包。
+2. Windows 初始設定／Wi-Fi 畫面按 `Ctrl+Shift+F3`，進入稽核模式後取消 Sysprep 視窗，從 USB 執行 `Init.cmd` 建立自己的帳號與密碼。
+3. Init 顯示準備成功後手動重開，完成仍要求的 OOBE 選項並登入新帳號。
+4. 接網，從同一 USB 再執行 `Init.cmd` 安裝 SSH，成功後執行 `Windows.cmd`；需要驅動才選擇獨立包。
+5. 等整輪結束後手動重開，以同一帳號登入，從同一 USB 執行 `Windows.cmd -AfterRestart`。
+6. 處理所有失敗與待重開提示，再執行 `Windows.cmd -VerifyOnly` 並完成下方目視確認。
 
-# 依提示手動重開機後，回到同一份工具包續跑
-.\Windows.cmd -AfterRestart
+`Shift+F10` 命令窗執行 Init 只會提供進入稽核模式的引導；不要在 OOBE 直接執行 Windows.cmd。完整 System／安裝 E2E 尚未實測，以下是操作流程，不代表每份 Windows 安裝映像都已驗證通過。
 
-# 僅檢查，不重套設定
-.\Windows.cmd -VerifyOnly
-```
-
-若仍在 Windows 初始設定畫面，先照「初始安裝操作」進入稽核模式，再呼叫 Init，不直接套用上面的桌面流程。
+已經有正式本機管理員帳號並進入桌面者，略過建帳號與稽核模式，直接從步驟 4 開始；不會因此重新建立或改名帳號。
 
 ## 執行前提
 
 - 預設自動選擇硬體設定檔：Intel NUC8i7HVB／NUC8i7HNB 使用 NUC8 設定檔；驅動包由你選擇，直接 Enter 預設略過驅動安裝，AMD 模組依機型執行；其他主機板使用 Generic，略過這兩個硬體模組，其餘 Windows 設定照常執行。
 - 64 位元 Windows 11 22H2 或更新，專業／企業／教育版；Windows 流程須在正式目標本機管理員桌面執行。
 - 完整工具包必須可寫入，不能放在將被清理的桌面；使用者名稱與磁碟代號動態取得。
+- 正式桌面需有 Windows Terminal（`wt.exe`）與 App Installer／WinGet（`winget.exe`）；缺少時前置檢查會中止，先補齊再重跑。
 - Windows Update 與未快取的 OpenSSH 元件需要網路。UAC、密碼及提示的重新開機需使用者操作。
 - 桌面清理會刪除一般桌面檔案、資料夾與捷徑；先取走要保留的內容。桌面排列範本以繁體中文、1920×1080、100% 縮放為準。
 
@@ -76,31 +75,72 @@ Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不�
 
 本工具依上方前提自動選用 Generic 或 NUC8 設定檔，Windows 模組亦提供獨立入口。依目前階段先執行 Init，再執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
 
-目前 Downloads 內的 `windows_setup` 是主程式；資料夾可改名，腳本依所在位置解析。驅動獨立放在 `windows_driver_packages/nuc8`，主程式內不帶驅動。要換電腦使用時，複製主程式；需要 NUC 驅動時再另帶獨立包，兩者都可放在任意可寫入、非桌面的路徑，不強制放在 Downloads。USB 只是可選的搬運媒介；舊 USB 副本不會自動更新，也不作為本輪主版本。
+本機維護的 `windows_setup` 可整份複製到 USB；腳本依自己所在位置解析主程式，不綁定 Downloads、USB 磁碟代號或使用者名稱。驅動獨立放在 `windows_driver_packages/nuc8`，主程式不含驅動封存檔。每次換機使用前要確認 USB 是最新完整副本；舊 USB 不會自動同步本機修改。
 
 完整流程需要你允許管理員權限、輸入現有帳號密碼，以及依提示手動重新開機，並非完全無人值守。腳本不會自行重新開機或關機。
+
+## 準備 USB
+
+先將完整主程式複製到可寫入的 USB，保持以下結構。主程式內所選功能需要的資產也要帶齊；如果使用 GitHub 原始碼下載，先完成 [來源包準備](#從原始碼準備完整工具包)，來源 ZIP 不含驅動及 Autologon EXE。
+
+```text
+USB 根目錄\
+├─ windows_setup\
+│  ├─ Init.cmd
+│  ├─ Windows.cmd
+│  ├─ README.md
+│  ├─ core\
+│  └─ modules\              保留整份工具包，其餘檔案也一併複製
+└─ windows_driver_packages\  可選；不需要 NUC 驅動可不帶
+   └─ nuc8\                 保留 Install.cmd、manifest、輔助腳本及四個 ZIP
+```
+
+不是只複製兩個 `.cmd`。USB 必須可寫入，執行時保持連接，不可放到會被清理的桌面；`.git` 不是執行必要檔案。可以直接在 USB 使用，也可以自行完整複製到其他可寫入位置，無需固定任何使用者的 Downloads。
+
+在稽核桌面或正式帳號桌面，用檔案總管找到 USB 上的 `windows_setup`，雙擊入口即可。需要帶參數時開啟 PowerShell，輸入這次實際看到的完整資料夾路徑：
+
+```powershell
+$setupPath = Read-Host '貼上目前 USB 中 windows_setup 的完整路徑（不用加引號）'
+Set-Location -LiteralPath $setupPath
+# 先確認這兩個入口確實存在，再依目前階段執行
+Get-Item .\Init.cmd, .\Windows.cmd
+```
+
+重開機後 USB 磁碟代號可能改變，請重新從檔案總管確認、再執行上述定位；不要照抄前一次磁碟代號。主程式與驅動包放在同一 USB、相對目錄保持不變時，續跑會用保存的相對位置及驅動包身分重新核對。若驅動包原本在另一個磁碟／USB，則不猜測新位置；舊路徑失效時，從一般 `Windows.cmd` 入口重新選包。不要刪除續跑紀錄來跳過失敗。
 
 ## 先看目前在哪個階段
 
 兩個入口各有用途：`Init.cmd` 處理初始帳號與 SSH；`Windows.cmd` 處理正式帳號登入後的驅動、更新、清理與偏好。不要在 OOBE 或稽核用 Administrator 桌面執行 Windows.cmd。
 
-### 還在 Windows 初始設定／連接 Wi-Fi 畫面
+### 情境 A：全新安裝，仍在初始設定／連接 Wi-Fi 畫面
 
 1. 保持離線，按 `Ctrl+Shift+F3`（部分鍵盤需加 Fn），Windows 會重新啟動進入「稽核模式」。這一步不會重新安裝 Windows。若已按 Shift+F10 開啟命令窗，可先關閉它再按快捷鍵。
 2. 進入內建 Administrator 桌面後，按「取消」關閉自動出現的「系統準備工具」視窗，避免兩個 Sysprep 同時執行。
-3. 打開已完整複製的 windows_setup 資料夾，雙擊 `Init.cmd`。依畫面確認這是剛安裝系統的稽核模式，再輸入要建立的本機帳號、密碼與確認密碼。
+3. 打開 USB 上完整的 `windows_setup` 資料夾，雙擊 `Init.cmd`。依畫面輸入 `AUDIT` 確認這是剛安裝系統的稽核模式，再輸入自己要建立的本機帳號、密碼與確認密碼。每臺可使用不同帳號，不必使用範例帳密。
 4. Init 使用 Windows answer file 建立本機管理員並準備返回 OOBE。成功後依提示手動重新開機。不要在此稽核帳號執行 Windows.cmd。
 5. 完成仍顯示的地區、隱私等設定，以新帳號登入。此流程不替你同意授權或隱私選項。
+6. 接上網路，從同一完整工具包再執行 `Init.cmd`，這次會處理正式帳號的 SSH，不再建立帳號。
+7. Init 成功後執行 `Windows.cmd`，依提示選擇驅動包或略過，輸入目前帳號密碼並等整輪完成。
+8. 手動重新開機，以同一帳號登入並重新找到工具包，執行 `Windows.cmd -AfterRestart`；若提示仍需重開，等本輪結束再重開續跑。
+9. 最後執行 `Windows.cmd -VerifyOnly`，確認無未解決失敗，再做下方「最後目視確認」。
 
 同一 Init.cmd 若從 OOBE 的 Shift+F10 命令窗呼叫，只會辨識環境並引導進入稽核模式；不會在 SYSTEM 身分直接執行 Sysprep。Microsoft 不支援以 SYSTEM 執行 Sysprep，因此這個方式需要上述稽核模式切換，不能保證在 Wi-Fi 畫面一次呼叫就直接進桌面。
 
 帳號建立時的必要 answer file 只暫存在本機受管理員／SYSTEM 權限保護的目錄，不存於 USB；其中密碼可還原，不應視為加密。首次正式帳號登入會清理本工具的密碼 answer file，保留不含密碼的狀態與清理紀錄。詳細限制與清理紀錄見 `modules\init\README.md`。此 OOBE 新流程尚未在實機完整跑過，失敗時查看提示並停止，不要手動修改 Setup 狀態強行略過。
 
-### 已用正式本機帳號進入桌面
+### 情境 B：已有正式本機帳號，從 Windows 桌面開始
 
-先接上網路，再雙擊 `Init.cmd`，允許管理員權限。這個階段不會重新建立帳號或改密碼；它會安裝／啟用 OpenSSH Server、設定區域網路防火牆，並建立目前使用者的 SSH／hosts 框架。離線且缺少 SSH 安裝元件時會明確失敗，接網後重新執行 Init 即可。
+此情境保留現有帳號，不進稽核模式，也不重新建立帳號。USB 與本機的完整工具包都可使用，不必先移到 Downloads。
 
-Init 成功後，依下方步驟執行 Windows.cmd。SSH 為可重複執行模組，Windows 第 04 模組也會再次確認，不會因此改用其他帳號。
+1. 登入要套用設定的本機管理員帳號，確認記得現有密碼；先取走桌面要保留的檔案，接上網路並保持電源穩定。
+2. 準備完整工具包：可以直接開啟 USB 的 `windows_setup`，或開啟自行完整複製到本機可寫入、非桌面位置的副本。以檔案總管定位，或用上方 `Set-Location -LiteralPath $setupPath` 指向本次實際路徑。
+3. 執行 `Init.cmd`，允許目前帳號提權。這個階段不會重新建立帳號或改密碼；會安裝／啟用 OpenSSH Server、設定區域網路防火牆，並建立目前使用者的 SSH／hosts 框架。離線且缺少 SSH 元件時會明確失敗，接網後再執行 Init。
+4. Init 成功後執行 `Windows.cmd`，依提示輸入目前帳號的現有密碼供自動登入使用。需要 NUC 驅動才選擇獨立包，否則按 Enter 略過。等待整輪 19 個模組完成，不要中途關機。
+5. 整輪結束後手動重新開機，以同一帳號登入，再開啟原本使用的同一份完整工具包；USB 請重新確認本次磁碟代號。
+6. 在工具包目錄執行 `.\Windows.cmd -AfterRestart`。若仍要求重開，等本輪結束後手動重開，再從同一份工具包續跑。
+7. 處理所有失敗後執行 `.\Windows.cmd -VerifyOnly`，再逐項完成下方「最後目視確認」。有錯誤時查看 `reports` 及畫面，不將舊結果當成本輪成功。
+
+兩種情境都由目前正式使用者與腳本位置解析路徑，不要求固定帳號、磁碟代號或家目錄；請勿使用另一位管理員的帳密代替目前使用者提權。SSH 可重複執行，Windows 第 04 模組也會再次確認。
 
 以下是正式帳號桌面的後續流程。已完成上方 Init 的使用者，不必再建立帳號；直接確認前提並從步驟 2 繼續。
 
@@ -112,9 +152,9 @@ Init 成功後，依下方步驟執行 Windows.cmd。SSH 為可重複執行模�
 4. 多臺電腦請先各自設定唯一電腦名稱，例如 `NUC-001`、`NUC-002`；名稱變更要求重開時先完成重開，再開始下列流程。
 5. 取走桌面上需要保留的資料。桌面清理模組會刪除使用者桌面及共用桌面的普通檔案、資料夾和捷徑，最後只留下四個系統圖示。
 
-## 2. 完整複製工具包
+## 2. 確認 USB 工具包與可選驅動
 
-從主版本的 Downloads 複製整個 `windows_setup` 資料夾到目標電腦。可放在該電腦的 Downloads 或其他可寫入位置，不限磁碟代號，也不強制資料夾位於某個使用者的家目錄。
+已按「準備 USB」完成者，繼續使用同一份 USB 工具包，不必再複製到本機。以下是主程式的完整結構概覽：
 
 ```text
 windows_setup\
@@ -138,13 +178,14 @@ windows_setup\
 驅動包獨立於主程式。執行 `Windows.cmd` 時可輸入獨立包目錄，直接 Enter 預設略過驅動；也可明確傳入：
 
 ```powershell
-.\Windows.cmd -DriverPackagePath "E:\windows_driver_packages\nuc8"
+$driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不用加引號）'
+.\Windows.cmd -DriverPackagePath $driverPath
 ```
 
-此路徑只是例子，請換成目前電腦的位置。獨立包可自行執行 `Install.cmd`；只核對完整性用 `Install.cmd -PackageOnly`。安裝器自行檢查 NUC8i7HVB／NUC8i7HNB，其他機型略過，不能拿 NUC 驅動套用其他硬體。續跑只沿用同一電腦與使用者先前明確選擇的路徑；整包複製至其他電腦不沿用舊選擇。
+也可直接執行 `.\Windows.cmd`，依畫面輸入這次的驅動包路徑，或按 Enter 略過。獨立包可自行執行 `Install.cmd`；只核對完整性用 `Install.cmd -PackageOnly`。安裝器自行檢查 NUC8i7HVB／NUC8i7HNB，其他機型略過，不能拿 NUC 驅動套用其他硬體。續跑只沿用同一電腦與使用者先前明確選擇的驅動包，並核對 package.json／manifest.json 的雜湊；同 USB 相對位置可隨盤符變動解析，包身分變更則拒絕。整包複製至其他電腦不沿用舊選擇。
 
 不要只複製單一 `.cmd`／`.ps1`；主程式與獨立驅動包各自保留完整結構。`.git` 僅在維護版本時需要，執行設定與獨立驅動包不依賴它。
-工具包不要放在桌面或其子資料夾內，以免桌面清理刪到工具包。完整複製到本機後，執行本機這份；不需要 USB 持續連接。若自行選擇直接從外接磁碟執行，該磁碟必須可寫入且全程保持連接。
+工具包不要放在桌面或其子資料夾內，以免桌面清理刪到工具包。直接使用 USB 時，USB 必須可寫入且本輪全程保持連接；下一輪仍從同一完整副本續跑。若自行改用本機完整副本，才改從本機該份執行。
 
 腳本不會自行把工具包複製到 Downloads，也不會自動同步其他副本。要更新別臺電腦時，由你選擇要複製的完整主版本；先保留目的地的自訂檔及需要的執行紀錄，避免直接覆蓋。
 
@@ -163,7 +204,7 @@ windows_setup\
 
 ## 3. 執行第一次設定
 
-1. 雙擊 `Windows.cmd`。
+1. 在正式目標帳號桌面，從同一 USB 雙擊 `Windows.cmd`；不要使用稽核模式的 Administrator。
 2. Windows 管理員權限提示選「是」。請用目前登入的目標帳號執行，不要輸入另一個管理員帳號代替。
 3. 依提示輸入目前帳號的現有密碼，用來設定開機自動登入。密碼不會寫入工具包腳本。
 4. 等待視窗中的 19 個模組執行完畢。進度與結果以中文顯示；Windows Update 可能需要較久。
@@ -184,7 +225,7 @@ windows_setup\
 
 ## 5. 執行重開機後驗收
 
-1. 開啟這臺電腦先前執行的同一份 `windows_setup` 資料夾。
+1. 開啟這臺電腦先前使用的同一 USB 上 `windows_setup`；先重新確認 USB 磁碟代號與終端所在位置。
 2. 在此資料夾的終端執行 `.\Windows.cmd -AfterRestart`，允許管理員權限；也可雙擊 `core\Verify-AfterRestart.cmd`。
 3. 等待本輪結束。這個入口會重試同一臺電腦、同一帳號先前失敗且可重試的模組，重新掃描更新，再做清理及驗證。
 4. 若更新或驗收提示仍需重新開機，等本輪結束後手動重開，再執行一次 `Windows.cmd -AfterRestart`。

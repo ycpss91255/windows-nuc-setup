@@ -1,6 +1,8 @@
 ﻿#Requires -Version 5.1
-param([string]$UserName=$env:USERNAME,[string]$AutoLogonPassword,[string]$DriverPackagePath)
+param([string]$UserName=$env:USERNAME,[string]$AutoLogonPassword,[string]$DriverPackagePath,[string]$ExpectedUserSID)
 $ErrorActionPreference='Stop'
+$currentSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+if($ExpectedUserSID -and $ExpectedUserSID -ne $currentSID){throw '提權後帳號已改變，請使用原帳號的管理員權限。'}
 if($DriverPackagePath){$DriverPackagePath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DriverPackagePath)}
 . (Join-Path $PSScriptRoot 'Paths.ps1')
 Initialize-NucReports
@@ -8,11 +10,12 @@ $hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath
 $skippedModules=@()
 $principal=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    $command="& '"+$PSCommandPath.Replace("'","''")+"' -DriverPackagePath '"+$DriverPackagePath.Replace("'","''")+"'"
+    $command="& '"+$PSCommandPath.Replace("'","''")+"' -ExpectedUserSID '"+$currentSID+"' -DriverPackagePath '"+$DriverPackagePath.Replace("'","''")+"'"
     Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)))
     exit
 }
 & (Resolve-NucPath 'Test-SetupPrerequisites.ps1') -DriverPackagePath $DriverPackagePath
+if($hardware.IsNuc8 -and $DriverPackagePath){$hardware|Add-Member -NotePropertyName DriverSelection -NotePropertyValue (New-SetupDriverSelection -PackageRoot $script:NucPackageRoot -DriverPackagePath $DriverPackagePath) -Force}
 if($UserName -ine $env:USERNAME){throw '自動登入帳號必須與目前執行帳號相同。'}
 $log=Resolve-NucPath ('Setup-'+(Get-Date -Format yyyyMMdd-HHmmss)+'.log')
 Start-Transcript -Path $log | Out-Null

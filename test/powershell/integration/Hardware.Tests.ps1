@@ -64,8 +64,8 @@ Assert (-not(Test-Path (Join-Path $genericPackage 'modules\drivers\Payload'))) '
 $caught=$false;try{& (Join-Path $genericPackage 'core\Test-SetupPrerequisites.ps1') -PackageOnly -HardwareProfile NUC8 -DriverPackagePath (Join-Path $fixture 'missing')}catch{$caught=$true}
 Assert $caught '相同無驅動包指定 NUC8 仍拒絕'
 $selectionFile=Join-Path $fixture 'selection.json'
-@{Computer='machine_a';UserSID='sid_a';HardwareProfile=@{DriverPackagePath='chosen'}}|ConvertTo-Json -Depth 4|Set-Content $selectionFile -Encoding UTF8
-Assert ((Get-SetupSavedDriverSelection $selectionFile 'machine_a' 'sid_a') -eq 'chosen') '相同電腦與使用者續用明確選擇'
+@{Computer='machine_a';UserSID='sid_a';HardwareProfile=@{DriverPackagePath=$payload}}|ConvertTo-Json -Depth 4|Set-Content $selectionFile -Encoding UTF8
+Assert ((Get-SetupSavedDriverSelection $selectionFile 'machine_a' 'sid_a') -eq $payload) '相同電腦與使用者續用明確選擇'
 Assert ((Get-SetupSavedDriverSelection $selectionFile 'machine_b' 'sid_a') -eq '') '其他電腦不沿用驅動包'
 Assert ((Get-SetupSavedDriverSelection $selectionFile 'machine_a' 'sid_b') -eq '') '其他帳號不沿用驅動包'
 # Restore small fixture files, then export a standalone package and validate it from another directory.

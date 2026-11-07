@@ -1,9 +1,11 @@
 ﻿#Requires -Version 5.1
-param([string]$SshScriptPath)
+param([string]$SshScriptPath,[string]$ExpectedUserSID)
 $ErrorActionPreference='Stop'
+if($SshScriptPath){$SshScriptPath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($SshScriptPath)}
 . (Join-Path $PSScriptRoot 'OOBE-Library.ps1')
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $sid=$identity.User.Value
+if($ExpectedUserSID -and $ExpectedUserSID -ne $sid){throw '提權後帳號已改變，請使用原帳號的管理員權限。'}
 $principal=New-Object Security.Principal.WindowsPrincipal($identity)
 $admin=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $imageState=(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\State' -ErrorAction SilentlyContinue).ImageState
@@ -24,9 +26,9 @@ if($route -eq 'GuideAudit'){
 }
 if($route -eq 'ElevationRequired'){
  Write-Host '請允許目前帳號的管理員權限；不可輸入另一個管理員帳號。'
- $arguments='-NoProfile -ExecutionPolicy Bypass -NoExit -File "'+$PSCommandPath+'"'
- if($SshScriptPath){$arguments+=' -SshScriptPath "'+$SshScriptPath+'"'}
- Start-Process powershell.exe -Verb RunAs -ArgumentList $arguments
+ $command="& '"+$PSCommandPath.Replace("'","''")+"' -ExpectedUserSID '"+$sid+"'"
+ if($SshScriptPath){$command+=" -SshScriptPath '"+$SshScriptPath.Replace("'","''")+"'"}
+ Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)))
  return
 }
 if($route -eq 'RejectBuiltinAdministrator'){throw '目前是一般 Administrator 桌面，不是可確認的稽核模式。請登入正式的本機管理員帳號再執行 Init。'}
