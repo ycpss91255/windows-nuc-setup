@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -33,18 +34,29 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	r, e := a.VerifyWithRetry(read, string(b), *sha, *run, *base, 12, func() {
-		fmt.Println("部署驗收尚未符合本次來源，有限等待 CDN 更新。")
-		time.Sleep(10 * time.Second)
-	})
-	if e != nil {
-		return e
-	}
 	files, e := a.OwnedGoFiles(".")
 	if e != nil {
 		return e
 	}
-	if e = a.ValidateGoCoverageReport(func(n string) ([]byte, error) { return read("main/" + n) }, files, *sha, *run, true); e != nil {
+	var measured a.GoCoverage
+	r, e := a.VerifyWithRetry(read, string(b), *sha, *run, *base, 12, func() {
+		fmt.Println("部署驗收尚未符合本次來源，有限等待 CDN 更新。")
+		time.Sleep(10 * time.Second)
+	}, func() error {
+		var captured []byte
+		reportReader := func(n string) ([]byte, error) {
+			data, err := read("main/" + n)
+			if n == "go_coverage.json" {
+				captured = data
+			}
+			return data, err
+		}
+		if err := a.ValidateGoCoverageReport(reportReader, files, *sha, *run, true); err != nil {
+			return err
+		}
+		return json.Unmarshal(captured, &measured)
+	})
+	if e != nil {
 		return e
 	}
 	badges := regexp.MustCompile(`https://github\.com/[^/]+/[^/]+/actions/workflows/[^/]+/badge\.svg`).FindAllString(string(b), -1)
@@ -79,7 +91,7 @@ func run() error {
 	if svg.XMLName.Local != "svg" || svg.XMLName.Space != "http://www.w3.org/2000/svg" {
 		return fmt.Errorf("R05 GitHub CI 徽章不是SVG")
 	}
-	summary := fmt.Sprintf("## 公開部署需求驗收通過\n\n- 本次 main 提交：`%s`\n- 報告執行：%s\n- 首頁、報告、JSON／JUnit／Markdown、四個徽章與歷史頁均可讀取。\n- System／E2E 未執行，Coverage 未量測；人工視覺審查不由此 job 代替。\n", r.Commit, r.RunUrl)
+	summary := fmt.Sprintf("## 公開部署需求驗收通過\n\n- 本次 main 提交：`%s`\n- 報告執行：%s\n- 首頁、報告、JSON／JUnit／Markdown、Go 與分層徽章及歷史頁均可讀取。\n- Go statements：%.1f%%（%d/%d，包含 CLI），精確八成門檻通過。\n- System／E2E 未執行，PowerShell 覆蓋率未量測；人工視覺審查不由此 job 代替。\n", r.Commit, r.RunUrl, measured.Percent, measured.Covered, measured.TotalStatements)
 	fmt.Print(summary)
 	if p := os.Getenv("GITHUB_STEP_SUMMARY"); p != "" {
 		return os.WriteFile(p, []byte(summary), 0600)

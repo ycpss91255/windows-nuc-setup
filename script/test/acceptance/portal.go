@@ -104,7 +104,7 @@ func ValidatePortal(read Reader, readme, sha, run, base string) (Report, error) 
 	return r, nil
 }
 
-func VerifyWithRetry(read Reader, readme, sha, run, base string, attempts int, sleep func(), extra ...func()error) (Report, error) {
+func VerifyWithRetry(read Reader, readme, sha, run, base string, attempts int, sleep func(), extra ...func() error) (Report, error) {
 	var r Report
 	var e error
 	if attempts < 1 {
@@ -112,6 +112,13 @@ func VerifyWithRetry(read Reader, readme, sha, run, base string, attempts int, s
 	}
 	for i := 0; i < attempts; i++ {
 		r, e = ValidatePortal(read, readme, sha, run, base)
+		if e == nil {
+			for _, check := range extra {
+				if e = check(); e != nil {
+					break
+				}
+			}
+		}
 		if e == nil {
 			return r, nil
 		}
