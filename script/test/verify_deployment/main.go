@@ -38,6 +38,10 @@ func run() error {
 	if e != nil {
 		return e
 	}
+	goBadge, e := a.GoCoverageBadgePath(string(b), *base)
+	if e != nil {
+		return e
+	}
 	var measured a.GoCoverage
 	r, e := a.VerifyWithRetry(read, string(b), *sha, *run, *base, 12, func() {
 		fmt.Println("部署驗收尚未符合本次來源，有限等待 CDN 更新。")
@@ -45,6 +49,9 @@ func run() error {
 	}, func() error {
 		var captured []byte
 		reportReader := func(n string) ([]byte, error) {
+			if n == "go_coverage.svg" {
+				n = goBadge
+			}
 			data, err := read("main/" + n)
 			if n == "go_coverage.json" {
 				captured = data

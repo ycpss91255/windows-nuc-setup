@@ -5,11 +5,23 @@ import (
 	"encoding/xml"
 	"fmt"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 )
 
-func GoCoverageBadgePath(doc,base string)(string,error){return "",fmt.Errorf("Go README badge lookup not implemented")}
+func GoCoverageBadgePath(doc, base string) (string, error) {
+	found := []string{}
+	for _, m := range regexp.MustCompile(`!\[[^\]]*\]\(([^)]+)\)`).FindAllStringSubmatch(doc, -1) {
+		if strings.Split(m[1], "?")[0] == base+"main/go_coverage.svg" {
+			found = append(found, m[1])
+		}
+	}
+	if len(found) != 1 {
+		return "", fmt.Errorf("README must reference exactly one same-site Go coverage badge")
+	}
+	return strings.TrimPrefix(found[0], base+"main/"), nil
+}
 
 func ValidateGoCoverageReport(read Reader, files []string, sha, run string, required bool) error {
 	b, e := read("summary.json")
