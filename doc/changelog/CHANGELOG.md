@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed（變更）
+
+- 第三方來源與授權說明移至 doc/THIRD_PARTY.md，根 README 引用；修正相對連結與獨立驅動包位置。AGENTS.md 保留根目錄供工具自動發現，第三方授權檔不搬動。
+
 ## [v0.2.0] — 2026-11-07
 
 ### Changed（變更）
