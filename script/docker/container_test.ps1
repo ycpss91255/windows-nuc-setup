@@ -24,7 +24,7 @@ try {
  Write-Host ('Phase 3: Go acceptance tests / '+$plan.Mode)
  $env:WINDOWS_SETUP_ARTIFACT_DIR=$plan.ArtifactDirectory
  $env:WINDOWS_SETUP_PORTAL_FIXTURE_DIR=Join-Path $fixture 'portal'
- Invoke-ContainerGo -Arguments @('test','-count=1','./...')
+ Invoke-ContainerGoTestPhase -Plan $plan -SourceRoot C:/workspace -ReportDirectory C:/reports
  Write-Host ('Phase 4: source and report requirements gate / '+$plan.Mode)
  Invoke-ContainerGo -Arguments @('run','./script/test/requirements_gate','--artifact-dir',$plan.ArtifactDirectory,'--source-root','C:/workspace','--expected-sha',$plan.Commit,'--expected-run-url',$plan.RunUrl)
  exit 0
