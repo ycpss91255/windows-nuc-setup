@@ -40,4 +40,9 @@ foreach($match in [regex]::Matches($readme,'\]\(([^)]+)\)')){
  $link=$match.Groups[1].Value
  if($link -notmatch '^(https?://|#)' -and $link -notmatch '\$| '){$target=($link -split '#')[0];if($target){Assert (Test-Path -LiteralPath (Join-Path $root $target)) ('README 本機連結存在：'+$target)}}
 }
+# A skipped release ancestor must not suppress main's post-deployment verification.
+$workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
+$deployment=[regex]::Match($workflow,'(?ms)^  verify-deployment:\s*$(.*?)(?=^  [a-z][a-z-]*:|\z)').Groups[1].Value
+$condition=[regex]::Match($deployment,'(?m)^    if: (.+)$').Groups[1].Value
+Assert ($condition -match 'always\(\)' -and $condition.Contains("github.ref == 'refs/heads/main'") -and $condition.Contains("needs.publish-reports.result == 'success'")) 'main 公開驗收明確處理略過的祖先工作，且只在發布成功後執行'
 Write-Host ('ALL PASS: '+$count+' architecture assertions; source inspection and temporary fixture only.')
