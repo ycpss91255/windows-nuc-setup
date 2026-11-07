@@ -1,6 +1,7 @@
 package acceptance
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"path"
@@ -9,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 )
+
+var ErrCoverageBelowThreshold = errors.New("Go coverage below exact threshold")
 
 type CoverageMeasurement struct {
 	Covered, TotalStatements int
@@ -108,7 +111,7 @@ func EvaluateCoverage(profiles [][]byte, expectedFiles []string) (CoverageMeasur
 	}
 	m.Percent = math.Round(float64(m.Covered)*1000/float64(m.TotalStatements)) / 10
 	if int64(m.Covered)*100 < int64(m.TotalStatements)*80 {
-		return m, fmt.Errorf("Go statement coverage %.1f%% (%d/%d) below exact 80%%", m.Percent, m.Covered, m.TotalStatements)
+		return m, fmt.Errorf("%w: %.1f%% (%d/%d), required 80%%", ErrCoverageBelowThreshold, m.Percent, m.Covered, m.TotalStatements)
 	}
 	return m, nil
 }

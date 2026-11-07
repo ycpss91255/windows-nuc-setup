@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -43,12 +44,12 @@ func CreateCoverageEvidence(profiles [][]byte, files []string, p CoverageProvena
 		return c, nil, e
 	}
 	m, e := EvaluateCoverage(profiles, files)
-	if e != nil {
+	if e != nil && !errors.Is(e, ErrCoverageBelowThreshold) {
 		return c, nil, e
 	}
 	digest := sha256.Sum256(m.Profile)
 	c = GoCoverage{SchemaVersion: 1, Scope: "all-owned-go-including-cli", Metric: "statements", Covered: m.Covered, TotalStatements: m.TotalStatements, Percent: m.Percent, Threshold: 80, Commit: p.Commit, RunUrl: p.RunUrl, MeasuredAt: p.MeasuredAt, SourceState: p.SourceState, GoVersion: p.GoVersion, Environment: p.Environment, ProfileSHA256: hex.EncodeToString(digest[:]), Packages: m.Packages}
-	return c, m.Profile, nil
+	return c, m.Profile, e
 }
 func ValidateCoverageEvidence(data, profile []byte, files []string, sha, run string) (GoCoverage, error) {
 	var c GoCoverage

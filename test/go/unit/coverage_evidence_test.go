@@ -15,7 +15,11 @@ func TestCoverageEvidenceTruth(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	low:=[]byte(strings.ReplaceAll(string(profile)," 8 1"," 8 0"));failed,failedProfile,gateErr:=a.CreateCoverageEvidence([][]byte{low},files,p);if gateErr==nil||failed.TotalStatements!=10||failed.Covered!=0||len(failedProfile)==0{t.Fatal("failed threshold must retain truthful diagnostic evidence and fail")}
+	low := []byte(strings.ReplaceAll(string(profile), " 8 1", " 8 0"))
+	failed, failedProfile, gateErr := a.CreateCoverageEvidence([][]byte{low}, files, p)
+	if gateErr == nil || failed.TotalStatements != 10 || failed.Covered != 0 || len(failedProfile) == 0 {
+		t.Fatal("failed threshold must retain truthful diagnostic evidence and fail")
+	}
 	data, _ := json.Marshal(c)
 	if c.Percent != 80 || c.Covered != 8 || c.TotalStatements != 10 {
 		t.Fatalf("incorrect evidence %+v", c)

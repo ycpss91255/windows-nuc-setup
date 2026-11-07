@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -75,7 +76,8 @@ func run() error {
 		return e
 	}
 	evidence, profile, e := a.CreateCoverageEvidence([][]byte{first, second}, files, a.CoverageProvenance{Commit: metadata.Commit, RunUrl: metadata.RunUrl, MeasuredAt: time.Now().UTC().Format(time.RFC3339), SourceState: metadata.SourceState, GoVersion: runtime.Version(), Environment: metadata.Environment + " / " + runtime.Version()})
-	if e != nil {
+	gateErr := e
+	if e != nil && !errors.Is(e, a.ErrCoverageBelowThreshold) {
 		return e
 	}
 	data, e := json.MarshalIndent(evidence, "", "  ")
@@ -91,8 +93,10 @@ func run() error {
 	if e = os.WriteFile(filepath.Join(out, "go_coverage.json"), data, 0600); e != nil {
 		return e
 	}
-	fmt.Printf("Go statement coverage %.1f%% (%d/%d), exact threshold 80%% passed\n", evidence.Percent, evidence.Covered, evidence.TotalStatements)
-	return nil
+	if gateErr == nil {
+		fmt.Printf("Go statement coverage %.1f%% (%d/%d), exact threshold 80%% passed\n", evidence.Percent, evidence.Covered, evidence.TotalStatements)
+	}
+	return gateErr
 }
 func main() {
 	if e := run(); e != nil {
