@@ -8,8 +8,10 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHONUTF8: "1"
-  PYTHONDONTWRITEBYTECODE: "1"
+  GOTOOLCHAIN: local
+  GOPROXY: "off"
+  GOFLAGS: "-mod=vendor"
+  CGO_ENABLED: "0"
 
 permissions:
   contents: read
@@ -75,13 +77,20 @@ jobs:
         with:
           name: requirements-fixture-${{ github.run_id }}-${{ github.run_attempt }}
           path: acceptance-fixture
+      - name: 準備固定 Go 工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.3'
+          cache: false
       - name: 執行需求驗收與破壞性負例
         env:
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WINDOWS_SETUP_ARTIFACT_DIR: ${{ github.workspace }}/acceptance-artifact
+          WINDOWS_SETUP_PORTAL_FIXTURE_DIR: ${{ github.workspace }}/acceptance-fixture
         run: |
-          python test/python/integration/requirements_tests.py --artifact-dir acceptance-artifact --portal-fixture-dir acceptance-fixture
-          python script/test/requirements_gate.py --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
+          go test -count=1 ./...
+          go run ./script/test/requirements_gate --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
 
   docker-tests:
     name: docker-tests
@@ -95,6 +104,11 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: 準備固定 Go 工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.3'
+          cache: false
       - name: 確認真實 Windows Docker 能力
         run: |
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\docker\docker.ps1 -Action doctor -Isolation process
@@ -125,7 +139,7 @@ jobs:
           $public = Join-Path $env:RUNNER_TEMP 'windows-container-results/public'
           $report = Get-Content (Join-Path $public 'summary.json') -Raw -Encoding UTF8 | ConvertFrom-Json
           if ($report.Environment -notmatch 'Windows container') { throw '報告未標示實際 Windows 容器環境。' }
-          python script/test/requirements_gate.py --artifact-dir $public --source-root . --expected-sha $env:EXPECTED_SHA --expected-run-url $env:EXPECTED_RUN_URL
+          go run ./script/test/requirements_gate --artifact-dir $public --source-root . --expected-sha $env:EXPECTED_SHA --expected-run-url $env:EXPECTED_RUN_URL
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: 僅保留容器去識別報告七天
         if: always()
@@ -276,9 +290,14 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: 準備固定 Go 工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.3'
+          cache: false
       - name: 匿名核對公開網站與本次來源
         env:
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          python script/test/verify_deployment.py --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
+          go run ./script/test/verify_deployment --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
