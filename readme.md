@@ -594,7 +594,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\test\powershell\system
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\prepare_release.ps1 -Version v0.2.0
 ```
 
-此命令將 Unreleased 區段提升為指定版本、寫入 `.version`，不提交、不建立標籤也不推送。審查版本內容後，以中文提交並開啟 Pull Request。主分支要求 `ci-rollup` 通過；維護者可以 squash 合併，不需要額外審核人核准。版本必須符合 `vX.Y.Z` 或 `vX.Y.Z-rcN`。
+此命令將 Unreleased 區段提升為指定版本、寫入 `.version`，不提交、不建立標籤也不推送。審查版本內容後，以中文提交並開啟 Pull Request。主分支要求 `ci-rollup` 通過；使用保留各階段提交的 rebase merge，不以 squash 抹掉 TDD 證據。版本必須符合 `vX.Y.Z` 或 `vX.Y.Z-rcN`。
 
 ### 標籤與發布門檻
 
@@ -644,3 +644,5 @@ PR 與 main 的 `requirements-gate` 讀取同一次 PS5.1 測試產物，驗證�
 Pages 部署後會匿名 GET 公開首頁、main 報表、JSON／Markdown／JUnit、四個 SVG、README 徽章實際網址及歷史版本頁；提交與 Actions 執行必須屬於本次 main。CDN 延遲只有限重試，舊報表或不一致會使 workflow 失敗。這些是可重複的自動驗收，不需要 agent 才能續跑；人工看畫面是否清楚、實機安裝是否成功仍是另外的驗收。
 
 實作、freeze、主代理與未參與實作的獨立代理完整審查流程見 [維護規範](agents.md)。發現問題必須修正後重新全需求審查，不能把上次 PASS 沿用到修改後版本。
+
+每個問題／功能採嚴格 TDD，以獨立中文提交保留「測試（紅）→ 修改（綠）→ 優化（綠，可選）」及實跑命令、原因與結果；最終必要 CI 全綠才合併，歷史紅燈提交保留。純文件修改只記錄真實文件核對，不偽造失敗測試；既有歷史不追造 TDD。完整規則集中於 [維護規範](agents.md#嚴格-tdd-與中文提交證據)。
