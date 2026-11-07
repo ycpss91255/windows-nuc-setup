@@ -9,11 +9,11 @@ $checks=@([pscustomobject]@{Name='fixture_unit';Layer='Unit';Executed=$true;Pass
 $arguments=@{Checks=$checks;OutputDirectory=(Join-Path $fixture 'legacy');Commit=('a'*40);RunUrl='https://github.com/example/repo/actions/runs/123';SourceState='Clean';Version='v1.0.0';Environment='Windows fixture';RefType='Branch';RefName='main';MeasuredAt='2026-11-08T00:00:00Z'}
 $legacy=Write-TestReports @arguments
 Assert ($legacy.Coverage -eq 'NotMeasured' -and -not $legacy.PSObject.Properties['GoCoverage']) 'historical reports keep unmeasured PowerShell coverage without invented Go evidence'
-$coverage=[pscustomobject]@{SchemaVersion=1;Scope='all-owned-go-including-cli';Metric='statements';CoveredStatements=8;TotalStatements=10;Percent=80.0;Threshold=80;Commit=('a'*40);RunUrl=$arguments.RunUrl;MeasuredAt='2026-11-08T00:00:01Z';SourceState='Clean';GoVersion='go1.27.3';Environment='windows/amd64';ProfileSHA256=('b'*64);Packages=@('windows_setup/script/test/acceptance','windows_setup/script/test/requirements_gate','windows_setup/script/test/verify_deployment')}
+$coverage=[pscustomobject]@{SchemaVersion=1;Scope='all-owned-go-including-cli';Metric='statements';Covered=8;TotalStatements=10;Percent=80.0;Threshold=80;Commit=('a'*40);RunUrl=$arguments.RunUrl;MeasuredAt='2026-11-08T00:00:01Z';SourceState='Clean';GoVersion='go1.27.3';Environment='windows/amd64';ProfileSHA256=('b'*64);Packages=@('windows_setup/script/test/acceptance','windows_setup/script/test/requirements_gate','windows_setup/script/test/verify_deployment')}
 $arguments.OutputDirectory=Join-Path $fixture 'measured'
 $measured=Write-TestReports @arguments -GoCoverage $coverage
 $html=[IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'index.html'))
-Assert ($measured.Coverage -eq 'NotMeasured' -and $measured.GoCoverage.CoveredStatements -eq 8 -and $html.Contains('Go 程式敘述覆蓋率') -and $html.Contains('80.0%')) 'actual renderer displays measured Go percentage separately from unmeasured PowerShell'
+Assert ($measured.Coverage -eq 'NotMeasured' -and $measured.GoCoverage.Covered -eq 8 -and $html.Contains('Go 程式敘述覆蓋率') -and $html.Contains('80.0%')) 'actual renderer displays measured Go percentage separately from unmeasured PowerShell'
 $badge=[IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_coverage.svg'))
 Assert ($badge.Contains('go coverage branch: 80.0%') -and $badge.Contains('#4c1')) 'Go badge identifies scope and actual passing percentage'
 Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'coverage.svg'))).Contains('not measured')) 'existing coverage badge never changes into an overall Go percentage'
@@ -24,7 +24,7 @@ $coverage.Commit=$arguments.Commit;$coverage.Percent=81
 Refuse {Write-TestReports @arguments -GoCoverage $coverage} 'display percentage must agree with raw statement counts'
 $coverage.Percent=80;$coverage.TotalStatements=0
 Refuse {Write-TestReports @arguments -GoCoverage $coverage} 'zero denominator cannot claim measured coverage'
-$coverage.TotalStatements=10;$coverage.Percent=70;$coverage.CoveredStatements=7
+$coverage.TotalStatements=10;$coverage.Percent=70;$coverage.Covered=7
 $arguments.OutputDirectory=Join-Path $fixture 'below_threshold'
 $null=Write-TestReports @arguments -GoCoverage $coverage
 Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_coverage.svg'))).Contains('#e05d44')) 'below-threshold measured result stays visible as failed coverage'
@@ -33,7 +33,7 @@ Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_covera
 $producer=Join-Path $fixture 'producer';New-Item -ItemType Directory $producer|Out-Null
 $profile=Join-Path $producer 'go_coverage.out'
 [IO.File]::WriteAllText($profile,"mode: atomic`nwindows_setup/script/test/acceptance/report.go:1.1,1.2 8 1`nwindows_setup/script/test/acceptance/report.go:2.1,2.2 2 0`n",[Text.UTF8Encoding]::new($false))
-$coverage.CoveredStatements=8;$coverage.Percent=80;$coverage.ProfileSHA256=(Get-FileHash $profile -Algorithm SHA256).Hash.ToLowerInvariant()
+$coverage.Covered=8;$coverage.Percent=80;$coverage.ProfileSHA256=(Get-FileHash $profile -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText((Join-Path $producer 'go_coverage.json'),($coverage|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
 $arguments.OutputDirectory=Join-Path $fixture 'attach';$null=Write-TestReports @arguments
 $attach=Join-Path $root 'script/test/attach_go_coverage.ps1'
