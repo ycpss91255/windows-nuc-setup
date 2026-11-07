@@ -32,6 +32,11 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: 準備固定 Go 覆蓋率工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
       - name: 執行 Windows PowerShell 5.1 隔離測試
         run: |
           & .\script\test\run_ci.ps1 -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results')
@@ -39,6 +44,21 @@ jobs:
         if: always()
         run: |
           & .\script\test\create_portal_fixture.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'requirements-fixture')
+      - name: 量測全部自有 Go 與 CLI 並要求八成
+        env:
+          WINDOWS_SETUP_ARTIFACT_DIR: ${{ runner.temp }}/NUC-CI-Results/public
+          WINDOWS_SETUP_PORTAL_FIXTURE_DIR: ${{ runner.temp }}/requirements-fixture/portal
+        run: |
+          & .\script\test\measure_go_coverage.ps1 -SourceRoot $PWD.Path -ReportDirectory $env:WINDOWS_SETUP_ARTIFACT_DIR -OutputDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage')
+          if ($env:GITHUB_REF_TYPE -ne 'tag') { & .\script\test\attach_go_coverage.ps1 -PublicDirectory $env:WINDOWS_SETUP_ARTIFACT_DIR -CoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage') }
+      - name: 保留獨立 Go 覆蓋率證據七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/go-coverage/
+          retention-days: 7
+          if-no-files-found: error
       - name: 保留合成驗收樣本七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -210,7 +230,7 @@ jobs:
 
   build-portal:
     name: 建立 main 與不可變版本品質索引
-    if: always() && needs.requirements-gate.result == 'success' && needs.docker-tests.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
+    if: always() && needs.isolated-tests.result == 'success' && needs.requirements-gate.result == 'success' && needs.docker-tests.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
     needs: [isolated-tests, requirements-gate, docker-tests, release]
     runs-on: windows-2022
     timeout-minutes: 15
@@ -238,7 +258,7 @@ jobs:
           $parameters = @{Repository=$env:GH_REPO;OutputDirectory="$env:RUNNER_TEMP\portal-inputs"}
           if ($env:EVENT_REF -eq 'refs/heads/main') {$parameters.MainRunId=$env:CURRENT_RUN}
           $inputs = .\script\report\get_portal_inputs.ps1 @parameters
-          .\script\report\build_portal.ps1 -CatalogPath $inputs.CatalogPath -MainSnapshotPath $inputs.MainSnapshotPath -OutputDirectory "$env:RUNNER_TEMP\quality-portal"
+          .\script\report\build_portal.ps1 -CatalogPath $inputs.CatalogPath -MainSnapshotPath $inputs.MainSnapshotPath -OutputDirectory "$env:RUNNER_TEMP\quality-portal" -RequireGoCoverage
       - name: 保存去識別 portal 供 Linux 部署
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
