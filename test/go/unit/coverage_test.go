@@ -33,4 +33,15 @@ func TestCoverageUnionAndExactThreshold(t *testing.T) {
 	}
 }
 
-func TestGoBadgeExactREADMEURL(t *testing.T){base:="https://example.github.io/site/";p,e:=a.GoCoverageBadgePath("![Go]("+base+"main/go_coverage.svg?style=actual)",base);if e!=nil||p!="go_coverage.svg?style=actual"{t.Fatalf("exact README target lost: %s %v",p,e)};for _,doc:=range []string{"", "![Go](https://other.example/main/go_coverage.svg)","![Go]("+base+"main/go_coverage.svg) ![duplicate]("+base+"main/go_coverage.svg)"}{if _,e:=a.GoCoverageBadgePath(doc,base);e==nil{t.Fatal("missing, foreign or duplicate Go badge accepted")}}}
+func TestGoBadgeExactREADMEURL(t *testing.T) {
+	base := "https://example.github.io/site/"
+	p, e := a.GoCoverageBadgePath("![Go]("+base+"main/go_coverage.svg?style=actual)", base)
+	if e != nil || p != "go_coverage.svg?style=actual" {
+		t.Fatalf("exact README target lost: %s %v", p, e)
+	}
+	for _, doc := range []string{"", "![Go](https://other.example/main/go_coverage.svg)", "![Go](" + base + "main/go_coverage.svg) ![duplicate](" + base + "main/go_coverage.svg)"} {
+		if _, e := a.GoCoverageBadgePath(doc, base); e == nil {
+			t.Fatal("missing, foreign or duplicate Go badge accepted")
+		}
+	}
+}
