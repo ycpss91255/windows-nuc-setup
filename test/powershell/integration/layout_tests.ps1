@@ -9,7 +9,7 @@ $root=[IO.Path]::GetFullPath($PackageRoot).TrimEnd('\')+'\'
 $tracked=if(Test-Path -LiteralPath (Join-Path $PackageRoot '.git')){@(& git -C $PackageRoot -c core.quotePath=false ls-files)}else{@(Get-ChildItem $PackageRoot -Recurse -File|ForEach-Object {$_.FullName.Substring($PackageRoot.TrimEnd('\').Length+1).Replace('\','/')})}
 foreach($license in @('vendor/golang.org/x/net/LICENSE','vendor/golang.org/x/net/PATENTS')){Assert ($tracked -ccontains $license) ('official HTML parser license retains upstream spelling: '+$license)}
 foreach($path in $tracked){
- if($path -cmatch '^modules/debloat/win11debloat/'){continue}
+ if($path -cmatch '^(modules/debloat/win11debloat/|vendor/golang.org/x/net/)'){continue}
  Assert ((Split-Path $path -Leaf) -cmatch '^[a-z0-9_.]+$') ('owned filename is lowercase snake_case: '+$path)
  $parts=$path -split '/'
  foreach($part in @($parts|Select-Object -SkipLast 1)){
