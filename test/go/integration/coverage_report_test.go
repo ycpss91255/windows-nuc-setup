@@ -34,17 +34,24 @@ func TestGoCoveragePublishedEvidence(t *testing.T) {
 	value := "80.0%"
 	left, right := len(label)*7+12, len(value)*7+12
 	data["go_coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d"><rect width="%d" fill="#555"/><rect width="%d" fill="#4c1"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, left+right, left, right, label, value))
+	goBlock:=`<h2>Go 程式敘述覆蓋率</h2><p>80.0% · 8/10 statements；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。</p><p>PowerShell 覆蓋率：尚未量測</p><a href="go_coverage.json">Go JSON</a><a href="go_coverage.out">Go profile</a>`
+	data["index.html"]=append(data["index.html"],[]byte(goBlock)...);data["summary.md"]=append(data["summary.md"],[]byte("\nGo 程式敘述覆蓋率：80.0%；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。\nGo statements: 8/10；PowerShell 覆蓋率未量測。")...)
 	if e = a.ValidateGoCoverageReport(reader(data), owned, r.Commit, r.RunUrl, true); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = a.ValidateReport(reader(data), r.Commit, r.RunUrl, false); e != nil {
 		t.Fatalf("full report must consume attached coverage: %v", e)
 	}
-	for _, kind := range []string{"missing", "badge_percent", "summary_disagrees", "stale_run", "profile_hash", "missing_json", "missing_profile", "missing_svg", "bad_svg_namespace", "bad_sidecar_json", "bad_summary_json", "release_attachment"} {
+	for _, kind := range []string{"missing", "badge_percent", "summary_disagrees", "stale_run", "profile_hash", "missing_json", "missing_profile", "missing_svg", "bad_svg_namespace", "bad_sidecar_json", "bad_summary_json", "release_attachment","missing_visible_go","hidden_go","html_fraction","md_percent","profile_link"} {
 		t.Run(kind, func(t *testing.T) {
 			m := copyFiles(data)
 			run := r.RunUrl
 			switch kind {
+			case "missing_visible_go":m["index.html"]=[]byte(strings.ReplaceAll(string(m["index.html"]),goBlock,""))
+			case "hidden_go":m["index.html"]=[]byte(strings.ReplaceAll(string(m["index.html"]),goBlock,"<details><summary>Hidden</summary>"+goBlock+"</details>"))
+			case "html_fraction":m["index.html"]=[]byte(strings.ReplaceAll(string(m["index.html"]),"8/10 statements","9/10 statements"))
+			case "md_percent":m["summary.md"]=[]byte(strings.ReplaceAll(string(m["summary.md"]),"80.0%","99.0%"))
+			case "profile_link":m["index.html"]=[]byte(strings.ReplaceAll(string(m["index.html"]),`href="go_coverage.out"`,`href="wrong.out"`))
 			case "missing_json":
 				delete(m, "go_coverage.json")
 			case "missing_profile":
