@@ -14,6 +14,7 @@ $arguments.OutputDirectory=Join-Path $fixture 'measured'
 $measured=Write-TestReports @arguments -GoCoverage $coverage
 $html=[IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'index.html'))
 Assert ($measured.Coverage -eq 'NotMeasured' -and $measured.GoCoverage.Covered -eq 8 -and $html.Contains('Go 程式敘述覆蓋率') -and $html.Contains('80.0%')) 'actual renderer displays measured Go percentage separately from unmeasured PowerShell'
+Assert ($html.IndexOf('<h2>Go 程式敘述覆蓋率</h2>') -lt $html.IndexOf('<h2>各項檢查結果</h2>') -and $html.IndexOf('href="go_coverage.out"') -lt $html.IndexOf('<h2>各項檢查結果</h2>')) 'visible Go percentage and evidence downloads precede the long individual-check section'
 $badge=[IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_coverage.svg'))
 Assert ($badge.Contains('go coverage branch: 80.0%') -and $badge.Contains('#4c1')) 'Go badge identifies scope and actual passing percentage'
 Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'coverage.svg'))).Contains('not measured')) 'existing coverage badge never changes into an overall Go percentage'
