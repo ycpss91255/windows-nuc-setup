@@ -275,6 +275,9 @@ func ValidateReport(read Reader, sha, run string, main bool) (Report, error) {
 			return fail("R07 公開產物包含本機或 runner 絕對路徑")
 		}
 	}
+	if e := ValidateGoCoverageReport(read, nil, sha, run, false); e != nil {
+		return r, e
+	}
 	return r, nil
 }
 func contains(items []string, v string) bool {
