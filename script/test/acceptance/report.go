@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func xmlNamespace(data []byte, namespace string) error {
+func ValidateXMLNamespace(data []byte, namespace string) error {
 	d := xml.NewDecoder(bytes.NewReader(data))
 	depth, roots := 0, 0
 	for {
@@ -90,7 +90,7 @@ func BadgeStatus(r Report, name string) string {
 	return status
 }
 func ValidateSVG(data []byte, r Report, name string) error {
-	if e := xmlNamespace(data, "http://www.w3.org/2000/svg"); e != nil {
+	if e := ValidateXMLNamespace(data, "http://www.w3.org/2000/svg"); e != nil {
 		return e
 	}
 	var s struct {
@@ -204,7 +204,7 @@ func ValidateReport(read Reader, sha, run string, main bool) (Report, error) {
 	if e != nil {
 		return r, e
 	}
-	if e = xmlNamespace(data, ""); e != nil {
+	if e = ValidateXMLNamespace(data, ""); e != nil {
 		return r, e
 	}
 	if e = xml.Unmarshal(data, &junit); e != nil {

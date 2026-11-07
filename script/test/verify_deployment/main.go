@@ -60,6 +60,9 @@ func run() error {
 	if e != nil {
 		return e
 	}
+	if e = a.ValidateXMLNamespace(body, "http://www.w3.org/2000/svg"); e != nil {
+		return e
+	}
 	var svg struct{ XMLName xml.Name }
 	if e = xml.Unmarshal(body, &svg); e != nil {
 		return e
