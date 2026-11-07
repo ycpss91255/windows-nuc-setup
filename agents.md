@@ -1,4 +1,4 @@
-﻿# Windows 設定工具迭代規範
+# Windows 設定工具迭代規範
 
 ## 範圍與授權
 - 本儲存庫保存通用 Windows 設定腳本及 NUC8 硬體設定檔、設定範本、說明及已釘選的 Win11Debloat 原始碼。
@@ -33,10 +33,10 @@
 - 版本由 .version、doc/changelog 與 Prepare-Release 管理；標籤提交必須位於 main 歷史，禁止移動或重用已發布標籤。
 - GitHub Release 使用內建來源下載，不另傳重複 ZIP／SHA256；不得把未完成實機驗收寫成硬體已通過。
 
-- 自有目錄使用小寫與底線；第三方 win11debloat 內容保留上游目錄及原始碼。
+- 自有目錄使用小寫與底線；第三方 win11debloat 與 vendor/golang.org/x/net 內容保留上游原名、授權及原始碼。
 
 ## 架構邊界
-- core／modules 是 Windows 交付執行樹；script/test、script/release、script/package 是倉庫維護工具；test/powershell 只放分層案例。
+- core／modules 是 Windows 交付執行樹；script/test、script/release、script/package 是倉庫維護工具；test/powershell 與 test/go 只放分層案例。Go 模組僅管理維護工具，Windows 原生執行樹維持 PowerShell，不要求使用者安裝 Go。
 - 依賴只能由維護工具與案例指向 runtime；runtime 不得引用 script、test、.github。不要求一般使用者安裝倉庫測試或發布工具。
 - 新建自有目錄使用小寫與底線（例如 driver_logs）。ProgramData 既有 NUC8-Setup、NUC-Init、CustomHostsSync 及排程工作識別保留，避免破壞續跑與既有部署；第三方目錄不自行改寫。
 

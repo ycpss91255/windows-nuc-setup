@@ -25,3 +25,10 @@
 ## Windows 內建元件
 
 OpenSSH Server、Windows Update、Sysprep 與 Windows PowerShell 使用目標系統提供的元件；沒有把它們的二進位加入 Git。離線環境若尚未快取 OpenSSH 安裝來源，仍須接網或另外準備符合目標 Windows 的元件來源。
+
+## Go 維護工具與 HTML5 解析器
+
+- 工具鏈使用 [Go 官方下載](https://go.dev/dl/)的 Go 1.27.3，Windows 容器 ZIP 的 SHA256 釘選於 `script/docker/install_go.ps1`；SDK 不提交 Git，也不要求一般設定使用者安裝。
+- HTML5 解析使用 Go 官方專案 [golang.org/x/net/html](https://pkg.go.dev/golang.org/x/net/html)，釘選模組 `golang.org/x/net v0.62.0`，由根目錄 `go.mod`／`go.sum` 記錄。這是額外依賴，不宣稱僅使用標準庫。
+- `go mod vendor` 保留實際需要的 html 與 atom 原始碼；[BSD 類授權 LICENSE](../vendor/golang.org/x/net/LICENSE)及[PATENTS](../vendor/golang.org/x/net/PATENTS)維持上游原名與內容。自有檔名規則僅在此明確第三方路徑例外，不修改上游來源。
+- CI 與容器使用 `-mod=vendor`、`GOPROXY=off`、`GOTOOLCHAIN=local`；固定 SDK 在建置階段準備，執行驗收時不自動下載模組或切換工具鏈。
