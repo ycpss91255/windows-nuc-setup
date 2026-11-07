@@ -7,7 +7,7 @@ function Refuse([scriptblock]$Action,[string]$Message){$caught=$false;try{& $Act
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ("container 中文 ' "+[guid]::NewGuid().ToString('N'))
 $source=Join-Path $fixture 'source';$reports=Join-Path $fixture 'reports'
 New-Item -ItemType Directory (Join-Path $source '.git'),(Join-Path $source 'dockerfile'),(Join-Path $source 'script/docker') -Force|Out-Null
-foreach($file in @('dockerfile/windows_tests.dockerfile','script/docker/install_min_git.ps1','script/docker/container_test.ps1','.dockerignore')){Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $source $file)}
+foreach($file in @('dockerfile/windows_tests.dockerfile','script/docker/install_min_git.ps1','script/docker/install_python.ps1','script/docker/container_test.ps1','.dockerignore','compose.yaml')){Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $source $file)}
 $first=Get-ContainerContext $source $reports
 $again=Get-ContainerContext $source $reports
 Assert ($first.Image -ceq $again.Image -and $first.Project -ceq $again.Project) 'same toolchain inputs select the same exact image and project'
@@ -33,3 +33,24 @@ Assert ($script:captured.Count -eq 3 -and $script:captured[1] -eq '--format' -an
 Invoke-ContainerDocker -Arguments @('compose','version')
 Assert (($script:captured -join '|') -eq 'compose|version') 'Compose subcommand is not dropped during argument forwarding'
 Remove-Item Function:/docker.exe
+
+foreach($mode in @('process','hyperv')){
+ $configuration=[pscustomobject]@{services=[pscustomobject]@{tools=[pscustomobject]@{image=$first.Image;isolation=$mode;build=[pscustomobject]@{isolation=$mode}}}}
+ Assert-ContainerCompose -Configuration $configuration -Isolation $mode -Image $first.Image
+ Assert $true ('resolved Compose accepts matching build and run isolation: '+$mode)
+ $configuration.services.tools.build.isolation=''
+ Refuse {Assert-ContainerCompose $configuration $mode $first.Image} ('missing build isolation cannot silently use engine default: '+$mode)
+ $configuration.services.tools.build.isolation=$mode;$configuration.services.tools.isolation=''
+ Refuse {Assert-ContainerCompose $configuration $mode $first.Image} ('missing run isolation is rejected: '+$mode)
+}
+. (Join-Path $root 'script/docker/acceptance.ps1')
+$local=Get-ContainerAcceptancePlan -ReportDirectory $reports -FixtureDirectory $fixture -Commit '' -Repository '' -RunId '' -RefType '' -RefName ''
+Assert ($local.Mode -eq 'LocalSynthetic' -and $local.ArtifactDirectory -eq (Join-Path $fixture 'synthetic_snapshot') -and -not $local.ArtifactDirectory.StartsWith($reports)) 'local no-CI mode uses private labeled synthetic evidence without overwriting actual report'
+$actual=Get-ContainerAcceptancePlan -ReportDirectory $reports -FixtureDirectory $fixture -Commit ('a'*40) -Repository 'example/repo' -RunId '123' -RefType 'branch' -RefName 'feature/test'
+Assert ($actual.Mode -eq 'CIActual' -and $actual.ArtifactDirectory -eq (Join-Path $reports 'public') -and $actual.RunUrl -eq 'https://github.com/example/repo/actions/runs/123') 'CI mode binds Python acceptance to actual report and supplied execution identity'
+Refuse {Get-ContainerAcceptancePlan $reports $fixture ('a'*40) '' ''} 'partial CI metadata cannot downgrade to synthetic validation'
+Refuse {Get-ContainerAcceptancePlan $reports $fixture 'invalid' 'example/repo' '123'} 'malformed CI commit cannot become evidence'
+function python.exe {$global:LASTEXITCODE=19}
+Refuse {Invoke-ContainerPython -Arguments @('fixture.py')} 'Python failure is not swallowed by container orchestration'
+Remove-Item Function:/python.exe
+Refuse {Get-ContainerAcceptancePlan $reports $fixture ('a'*40) 'example/repo' '123' '' ''} 'CI identity without ref metadata cannot silently become local branch evidence'

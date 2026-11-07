@@ -5,6 +5,7 @@ services:
       context: .
       dockerfile: dockerfile/windows_tests.dockerfile
       target: test
+      isolation: ${WINDOWS_SETUP_ISOLATION:-process}
     isolation: ${WINDOWS_SETUP_ISOLATION:-process}
     network_mode: none
     volumes:

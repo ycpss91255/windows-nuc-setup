@@ -16,6 +16,8 @@ try {
  $settings=@{WINDOWS_SETUP_SOURCE=$context.Root;WINDOWS_SETUP_REPORTS=$context.Reports;WINDOWS_SETUP_IMAGE=$context.Image;WINDOWS_SETUP_ISOLATION=$context.Isolation}
  foreach($key in $settings.Keys){$previous[$key]=[Environment]::GetEnvironmentVariable($key,'Process');[Environment]::SetEnvironmentVariable($key,$settings[$key],'Process')}
  $compose=@('compose','--project-name',$context.Project,'--file',(Join-Path $context.Root 'compose.yaml'))
+ $configuration=(Invoke-ContainerDocker -Arguments ($compose+@('config','--format','json'))) -join "`n"
+ Assert-ContainerCompose -Configuration ($configuration|ConvertFrom-Json) -Isolation $context.Isolation -Image $context.Image
  Invoke-ContainerDocker -Arguments ($compose+@('build','--pull','tools'))
  if($Action -eq 'build'){Write-Host ('Built '+$context.Image);exit 0}
  if(Test-Path -LiteralPath $context.Reports){throw 'Report destination must be a new directory to avoid mixing runs.'}
@@ -24,7 +26,7 @@ try {
  if($Action -eq 'test'){
   Invoke-ContainerDocker -Arguments ($compose+@('run','--rm','--no-deps','-T','tools'))
  }else{
-  Invoke-ContainerDocker -Arguments ($compose+@('run','--rm','--no-deps','tools','powershell.exe','-NoLogo','-NoProfile','-NoExit','-Command',"git.exe config --global --add safe.directory C:/workspace; Set-Location C:/workspace"))
+  Invoke-ContainerDocker -Arguments ($compose+@('run','--rm','--no-deps','tools','powershell.exe','-NoLogo','-NoProfile','-NoExit','-Command','git.exe config --global --add safe.directory C:/workspace; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; Set-Location C:/workspace'))
  }
  exit 0
 }catch{
