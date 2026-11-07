@@ -12,7 +12,10 @@ import (
 func TestGoCoveragePublishedEvidence(t *testing.T) {
 	original := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
 	// These cases deliberately construct optional historical and required-current states.
-	var historical map[string]any;json.Unmarshal(original["summary.json"],&historical);delete(historical,"GoCoverage");original["summary.json"],_=json.Marshal(historical)
+	var historical map[string]any
+	json.Unmarshal(original["summary.json"], &historical)
+	delete(historical, "GoCoverage")
+	original["summary.json"], _ = json.Marshal(historical)
 	r := decode(t, original)
 	owned := []string{"windows_setup/script/test/example.go"}
 	profile := []byte("mode: set\n" + owned[0] + ":1.1,2.1 8 1\n" + owned[0] + ":3.1,4.1 2 0\n")
@@ -63,4 +66,19 @@ func TestGoCoveragePublishedEvidence(t *testing.T) {
 	}
 }
 
-func TestCoverageCDNRetryIsBounded(t *testing.T){original:=files(t,os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"));r:=decode(t,original);p:=portal(t,synthetic(t,original,r.Success,"Branch"));calls,sleeps:=0,0;_,e:=a.VerifyWithRetry(reader(p),readme(),r.Commit,r.RunUrl,base,3,func(){sleeps++},func()error{calls++;if calls<3{return fmt.Errorf("sidecar not synchronized")};return nil});if e!=nil||calls!=3||sleeps!=2{t.Fatalf("coverage validation not part of bounded retry: calls=%d sleeps=%d err=%v",calls,sleeps,e)}}
+func TestCoverageCDNRetryIsBounded(t *testing.T) {
+	original := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+	r := decode(t, original)
+	p := portal(t, synthetic(t, original, r.Success, "Branch"))
+	calls, sleeps := 0, 0
+	_, e := a.VerifyWithRetry(reader(p), readme(), r.Commit, r.RunUrl, base, 3, func() { sleeps++ }, func() error {
+		calls++
+		if calls < 3 {
+			return fmt.Errorf("sidecar not synchronized")
+		}
+		return nil
+	})
+	if e != nil || calls != 3 || sleeps != 2 {
+		t.Fatalf("coverage validation not part of bounded retry: calls=%d sleeps=%d err=%v", calls, sleeps, e)
+	}
+}
