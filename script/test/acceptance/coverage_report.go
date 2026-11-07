@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+func GoCoverageBadgePath(doc,base string)(string,error){return "",fmt.Errorf("Go README badge lookup not implemented")}
+
 func ValidateGoCoverageReport(read Reader, files []string, sha, run string, required bool) error {
 	b, e := read("summary.json")
 	if e != nil {
