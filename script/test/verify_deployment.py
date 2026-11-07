@@ -26,7 +26,7 @@ def validate_portal(read, readme, expected_sha, expected_run, base_url):
         page = Page(read(version['Path']).decode('utf-8-sig'))
         require('Unknown' not in page.visible, 'R06 舊版本頁顯示未翻譯 Unknown')
         if version['Status'] == 'Unknown':
-            require('未保存測試紀錄' in page.visible, 'R06 缺少舊版證據卻沒有明確說明')
+            require(re.search(r'未保存(?:可用的)?測試紀錄', page.visible), 'R06 缺少舊版證據卻沒有明確說明')
     for a in versions:
         for b in versions:
             comparison = json.loads(read('comparisons/' + a['Version'] + '--' + b['Version'] + '.json').decode('utf-8-sig'))

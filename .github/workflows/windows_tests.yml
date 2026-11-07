@@ -33,6 +33,18 @@ jobs:
       - name: 執行 Windows PowerShell 5.1 隔離測試
         run: |
           & .\script\test\run_ci.ps1 -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results')
+      - name: 產生明確標示的合成首頁驗收樣本
+        if: always()
+        run: |
+          & .\script\test\create_portal_fixture.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'requirements-fixture')
+      - name: 保留合成驗收樣本七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: requirements-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/requirements-fixture/portal/
+          retention-days: 7
+          if-no-files-found: error
       - name: 測試報告短期保留七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -58,12 +70,17 @@ jobs:
         with:
           name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
           path: acceptance-artifact
+      - name: 下載本次實際產生的合成首頁樣本
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: requirements-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: acceptance-fixture
       - name: 執行需求驗收與破壞性負例
         env:
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          python test/python/integration/requirements_tests.py --artifact-dir acceptance-artifact
+          python test/python/integration/requirements_tests.py --artifact-dir acceptance-artifact --portal-fixture-dir acceptance-fixture
           python script/test/requirements_gate.py --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
 
   ci-rollup:

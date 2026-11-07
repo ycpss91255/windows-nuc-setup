@@ -514,7 +514,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_
 
 每次測試從實際斷言的結構化事件與程序退出碼產生 JSON、Markdown、自含 HTML、JUnit XML 及分層 SVG。報告先顯示一般使用者結論、宣告版本／分支或 Release 範圍、變更、已知限制與下載，再列所選層級、斷言結果、套件耗時、提交及工作樹狀態；新增 `test/powershell/unit` 或 `integration` 測試會自動列入執行清單。程序崩潰、缺少斷言事件或任何失敗均不能標成通過。
 
-CI 只上傳去識別的 `public` 報表子目錄，附件保留 7 天；原始程序 log 留在 runner 暫存，不公開至 Pages。main 推送會更新公開 HTML／SVG（包含測試失敗的有效報表），PR 只有短期附件；main 首頁呈現最新分支報表；版本頁由各 Release 保存的品質 JSON 快照重建，保留原 Version／Commit／MeasuredAt。舊版缺少快照時顯示 Unknown，不拿新測試補寫舊版證據。實機 reports 仍獨立保留，不納入 Git 或 Pages。
+正式測試證據只上傳去識別的 `public` 報表子目錄，附件保留 7 天；原始程序 log 留在 runner 暫存，不公開至 Pages。main 推送會更新公開 HTML／SVG（包含測試失敗的有效報表），PR 只有短期附件；main 首頁呈現最新分支報表；版本頁由各 Release 保存的品質 JSON 快照重建，保留原 Version／Commit／MeasuredAt。舊版缺少快照時顯示 Unknown，不拿新測試補寫舊版證據。實機 reports 仍獨立保留，不納入 Git 或 Pages。
 
 Coverage 顯示 `NotMeasured`：目前沒有對 PowerShell 原始碼作行／分支執行量測，斷言數不是覆蓋率。base 的 coverage badge 來源是實際 kcov 報告，發布徽章目前仍是 release 手動生成；本專案採相同的證據原則，沒有照搬 Bash 工具或宣稱已具備相同覆蓋率能力。System／完整 E2E 保持 `Deferred / NotRun`，不計入已通過項目。
 
@@ -551,7 +551,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\test\powershell\system
 
 完整 E2E 必須在可重建的測試機或 VM 記錄起始 Windows 映像／版本、主機型號、使用者、是否選驅動包、工具版本，依本文從 Init 跑到重開後驗收；保留該機 reports 與每一階段的失敗／略過。沒有執行過的階段必須記為未執行。此輪未執行這項完整安裝測試，CI 不會自動修改 runner 來模擬通過。
 
-每次 CI 將各套件 log 與 summary 上傳為 windows-test-reports artifact，保留 7 天。只上傳明確的 CI 報告資料夾，不上傳測試 fixture、帳號 answer XML、每機 Reports 或秘密。Actions 本身執行 log 的保留天數另由儲存庫設定控制，不是 YAML artifact 保留期。
+每次 CI 將去識別的 HTML／JSON／Markdown／JUnit 與徽章上傳為 windows-test-reports artifact，保留 7 天；原始套件 log 不上傳。另有 requirements-fixture artifact，只含程式明確建立的合成首頁樣本，固定假 SHA、示例執行網址及 Synthetic 環境標記，不含帳密或實機資料，同樣保留 7 天供需求門檻驗證。這份樣本不是正式測試證據，不混入 windows-test-reports、Release 或 Pages。其他測試副本、帳號 answer XML、每機 Reports 與秘密均不上傳。Actions 本身執行 log 的保留天數另由儲存庫設定控制，不是 YAML artifact 保留期。
 
 實機 Setup-Result.json、Setup-Progress.json、Acceptance-Result.json 與驗證結果是續跑或排錯資料，原有 Git 忽略規則保留；CI 不清理這些檔案。設定未完成時不要刪除 Setup-Result.json。雲端通過僅代表來源／隔離測試成功，不表示 NUC 硬體或 OOBE 已通過實機驗收。
 
