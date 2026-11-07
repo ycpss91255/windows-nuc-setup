@@ -83,3 +83,13 @@ try{
  Assert ($env:GOTOOLCHAIN -eq 'local' -and $env:GOPROXY -eq 'off' -and $env:GOSUMDB -eq 'off' -and $env:GOFLAGS -eq '-mod=vendor' -and $env:CGO_ENABLED -eq '0' -and $env:GOWORK -eq 'off' -and $env:GOENV -eq 'off') 'Go execution uses checked-in vendor and cannot fetch toolchains or module services'
  Refuse {Initialize-ContainerGoEnvironment -SourceRoot $source -CacheRoot (Join-Path $source 'cache')} 'Go caches cannot write into the read-only source mount'
 }finally{foreach($key in $goKeys){[Environment]::SetEnvironmentVariable($key,$before[$key],'Process')}}
+$coverageSource=Join-Path $fixture 'coverage_source';New-Item -ItemType Directory (Join-Path $coverageSource 'script/test') -Force|Out-Null
+[IO.File]::WriteAllText((Join-Path $coverageSource 'script/test/measure_go_coverage.ps1'),'param($SourceRoot,$ReportDirectory,$OutputDirectory); throw ''fixture measurement failed''')
+$global:localGoCalls=0
+function go.exe {$global:localGoCalls++;$global:LASTEXITCODE=0}
+Invoke-ContainerGoTestPhase -Plan ([pscustomobject]@{Mode='LocalSynthetic'}) -SourceRoot $coverageSource -ReportDirectory (Join-Path $fixture 'local_report')
+Assert ($global:localGoCalls -eq 1) 'local container runs full Go tests without manufacturing clean coverage evidence'
+$failed=$false
+try{Invoke-ContainerGoTestPhase -Plan ([pscustomobject]@{Mode='CIActual'}) -SourceRoot $coverageSource -ReportDirectory (Join-Path $fixture 'ci_report')}catch{$failed=$_.Exception.Message -eq 'fixture measurement failed'}
+Assert $failed 'CI container propagates coverage measurement failure instead of falling back to local tests'
+Remove-Item Function:/go.exe
