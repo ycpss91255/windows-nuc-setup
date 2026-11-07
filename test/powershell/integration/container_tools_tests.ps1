@@ -64,3 +64,22 @@ try{
  Assert ([bool](Get-Command powershell.exe -CommandType Application -ErrorAction Stop)) 'image PATH preserves actual Windows PowerShell discovery'
  Assert ([bool](Get-Command cmd.exe -CommandType Application -ErrorAction Stop)) 'image PATH preserves actual Windows command processor discovery'
 }finally{$env:Path=$originalPath}
+# Go migration: exercise the process boundary with a fake executable, never Python.
+function go.exe {$script:goArguments=@($args);$global:LASTEXITCODE=0;Write-Output 'go-result'}
+Assert ((Invoke-ContainerGo -Arguments @('test','-count=1','./test/go/...')) -eq 'go-result') 'Go acceptance executes the Go toolchain and returns its actual output'
+Assert (($script:goArguments -join '|') -eq 'test|-count=1|./test/go/...') 'Go test arguments retain uncached execution and package selection'
+function go.exe {$global:LASTEXITCODE=23}
+Refuse {Invoke-ContainerGo -Arguments @('run','./script/test/requirements_gate')} 'Go acceptance cannot swallow a nonzero process result'
+Remove-Item Function:/go.exe
+$goKeys=@('GOCACHE','GOMODCACHE','GOPATH','GOTMPDIR','GOTOOLCHAIN','GOPROXY','GOSUMDB','GOFLAGS','CGO_ENABLED','GOWORK','GOENV')
+$before=@{};foreach($key in $goKeys){$before[$key]=[Environment]::GetEnvironmentVariable($key,'Process')}
+try{
+ $goCache=Join-Path $fixture 'go_cache'
+ Initialize-ContainerGoEnvironment -SourceRoot $source -CacheRoot $goCache
+ foreach($key in @('GOCACHE','GOMODCACHE','GOPATH','GOTMPDIR')){
+  $value=[Environment]::GetEnvironmentVariable($key,'Process')
+  Assert ($value.StartsWith($goCache+'\',[StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $value -PathType Container)) ('Go writable state stays outside source: '+$key)
+ }
+ Assert ($env:GOTOOLCHAIN -eq 'local' -and $env:GOPROXY -eq 'off' -and $env:GOSUMDB -eq 'off' -and $env:GOFLAGS -eq '-mod=vendor' -and $env:CGO_ENABLED -eq '0' -and $env:GOWORK -eq 'off' -and $env:GOENV -eq 'off') 'Go execution uses checked-in vendor and cannot fetch toolchains or module services'
+ Refuse {Initialize-ContainerGoEnvironment -SourceRoot $source -CacheRoot (Join-Path $source 'cache')} 'Go caches cannot write into the read-only source mount'
+}finally{foreach($key in $goKeys){[Environment]::SetEnvironmentVariable($key,$before[$key],'Process')}}
