@@ -516,11 +516,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_
 
 每次測試從實際斷言的結構化事件與程序退出碼產生 JSON、Markdown、自含 HTML、JUnit XML 及分層 SVG。報告先顯示一般使用者結論、宣告版本／分支或 Release 範圍、變更、已知限制與下載，再列所選層級、斷言結果、套件耗時、提交及工作樹狀態；新增 `test/powershell/unit` 或 `integration` 測試會自動列入執行清單。程序崩潰、缺少斷言事件或任何失敗均不能標成通過。
 
-正式測試證據只上傳去識別的 `public` 報表子目錄，附件保留 7 天；原始程序 log 留在 runner 暫存，不公開至 Pages。main 推送會更新公開 HTML／SVG（包含測試失敗的有效報表），PR 只有短期附件；main 首頁呈現最新分支報表；版本頁由各 Release 保存的品質 JSON 快照重建，保留原 Version／Commit／MeasuredAt。舊版缺少快照時顯示 Unknown，不拿新測試補寫舊版證據。實機 reports 仍獨立保留，不納入 Git 或 Pages。
+正式測試證據只上傳去識別的 `public` 報表子目錄，附件保留 7 天；原始程序 log 留在 runner 暫存，不公開至 Pages。main 僅在必要測試、Go 覆蓋率與需求驗收全部通過後更新公開 HTML／SVG；失敗結果請查看 Actions 與短期附件，公開徽章保留最後一次成功部署。PR 只有短期附件；main 首頁呈現最新分支報表；版本頁由各 Release 保存的品質 JSON 快照重建，保留原 Version／Commit／MeasuredAt。舊版缺少快照時顯示 Unknown，不拿新測試補寫舊版證據。實機 reports 仍獨立保留，不納入 Git 或 Pages。
 
 Go 徽章顯示最近一次成功部署 main 的實際 **statement coverage**，不是手填百分比或全儲存庫覆蓋率。量測涵蓋所有自有 Go 正式套件及 CLI；完整測試使用 `-coverpkg=./script/test/...`，命令列子程序另外 instrumentation，合併原始計數後以 `Covered × 100 >= TotalStatements × 80` 判定 CI 門檻，不以四捨五入後的顯示值過關。第三方 vendor、測試程式、PowerShell 與 Windows 系統操作不在 Go 分母內。
 
-[Go 量測 JSON](https://ycpss91255.github.io/windows_setup/main/go_coverage.json)與[原始合併 profile](https://ycpss91255.github.io/windows_setup/main/go_coverage.out)可下載核對數量、套件範圍、提交、執行來源、量測時間及 SHA256。新量測成功部署前，不宣稱公開頁已達門檻；徽章與來源以已部署產物為準。歷史 Release 沒有 Go 量測時維持未量測，不回填目前結果；既有不可變 Release 附件格式不變。
+[Go 量測 JSON](https://ycpss91255.github.io/windows_setup/main/go_coverage.json)與[原始合併 profile](https://ycpss91255.github.io/windows_setup/main/go_coverage.out)可下載核對數量、套件範圍、提交、執行來源、量測時間及 SHA256。徽章數值、來源提交與時間以已部署產物為準，不能代表尚未部署的修改。歷史 Release 沒有 Go 量測時維持未量測，不回填目前結果；既有不可變 Release 附件格式不變。
 
 PowerShell `Coverage` 與既有 `coverage.svg` 仍顯示 `NotMeasured`：目前沒有對 PowerShell 原始碼作行／分支執行量測，斷言數不是覆蓋率。沿用 base 由真實量測產生徽章的原則及 flat-square 外觀，不把 Go 百分比套用為 PowerShell 或整體覆蓋率。System／完整 E2E 保持 `Deferred / NotRun`，不計入已通過項目。
 
