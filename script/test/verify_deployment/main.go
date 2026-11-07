@@ -19,7 +19,9 @@ func run() error {
 	sha := flag.String("expected-sha", "", "expected commit")
 	run := flag.String("expected-run-url", "", "expected run")
 	flag.Parse()
-	if *base == "" || *doc == "" || *sha == "" || *run == "" {
+	provided := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { provided[f.Name] = true })
+	if *base == "" || *doc == "" || *sha == "" || !provided["expected-run-url"] {
 		return fmt.Errorf("四個驗收參數皆為必要")
 	}
 	*base = strings.TrimRight(*base, "/") + "/"

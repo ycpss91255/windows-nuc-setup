@@ -14,7 +14,9 @@ func run() error {
 	sha := flag.String("expected-sha", "", "expected commit")
 	run := flag.String("expected-run-url", "", "expected run")
 	flag.Parse()
-	if *dir == "" || *root == "" || *sha == "" || *run == "" {
+	provided := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { provided[f.Name] = true })
+	if *dir == "" || *root == "" || *sha == "" || !provided["expected-run-url"] {
 		return fmt.Errorf("四個驗收參數皆為必要")
 	}
 	if _, e := a.ValidateSource(*root); e != nil {
