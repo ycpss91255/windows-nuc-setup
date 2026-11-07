@@ -8,7 +8,7 @@ $fixture=Join-Path ([IO.Path]::GetTempPath()) ('Windows-Release-'+[guid]::NewGui
 $repo=Join-Path $fixture '中文 來源'
 New-Item -ItemType Directory -Path (Join-Path $repo 'doc/changelog') -Force|Out-Null
 $script:count=0
-function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++;Write-Host ('PASS: '+$Message)}
+function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++;Write-Host ('PASS: '+$Message)}
 function Refuse([scriptblock]$Action,[string]$Message){$caught=$false;try{& $Action|Out-Null}catch{$caught=$true};Assert $caught $Message}
 function FixtureGit([string[]]$Arguments){& git.exe -C $repo @Arguments|Out-Null;if($LASTEXITCODE -ne 0){throw '測試 Git 命令失敗。'}}
 function WriteFile([string]$Path,[string]$Text){[IO.File]::WriteAllText((Join-Path $repo $Path),$Text,[Text.UTF8Encoding]::new($false))}

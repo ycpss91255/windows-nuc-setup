@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 
-param([ValidateSet('Save','Load','Verify')][string]$Mode='Load',[switch]$Worker)
+param([ValidateSet('Save','Load','Verify')][string]$Mode='Load',[switch]$Worker,[ValidatePattern('^[a-fA-F0-9-]{36}$')][string]$VerificationRunId)
 if($Mode -ne 'Save' -and (Get-UICulture).Name -ne 'zh-TW'){Write-Host '[略過] 目前桌面排列範本僅適用繁體中文，未套用座標。';[pscustomobject]@{Status='Skipped';Module='Desktop-IconLayout.ps1';Reason='目前排列範本使用繁體中文圖示名稱'};return}
 $principal=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
@@ -17,7 +17,7 @@ if(-not $Worker -and [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0)
  $resultPath=Join-Path $root 'IconLayout-Result.json'
  if(Test-Path $resultPath){Remove-Item $resultPath -Force}
  $name='NUC8-Desktop-IconLayout'
- $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$workerPath+'" -Worker -Mode '+$Mode)
+ $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$workerPath+'" -Worker -Mode '+$Mode+$(if($VerificationRunId){' -VerificationRunId '+$VerificationRunId}else{''}))
  $principal=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
  Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -Force|Out-Null
  Start-ScheduledTask -TaskName $name
@@ -79,7 +79,7 @@ namespace NUC8Icons {
   if($snapshot.Icons.Count -ne 4){throw ('目前桌面不是四個圖示，請先確認：'+$snapshot.Icons.Count)}
   $reference=[ordered]@{Width=$snapshot.Width;Height=$snapshot.Height;Icons=@($snapshot.Icons|Select-Object Name,X,Y);SavedAt=(Get-Date).ToString('o')}
   $reference|ConvertTo-Json -Depth 5|Set-Content $referencePath -Encoding UTF8
-  $result=[ordered]@{Success=$true;Mode=$Mode;Reference=$reference}
+  $result=[ordered]@{VerificationRunId=$VerificationRunId;Computer=$env:COMPUTERNAME;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;Success=$true;Mode=$Mode;Reference=$reference}
  }else{
   $reference=Get-Content $referencePath -Raw|ConvertFrom-Json
   if($snapshot.Width -ne $reference.Width -or $snapshot.Height -ne $reference.Height){throw '桌面範圍與範本不同，請確認解析度、縮放及螢幕數量。'}
@@ -97,7 +97,7 @@ namespace NUC8Icons {
   }
   $after=[NUC8Icons.Desktop]::Capture()
   foreach($expected in $reference.Icons){$actual=@($after.Icons|Where-Object Name -eq $expected.Name);if($actual.Count -eq 1 -and ([math]::Abs($actual[0].X-$expected.X) -gt 2 -or [math]::Abs($actual[0].Y-$expected.Y) -gt 2)){$differences+=('位置不符：'+$expected.Name)}}
-  $result=[ordered]@{Success=($differences.Count -eq 0);Mode=$Mode;Differences=$differences;Actual=@($after.Icons|Select-Object Name,X,Y);Error=($differences -join '；')}
+  $result=[ordered]@{VerificationRunId=$VerificationRunId;Computer=$env:COMPUTERNAME;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;Success=($differences.Count -eq 0);Mode=$Mode;Differences=$differences;Actual=@($after.Icons|Select-Object Name,X,Y);Error=($differences -join '；')}
  }
  $result|ConvertTo-Json -Depth 6|Set-Content (Join-Path $root 'IconLayout-Result.json') -Encoding UTF8
  if((Join-Path $PSScriptRoot 'IconLayout-Result.json') -ne (Join-Path $root 'IconLayout-Result.json')){$result|ConvertTo-Json -Depth 6|Set-Content (Join-Path $PSScriptRoot 'IconLayout-Result.json') -Encoding UTF8}

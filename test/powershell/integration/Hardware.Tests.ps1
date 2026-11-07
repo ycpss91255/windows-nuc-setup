@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 $packageRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 . (Join-Path $packageRoot 'core\Hardware.ps1')
 $count=0
-function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++;Write-Host ('PASS: '+$Message)}
+function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++;Write-Host ('PASS: '+$Message)}
 $generic=Get-SetupHardwareProfile -BoardProduct 'Other Board' -UICulture 'en-US'
 $hv=Get-SetupHardwareProfile -BoardProduct 'NUC8i7HVB' -UICulture 'zh-TW' -DriverPackagePath 'selected_package'
 $hn=Get-SetupHardwareProfile -BoardProduct 'NUC8i7HNB' -UICulture 'zh-TW' -DriverPackagePath 'selected_package'
@@ -55,6 +55,11 @@ foreach($dir in @('core','modules')){
 foreach($entry in @('Init.cmd','Windows.cmd','README.md')){Copy-Item -LiteralPath (Join-Path $packageRoot $entry) -Destination $genericPackage}
 [IO.File]::WriteAllText((Join-Path $genericPackage 'modules\accounts\Autologon64.exe'),'existence fixture, never executed')
 & (Join-Path $genericPackage 'core\Test-SetupPrerequisites.ps1') -PackageOnly -HardwareProfile Generic
+$verificationHelper=Join-Path $genericPackage 'core\Verification.ps1'
+Move-Item -LiteralPath $verificationHelper -Destination ($verificationHelper+'.fixture-backup')
+$missingHelperRejected=$false
+try{& (Join-Path $genericPackage 'core\Test-SetupPrerequisites.ps1') -PackageOnly -HardwareProfile Generic}catch{$missingHelperRejected=$_.Exception.Message -match 'Verification.ps1'}finally{Move-Item -LiteralPath ($verificationHelper+'.fixture-backup') -Destination $verificationHelper}
+Assert $missingHelperRejected '缺少 Verification helper 的套件不得通過 PackageOnly'
 Assert (-not(Test-Path (Join-Path $genericPackage 'modules\drivers\Payload'))) '通用 PackageOnly 完整檢查成功且未建立或要求 NUC payload'
 $caught=$false;try{& (Join-Path $genericPackage 'core\Test-SetupPrerequisites.ps1') -PackageOnly -HardwareProfile NUC8 -DriverPackagePath (Join-Path $fixture 'missing')}catch{$caught=$true}
 Assert $caught '相同無驅動包指定 NUC8 仍拒絕'

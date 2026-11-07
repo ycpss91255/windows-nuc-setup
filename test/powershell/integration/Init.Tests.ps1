@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 $moduleRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\modules\init'))
 . (Join-Path $moduleRoot 'OOBE-Library.ps1')
 $script:count=0
-function Assert([bool]$Condition,[string]$Name){if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++;Write-Host ('PASS: '+$Name)}
+function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++;Write-Host ('PASS: '+$Name)}
 $marker='NUC-INIT-'+[guid]::NewGuid().ToString('N')
 $password='a&<>"中文'
 $xmlText=New-InitAnswerXml -UserName 'my&user' -Password $password -CleanupCommand 'powershell.exe -File "C:\測試 資料夾\Cleanup.ps1"' -Marker $marker

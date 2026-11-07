@@ -70,6 +70,7 @@
   "Theme-Verification.json": "modules/theme/Theme-Verification.json",
   "IconLayout-Result.json": "modules/desktop/IconLayout-Result.json",
   "Paths.ps1": "core/Paths.ps1",
+  "Verification.ps1": "core/Verification.ps1",
   "Paths.json": "core/Paths.json",
   "Start-Windows.ps1": "core/Start-Windows.ps1",
   "Initialize-NUC.ps1": "modules/init/Initialize-NUC.ps1",

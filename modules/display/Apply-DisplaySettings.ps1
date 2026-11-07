@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 #Requires -RunAsAdministrator
-param([switch]$Worker,[switch]$VerifyOnly)
+param([switch]$Worker,[switch]$VerifyOnly,[ValidatePattern('^[a-fA-F0-9-]{36}$')][string]$VerificationRunId)
 $ErrorActionPreference='Stop'
 $resultFileName=if($VerifyOnly){'Display-Verification.json'}else{'Display-Result.json'}
 $root=Join-Path $env:ProgramData 'NUC8-Setup'
@@ -13,6 +13,7 @@ if(-not $Worker -and [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0)
  $name='NUC8-Apply-Display'
  $workerArgs='-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$workerPath+'" -Worker'
  if($VerifyOnly){$workerArgs+=' -VerifyOnly'}
+ if($VerificationRunId){$workerArgs+=' -VerificationRunId '+$VerificationRunId}
  $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $workerArgs
  $principal=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
  Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -Force|Out-Null
@@ -100,7 +101,7 @@ namespace NUC8Display {
 "@
  if($VerifyOnly){
   $actual=[NUC8Display.Display]::Read()
-  $result=[ordered]@{Success=($actual[0] -eq 1920 -and $actual[1] -eq 1080 -and $actual[2] -eq 96 -and (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).Win8DpiScaling -ne 1);Width=$actual[0];Height=$actual[1];CurrentMonitorDPI=$actual[2];CurrentScalePercent=[math]::Round($actual[2]*100/96);CustomScalingEnabled=((Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).Win8DpiScaling -eq 1);VerifiedAt=(Get-Date).ToString('o');Error='解析度或實際 DPI 尚未符合 1920×1080 / 100%，可能需要重新登入。'}
+  $result=[ordered]@{VerificationRunId=$VerificationRunId;Computer=$env:COMPUTERNAME;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;Success=($actual[0] -eq 1920 -and $actual[1] -eq 1080 -and $actual[2] -eq 96 -and (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).Win8DpiScaling -ne 1);Width=$actual[0];Height=$actual[1];CurrentMonitorDPI=$actual[2];CurrentScalePercent=[math]::Round($actual[2]*100/96);CustomScalingEnabled=((Get-ItemProperty 'HKCU:\Control Panel\Desktop' -ErrorAction SilentlyContinue).Win8DpiScaling -eq 1);VerifiedAt=(Get-Date).ToString('o');Error='解析度或實際 DPI 尚未符合 1920×1080 / 100%，可能需要重新登入。'}
   if($result.Success){$result.Error=$null}
   $result|ConvertTo-Json|Set-Content (Join-Path $root 'Display-Verification.json') -Encoding UTF8
   if((Join-Path $PSScriptRoot 'Display-Verification.json') -ne (Join-Path $root 'Display-Verification.json')){$result|ConvertTo-Json|Set-Content (Join-Path $PSScriptRoot 'Display-Verification.json') -Encoding UTF8}
@@ -114,7 +115,7 @@ namespace NUC8Display {
  Remove-ItemProperty $desktop -Name LogPixels -ErrorAction SilentlyContinue
  $nativeScales=@([NUC8Display.Display]::NativeScales($true))
  if(@($nativeScales|Where-Object {$_ -ne 100}).Count){throw '標準縮放尚未成功設定為 100%。'}
- $result=[ordered]@{Success=$true;PreviousWidth=$values[0];PreviousHeight=$values[1];Width=$values[2];Height=$values[3];DisplayChangeResult=$values[4];LegacySystemDPI=$values[5];RequestedScalePercent=100;NativeScalePercent=$nativeScales;CustomScalingEnabled=$false;LegacyAppsMayRequireNextSignIn=$true;AppliedAt=(Get-Date).ToString('o')}
+ $result=[ordered]@{VerificationRunId=$VerificationRunId;Computer=$env:COMPUTERNAME;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;Success=$true;PreviousWidth=$values[0];PreviousHeight=$values[1];Width=$values[2];Height=$values[3];DisplayChangeResult=$values[4];LegacySystemDPI=$values[5];RequestedScalePercent=100;NativeScalePercent=$nativeScales;CustomScalingEnabled=$false;LegacyAppsMayRequireNextSignIn=$true;AppliedAt=(Get-Date).ToString('o')}
  $result|ConvertTo-Json|Set-Content (Join-Path $root $resultFileName) -Encoding UTF8
  if(-not $Worker){$result|ConvertTo-Json|Set-Content (Join-Path $PSScriptRoot $resultFileName) -Encoding UTF8}
  Write-Host ('目前主螢幕解析度：'+$result.Width+'×'+$result.Height) -ForegroundColor Green

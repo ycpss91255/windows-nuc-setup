@@ -34,6 +34,19 @@ function Expand-DriverArchive {
   Write-Host '解壓縮進度：100%'
  }finally{$zip.Dispose();Write-Progress -Id 2 -Activity '驅動解壓縮' -Completed}
 }
+function Expand-CachedDriverArchive {
+ param([string]$Archive,[string]$CacheRoot,[string]$SHA256)
+ if($SHA256 -notmatch '^[a-fA-F0-9]{64}$'){throw '驅動快取需要有效的 SHA256。'}
+ $dest=Join-Path $CacheRoot (([IO.Path]::GetFileNameWithoutExtension($Archive))+'-'+$SHA256.ToLowerInvariant())
+ $marker=Join-Path $dest '.archive-sha256'
+ if(-not(Test-Path -LiteralPath $marker) -or (Get-Content -LiteralPath $marker -Raw).Trim() -ne $SHA256){
+  Write-Host ('正在解壓縮：'+[IO.Path]::GetFileName($Archive)) -ForegroundColor Cyan
+  New-Item -ItemType Directory -Path $dest -Force|Out-Null
+  Expand-DriverArchive -Archive $Archive -Destination $dest
+  Set-Content -LiteralPath $marker -Value $SHA256 -Encoding ascii
+ }
+ return $dest
+}
 $hardware=if($PackageOnly){Get-SetupHardwareProfile -BoardProduct 'NUC8i7HVB' -DriverPackagePath $DriverPackagePath}else{Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath}
 $decision=Get-SetupModuleDecision -Module 'Install-Drivers.ps1' -Hardware $hardware
 if(-not $decision.Applicable){Write-Host ('[略過] '+$decision.Reason);$decision;return}
@@ -62,14 +75,7 @@ $reboot=$false
 $failed=@()
 foreach($entry in $manifest){
  Write-Host ('=== 驅動套件：'+$entry.File+' ===') -ForegroundColor Cyan
- $dest=Join-Path $cache ([IO.Path]::GetFileNameWithoutExtension($entry.File))
- $marker=Join-Path $dest '.archive-sha256'
- if(-not(Test-Path $marker) -or (Get-Content $marker -Raw).Trim() -ne $entry.SHA256){
-  Write-Host ('正在解壓縮：'+$entry.File) -ForegroundColor Cyan
-  New-Item -ItemType Directory -Path $dest -Force|Out-Null
-  Expand-DriverArchive -Archive (Join-Path $driverRoot $entry.File) -Destination $dest
-  Set-Content $marker $entry.SHA256 -Encoding ascii
- }
+ $dest=Expand-CachedDriverArchive -Archive (Join-Path $driverRoot $entry.File) -CacheRoot $cache -SHA256 $entry.SHA256
  $infFiles=@()
  if($entry.File -like 'Chipset*'){$infFiles=@(Get-ChildItem $dest -Recurse -Filter '*.inf'|Where-Object FullName -match 'Windows10-x64')}
  elseif($entry.File -like 'SerialIO*'){$infFiles=@(Get-ChildItem $dest -Recurse -Filter '*.inf')}

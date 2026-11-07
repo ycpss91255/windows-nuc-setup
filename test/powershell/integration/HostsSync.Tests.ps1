@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 $package=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 . (Join-Path $package 'modules\ssh\custom_hosts_sync\sync-custom-hosts.ps1')
 $count=0
-function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++;Write-Host ('PASS: '+$Message)}
+function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++;Write-Host ('PASS: '+$Message)}
 $root=Join-Path ([IO.Path]::GetTempPath()) ('NUC-Hosts-Test-'+[guid]::NewGuid().ToString('N'))
 $profile=Join-Path $root 'profile'
 $hostsSource=Join-Path $profile '.config\hosts\hosts.d'

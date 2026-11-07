@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 #Requires -RunAsAdministrator
-param([switch]$Worker,[switch]$VerifyOnly)
+param([switch]$Worker,[switch]$VerifyOnly,[ValidatePattern('^[a-fA-F0-9-]{36}$')][string]$VerificationRunId)
 $ErrorActionPreference='Stop'
 $resultFileName=if($VerifyOnly){'Theme-Verification.json'}else{'Theme-Result.json'}
 $root=Join-Path $env:ProgramData 'NUC8-Setup'
@@ -13,6 +13,7 @@ if(-not $Worker -and [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0)
  $name='NUC8-Apply-Theme'
  $workerArgs='-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$workerPath+'" -Worker'
  if($VerifyOnly){$workerArgs+=' -VerifyOnly'}
+ if($VerificationRunId){$workerArgs+=' -VerificationRunId '+$VerificationRunId}
  $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $workerArgs
  $principal=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
  Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -Force|Out-Null
@@ -85,7 +86,7 @@ public static class NUC8Theme {
  [void][NUC8Theme]::ReadWallpaper(0x73,1024,$wallpaper,0)
  $theme=Get-ItemProperty $personalize
  $actualColor=[NUC8Theme]::GetSysColor(1)
- $result=[ordered]@{Success=($theme.AppsUseLightTheme -eq 0 -and $theme.SystemUsesLightTheme -eq 0 -and $actualColor -eq 0 -and $wallpaper.Length -eq 0 -and $taskbarDark);AppsMode=$(if($theme.AppsUseLightTheme -eq 0){'Dark'}else{'Light'});WindowsMode=$(if($theme.SystemUsesLightTheme -eq 0){'Dark'}else{'Light'});Background='#000000';TaskbarRGB=@($taskbarColor);TaskbarIsDark=$taskbarDark;ExplorerReloaded=$shellReloaded;ActualBackgroundColor=$actualColor;ActualWallpaper=$wallpaper.ToString();AppliedAt=(Get-Date).ToString('o')}
+ $result=[ordered]@{VerificationRunId=$VerificationRunId;Computer=$env:COMPUTERNAME;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;Success=($theme.AppsUseLightTheme -eq 0 -and $theme.SystemUsesLightTheme -eq 0 -and $actualColor -eq 0 -and $wallpaper.Length -eq 0 -and $taskbarDark);AppsMode=$(if($theme.AppsUseLightTheme -eq 0){'Dark'}else{'Light'});WindowsMode=$(if($theme.SystemUsesLightTheme -eq 0){'Dark'}else{'Light'});Background='#000000';TaskbarRGB=@($taskbarColor);TaskbarIsDark=$taskbarDark;ExplorerReloaded=$shellReloaded;ActualBackgroundColor=$actualColor;ActualWallpaper=$wallpaper.ToString();AppliedAt=(Get-Date).ToString('o')}
  $result|ConvertTo-Json|Set-Content (Join-Path $root $resultFileName) -Encoding UTF8
  if((Join-Path $PSScriptRoot $resultFileName) -ne (Join-Path $root $resultFileName)){$result|ConvertTo-Json|Set-Content (Join-Path $PSScriptRoot $resultFileName) -Encoding UTF8}
  if($VerifyOnly){Write-Host '配色與背景即時驗證完成。' -ForegroundColor Green}else{Write-Host 'Windows/應用程式深色模式、純黑色桌面背景已套用。' -ForegroundColor Green}

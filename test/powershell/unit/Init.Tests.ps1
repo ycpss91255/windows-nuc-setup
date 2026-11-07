@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 $moduleRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\modules\init'))
 . (Join-Path $moduleRoot 'OOBE-Library.ps1')
 $script:count=0
-function Assert([bool]$Condition,[string]$Name){if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++;Write-Host ('PASS: '+$Name)}
+function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++;Write-Host ('PASS: '+$Name)}
 Assert ((Get-InitRoute 'S-1-5-18' 'IMAGE_STATE_UNDEPLOYABLE' $true $false) -eq 'GuideAudit') 'SYSTEM always guides to audit, never prepares account'
 Assert ((Get-InitRoute 'S-1-5-21-1-2-3-500' 'IMAGE_STATE_UNDEPLOYABLE' $true $true) -eq 'ConfirmAudit') 'known unfinished built-in administrator requires audit confirmation'
 Assert ((Get-InitRoute 'S-1-5-21-1-2-3-500' 'unexpected' $true $true) -eq 'RejectBuiltinAdministrator') 'unknown setup state cannot prepare account'

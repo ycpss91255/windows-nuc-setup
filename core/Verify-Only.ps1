@@ -1,6 +1,8 @@
 ﻿#Requires -Version 5.1
+param([ValidatePattern('^[a-fA-F0-9-]{36}$')][string]$VerificationRunId=([guid]::NewGuid().ToString()))
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Paths.ps1')
+. (Join-Path $PSScriptRoot 'Verification.ps1')
 Initialize-NucReports
 $DriverPackagePath=Get-SetupSavedDriverSelection -ResultPath (Resolve-NucPath 'Setup-Result.json')
 $hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath
@@ -50,11 +52,10 @@ Add-Check 'Edge-only 釘選配置' $validLayout '檢查配置只有 MSEdge；實
 $runOnce=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -ErrorAction SilentlyContinue
 $pendingPins=[bool]$runOnce.NUC8FinalizeTaskbar
 Add-Check '釘選登入後套用' (-not $pendingPins) $(if($pendingPins){'仍待下次登入套用及解除暫時原則'}else{'沒有待執行的釘選收尾工作；請目視確認工作列'})
-try{ & (Resolve-NucPath 'Apply-DisplaySettings.ps1') -VerifyOnly|Out-Null }catch{Write-Warning $_.Exception.Message}
-$displayPath=Resolve-NucPath 'Display-Verification.json'
-if(-not(Test-Path $displayPath)){$displayPath=Join-Path $env:ProgramData 'NUC8-Setup\Display-Verification.json'}
-if(Test-Path $displayPath){$display=Get-Content $displayPath -Raw|ConvertFrom-Json;Add-Check '實際解析度與縮放' ([bool]$display.Success) ($display.Width.ToString()+'×'+$display.Height+' / '+$display.CurrentScalePercent+'%')}
-else{Add-Check '實際解析度與縮放' $false '未取得桌面檢查結果'}
+try{
+ $fresh=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'Apply-DisplaySettings.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup\Display-Verification.json') -Arguments @{VerifyOnly=$true}
+ Add-Check '實際解析度與縮放' ([bool]$fresh.Success) ('本輪即時結果：'+($fresh|ConvertTo-Json -Compress -Depth 5))
+}catch{Add-Check '實際解析度與縮放' $false $_.Exception.Message}
 $desktopKey='HKCU:\Software\Microsoft\Windows\CurrentVersion\explorer\HideDesktopIcons\NewStartPanel'
 $icons=Get-ItemProperty $desktopKey -ErrorAction SilentlyContinue
 $show=@('{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}','{20D04FE0-3AEA-1069-A2D8-08002B30309D}','{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}','{645FF040-5081-101B-9F08-00AA002F954E}')
@@ -63,29 +64,30 @@ foreach($id in $show){if($null -eq $icons.$id -or $icons.$id -ne 0){$iconsOK=$fa
 Add-Check '四個桌面系統圖示' $iconsOK '控制台、本機、網路、資源回收筒的顯示設定'
 $desktopFiles=@(foreach($dir in @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))){Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue|Where-Object {-not ($_.Attributes -band [IO.FileAttributes]::Hidden) -and -not ($_.Attributes -band [IO.FileAttributes]::System)}|Select-Object -ExpandProperty Name})
 Add-Check '桌面無其他一般檔案/捷徑' ($desktopFiles.Count -eq 0) ('剩餘項目：'+($desktopFiles -join ', '))
-try{ & (Resolve-NucPath 'Apply-ThemeSettings.ps1') -VerifyOnly|Out-Null }catch{Write-Warning $_.Exception.Message}
-$themePath=Resolve-NucPath 'Theme-Verification.json'
-if(-not(Test-Path $themePath)){$themePath=Join-Path $env:ProgramData 'NUC8-Setup\Theme-Verification.json'}
-if(Test-Path $themePath){$theme=Get-Content $themePath -Raw|ConvertFrom-Json;Add-Check '深色模式與純黑背景' ([bool]$theme.Success) ($theme.WindowsMode+' / '+$theme.AppsMode+' / 背景色值：'+$theme.ActualBackgroundColor)}else{Add-Check '深色模式與純黑背景' $false '未取得即時結果'}
+try{
+ $fresh=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'Apply-ThemeSettings.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup\Theme-Verification.json') -Arguments @{VerifyOnly=$true}
+ Add-Check '深色模式與純黑背景' ([bool]$fresh.Success) ('本輪即時結果：'+($fresh|ConvertTo-Json -Compress -Depth 5))
+}catch{Add-Check '深色模式與純黑背景' $false $_.Exception.Message}
 $layoutDecision=Get-SetupModuleDecision -Module 'Desktop-IconLayout.ps1' -Hardware $hardware
 if($layoutDecision.Applicable){
-try{ & (Resolve-NucPath 'Desktop-IconLayout.ps1') -Mode Verify|Out-Null }catch{Write-Warning $_.Exception.Message}
-$layoutResultPath=Resolve-NucPath 'IconLayout-Result.json'
-if(-not(Test-Path $layoutResultPath)){$layoutResultPath=Join-Path $env:ProgramData 'NUC8-Setup\IconLayout-Result.json'}
-if(Test-Path $layoutResultPath){$layoutResult=Get-Content $layoutResultPath -Raw|ConvertFrom-Json;Add-Check '四個圖示的實際排列座標' ([bool]$layoutResult.Success) $(if($layoutResult.Success){'目前座標與 Desktop-Layout.json 相符'}else{$layoutResult.Error})}else{Add-Check '四個圖示的實際排列座標' $false '未取得座標結果'}
+try{
+ $fresh=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'Desktop-IconLayout.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup\IconLayout-Result.json') -Arguments @{Mode='Verify'}
+ Add-Check '四個圖示的實際排列座標' ([bool]$fresh.Success) ('本輪即時結果：'+($fresh|ConvertTo-Json -Compress -Depth 5))
+}catch{Add-Check '四個圖示的實際排列座標' $false $_.Exception.Message}
 }else{$checks.Add((New-SetupSkippedCheck -Name '四個圖示的實際排列座標' -Reason $layoutDecision.Reason));Write-Host ('[略過] '+$layoutDecision.Reason)}
 $updatePath=Join-Path $env:ProgramData 'NUC8-Setup\WindowsUpdate\WindowsUpdate-Result.json'
-if(Test-Path $updatePath){$updates=Get-Content $updatePath -Raw|ConvertFrom-Json;Add-Check '最近一次更新結果' (@($updates.Updates|Where-Object ResultCode -ne 2).Count -eq 0) ('完成時間：'+$updates.CompletedAt+'；安裝項目：'+$updates.Updates.Count)}
+if(Test-Path $updatePath){$updates=Get-Content $updatePath -Raw|ConvertFrom-Json;Add-Check '最近一次更新結果' (Test-WindowsUpdateResult $updates) ('完成時間：'+$updates.CompletedAt+'；安裝項目：'+$updates.Updates.Count)}
 else{Add-Check '最近一次更新結果' $false '尚未找到本工具的更新結果'}
 $reboot=(Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')
 Add-Check '無待處理重新開機' (-not $reboot) $(if($reboot){'Windows 要求重新開機；目前不會自動重開'}else{'未偵測到待重新開機'})
 $apps=Get-Content (Resolve-NucPath 'Debloat-Apps.txt')|Where-Object {$_ -and -not $_.StartsWith('#')}
 $remaining=@(Get-AppxPackage -AllUsers|Where-Object {@($_.PackageUserInformation|Where-Object InstallState -eq 'Installed').Count -gt 0}|Where-Object Name -in $apps|Select-Object -ExpandProperty Name -Unique)
 Add-Check '預載 App 清理' ($remaining.Count -eq 0) ('清單內仍存在：'+($remaining -join ', '))
-try{ & (Resolve-NucPath 'Apply-PagefileSettings.ps1') -VerifyOnly|Out-Null }catch{Write-Warning $_.Exception.Message}
-$page=Get-Content (Join-Path $env:ProgramData 'NUC8-Setup\Pagefile-Result.json') -Raw|ConvertFrom-Json
-Add-Check '磁碟分頁檔停用設定' ([bool]$page.Success) ('RAM：'+$page.RAMGB+' GB；目前作用中：'+($page.ActivePagefiles -join ', '))
-Add-Check '分頁檔實際已停用' (@($page.ActivePagefiles|Where-Object {$_}).Count -eq 0) '如仍作用中，需重新開機才生效'
+try{
+ $fresh=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'Apply-PagefileSettings.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup\Pagefile-Result.json') -Arguments @{VerifyOnly=$true}
+ Add-Check '磁碟分頁檔停用設定' ([bool]$fresh.Success) ('本輪即時結果：'+($fresh|ConvertTo-Json -Compress -Depth 5))
+ Add-Check '分頁檔實際已停用' (@($fresh.ActivePagefiles|Where-Object {$_}).Count -eq 0) '如仍作用中，需重新開機才生效'
+}catch{Add-Check '磁碟分頁檔停用設定' $false $_.Exception.Message}
 try{ & (Resolve-NucPath 'Apply-CopilotSettings.ps1') -VerifyOnly|Out-Null;Add-Check '獨立版 Copilot 清理' $true '未安裝' }catch{Add-Check '獨立版 Copilot 清理' $false $_.Exception.Message}
 $amdDecision=Get-SetupModuleDecision -Module 'Apply-AMDPrivacySettings.ps1' -Hardware $hardware
 if($amdDecision.Applicable){
@@ -101,19 +103,7 @@ try{ & (Resolve-NucPath 'Remove-OneDrive.ps1') -VerifyOnly|Out-Null;Add-Check 'O
 try{ & (Resolve-NucPath 'Apply-ExplorerSettings.ps1') -VerifyOnly|Out-Null;Add-Check '檔案總管隱藏檔即時狀態' $true 'Shell 狀態與登錄值均為顯示' }catch{Add-Check '檔案總管隱藏檔即時狀態' $false $_.Exception.Message}
 $provisioned=@(Get-AppxProvisionedPackage -Online|Where-Object DisplayName -in $apps|Select-Object -ExpandProperty DisplayName)
 Add-Check '新帳號預載 App 清理' ($provisioned.Count -eq 0) ($provisioned -join ', ')
-$result=[ordered]@{Computer=$env:COMPUTERNAME;VerifiedAt=(Get-Date).ToString('o');HardwareProfile=$hardware;SkippedCount=@($checks|Where-Object Status -eq Skipped).Count;Passed=(Test-SetupChecksPassed -Checks @($checks.ToArray()));Checks=@($checks.ToArray());Notes=@('本工具只驗證，不安裝更新或重新套用偏好。','自動登入是否真的成功，以及工作列實際圖示，仍需在下次登入後觀察。','Windows 啟用由使用者另外處理。')}
+$result=[ordered]@{VerificationRunId=$VerificationRunId;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;Computer=$env:COMPUTERNAME;VerifiedAt=(Get-Date).ToString('o');HardwareProfile=$hardware;SkippedCount=@($checks|Where-Object Status -eq Skipped).Count;Passed=(Test-SetupChecksPassed -Checks @($checks.ToArray()));Checks=@($checks.ToArray());Notes=@('本工具只驗證，不安裝更新或重新套用偏好。','自動登入是否真的成功，以及工作列實際圖示，仍需在下次登入後觀察。','Windows 啟用由使用者另外處理。')}
 $result|ConvertTo-Json -Depth 6|Set-Content (Resolve-NucPath 'Verification-Result.json') -Encoding UTF8
 Write-Host ('驗證紀錄：'+(Resolve-NucPath 'Verification-Result.json'))
-
-
-
-
-
-
-
-
-
-
-
-
-
+if(-not $result.Passed){throw '驗證未全部通過；已寫入 Verification-Result.json。'}

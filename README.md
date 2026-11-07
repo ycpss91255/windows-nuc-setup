@@ -2,6 +2,14 @@
 
 [![Windows CI](https://github.com/ycpss91255/windows_setup/actions/workflows/windows-tests.yml/badge.svg)](https://github.com/ycpss91255/windows_setup/actions/workflows/windows-tests.yml)
 
+[![Unit](https://ycpss91255.github.io/windows_setup/unit.svg)](https://ycpss91255.github.io/windows_setup/)
+[![Integration](https://ycpss91255.github.io/windows_setup/integration.svg)](https://ycpss91255.github.io/windows_setup/)
+[![System 狀態](https://ycpss91255.github.io/windows_setup/system.svg)](https://ycpss91255.github.io/windows_setup/)
+[![Coverage 狀態](https://ycpss91255.github.io/windows_setup/coverage.svg)](https://ycpss91255.github.io/windows_setup/)
+
+[最新已發布 main 報表](https://ycpss91255.github.io/windows_setup/) · [Actions 與七天報告附件](https://github.com/ycpss91255/windows_setup/actions/workflows/windows-tests.yml)
+
+上方分層徽章取自最近一次成功部署的 main 報表；報表標示提交與時間。若部署失敗，請以 Windows CI 徽章及 Actions 的最新執行結果為準。PR 不更新公開報表。
 Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、模組設定與後續驗收。本文以繁體中文提供完整操作說明；版本摘要見 [變更紀錄](doc/changelog/CHANGELOG.md)，實作與驗證細節以中文 Git 提交及 GitHub Release 為準。
 
 ## 目錄
@@ -35,7 +43,7 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 
 依賴方向為維護工具／測試 → 交付執行樹。`core`／`modules` 不依賴 `script`、`test` 或 `.github`；一般使用與獨立驅動安裝不需要儲存庫維護工具。
 
-自有目錄使用小寫與底線，新驅動安裝日誌位於 `modules/drivers/driver_logs`。為保留已部署電腦的續跑資料，`%ProgramData%\NUC8-Setup`、`NUC-Init`、`CustomHostsSync` 及既有排程工作名稱維持相容；這些是系統既存識別，不是新增的儲存庫目錄。第三方 `win11debloat` 內部目錄及內容保持上游原樣。
+自有目錄使用小寫與底線，新驅動安裝日誌位於 `modules\drivers/driver_logs`。為保留已部署電腦的續跑資料，`%ProgramData%\NUC8-Setup`、`NUC-Init`、`CustomHostsSync` 及既有排程工作名稱維持相容；這些是系統既存識別，不是新增的儲存庫目錄。第三方 `win11debloat` 內部目錄及內容保持上游原樣。
 ## 快速開始
 
 先確認已取得所選功能需要的檔案，並符合下方系統前提；不要直接在 OOBE 執行 Windows.cmd。
@@ -252,24 +260,24 @@ Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安�
 
 | 資料夾 | 用途 |
 | --- | --- |
-| `modules\Init` | 初始帳號建立 |
-| `modules\Accounts` | 自動登入 |
-| `modules\Memory` | 分頁檔 |
-| `modules\Power` | 電源與睡眠 |
-| `modules\SSH` | SSH 與 hosts 同步 |
+| `modules\init` | 初始帳號建立 |
+| `modules\accounts` | 自動登入 |
+| `modules\memory` | 分頁檔 |
+| `modules\power` | 電源與睡眠 |
+| `modules\ssh` | SSH 與 hosts 同步 |
 | `modules\drivers` | 驅動 |
-| `modules\AMD` | AMD 位置權限 |
-| `modules\Updates` | 更新與進度 |
-| `modules\Debloat` | 預載 App、OneDrive、Copilot 清理 |
-| `modules\Taskbar` | 工作列 |
-| `modules\StartMenu` | 開始選單 |
-| `modules\Display` | 解析度與縮放 |
-| `modules\Desktop` | 桌面圖示與排列 |
-| `modules\Theme` | 深色與背景 |
-| `modules\Input` | 英文美式鍵盤 |
-| `modules\Terminal` | Terminal 快捷鍵 |
-| `modules\Explorer` | 隱藏檔與副檔名 |
-| `modules\Cleanup` | 舊系統與資料夾殘留 |
+| `modules\amd` | AMD 位置權限 |
+| `modules\updates` | 更新與進度 |
+| `modules\debloat` | 預載 App、OneDrive、Copilot 清理 |
+| `modules\taskbar` | 工作列 |
+| `modules\start_menu` | 開始選單 |
+| `modules\display` | 解析度與縮放 |
+| `modules\desktop` | 桌面圖示與排列 |
+| `modules\theme` | 深色與背景 |
+| `modules\input` | 英文美式鍵盤 |
+| `modules\terminal` | Terminal 快捷鍵 |
+| `modules\explorer` | 隱藏檔與副檔名 |
+| `modules\cleanup` | 舊系統與資料夾殘留 |
 
 主流程結果位於 `reports`；各模組的執行紀錄位於各自資料夾或畫面提示的 `%ProgramData%\NUC8-Setup`。既有程式碼不再全部平鋪在根目錄，請勿只取出其中一支腳本執行。
 
@@ -333,7 +341,7 @@ Hosts／SSH 獨立入口為 `modules\ssh\Apply-HostsSync.cmd`、`Sync-Hosts.cmd`
 ### 從原始碼準備完整工具包
 
 1. 保留主程式完整結構，不只複製 `Init.cmd` 或 `Windows.cmd`。
-2. 補入 `modules/accounts/Autologon64.exe`：可從已核對的主程式複製，或從 [Microsoft Sysinternals 官方頁](https://learn.microsoft.com/en-us/sysinternals/downloads/autologon) 取得；執行時驗證 Microsoft 簽章。
+2. 補入 `modules\accounts/Autologon64.exe`：可從已核對的主程式複製，或從 [Microsoft Sysinternals 官方頁](https://learn.microsoft.com/en-us/sysinternals/downloads/autologon) 取得；執行時驗證 Microsoft 簽章。
 3. 執行只讀主程式檢查：
 
    ```powershell
@@ -345,7 +353,7 @@ Hosts／SSH 獨立入口為 `modules\ssh\Apply-HostsSync.cmd`、`Sync-Hosts.cmd`
 
 ### 準備獨立 NUC 驅動包
 
-既有可用包放在 `windows_driver_packages/nuc8`，包含 `Install.cmd`、自身的 `core`／`modules` helper、`package.json`、`manifest.json` 與四個 ZIP；不依賴原主程式路徑。需要重新建包時，準備符合 `modules/drivers/manifests/nuc8.json` 的四個封存檔，並將此範本複製為來源目錄的 `manifest.json`，再執行：
+既有可用包放在 `windows_driver_packages/nuc8`，包含 `Install.cmd`、自身的 `core`／`modules` helper、`package.json`、`manifest.json` 與四個 ZIP；不依賴原主程式路徑。需要重新建包時，準備符合 `modules\drivers/manifests/nuc8.json` 的四個封存檔，並將此範本複製為來源目錄的 `manifest.json`，再執行：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\Export-DriverPackage.ps1 -SourceDirectory "已核對的驅動來源目錄" -OutputDirectory "新的獨立包目錄"
@@ -365,7 +373,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\Export-
 
 ### 公開來源與授權注意事項
 
-公開版 `modules/ssh/custom_hosts_sync/sites.json` 使用空白 Sites，不帶公司、SSID 或實際網段；個人規則只在各機的使用者設定目錄維護。公開倉庫採乾淨新歷史，不推送曾含私人環境資訊的舊提交。
+公開版 `modules\ssh/custom_hosts_sync/sites.json` 使用空白 Sites，不帶公司、SSID 或實際網段；個人規則只在各機的使用者設定目錄維護。公開倉庫採乾淨新歷史，不推送曾含私人環境資訊的舊提交。
 
 發布前仍須掃描來源與提交歷史，確認沒有密碼、私鑰、個人網路規則或實機報告。Git 作者資訊應使用適合公開的身分。
 
@@ -378,6 +386,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\Export-
 ## Windows CI
 
 工作流程位於 .github/workflows/windows-tests.yml：使用 windows-2022、Windows PowerShell 5.1、唯讀 contents 權限，設定執行時間上限與併發控制。Action 固定到已核對的 commit。main 推送、版本標籤、Pull Request 與 workflow_dispatch 都可觸發；ci-rollup 統一呈現測試門檻。
+
+### 自動報表與徽章
+
+每次測試從實際斷言的結構化事件與程序退出碼產生 JSON、Markdown、自含 HTML、JUnit XML 及分層 SVG。報告先顯示一般使用者結論、宣告版本／分支或 Release 範圍、變更、已知限制與下載，再列所選層級、斷言結果、套件耗時、提交及工作樹狀態；新增 `test/powershell/unit` 或 `integration` 測試會自動列入執行清單。程序崩潰、缺少斷言事件或任何失敗均不能標成通過。
+
+CI 只上傳去識別的 `public` 報表子目錄，附件保留 7 天；原始程序 log 留在 runner 暫存，不公開至 Pages。main 推送會更新公開 HTML／SVG（包含測試失敗的有效報表），PR 只有短期附件；main 首頁呈現最新分支報表；版本頁由各 Release 保存的品質 JSON 快照重建，保留原 Version／Commit／MeasuredAt。舊版缺少快照時顯示 Unknown，不拿新測試補寫舊版證據。實機 reports 仍獨立保留，不納入 Git 或 Pages。
+
+Coverage 顯示 `NotMeasured`：目前沒有對 PowerShell 原始碼作行／分支執行量測，斷言數不是覆蓋率。base 的 coverage badge 來源是實際 kcov 報告，發布徽章目前仍是 release 手動生成；本專案採相同的證據原則，沒有照搬 Bash 工具或宣稱已具備相同覆蓋率能力。System／完整 E2E 保持 `Deferred / NotRun`，不計入已通過項目。
 
 ### 測試分層與本機入口
 

@@ -45,8 +45,15 @@ for($i=0;$i -lt 12;$i++){
 }
 $layoutDecision=Get-SetupModuleDecision -Module 'Desktop-IconLayout.ps1' -Hardware $hardware
 if($layoutDecision.Applicable){try{ & (Resolve-NucPath 'Desktop-IconLayout.ps1') -Mode Load }catch{$errors+=$_.Exception.Message}}else{Write-Host ('[略過] '+$layoutDecision.Reason)}
-& (Resolve-NucPath 'Verify-Only.ps1')
-$verification=Get-Content (Resolve-NucPath 'Verification-Result.json') -Raw|ConvertFrom-Json
+$verificationRunId=[guid]::NewGuid().ToString()
+$verification=$null
+try{ & (Resolve-NucPath 'Verify-Only.ps1') -VerificationRunId $verificationRunId }catch{$errors+=('本輪驗證：'+$_.Exception.Message)}
+try{
+ $candidate=Get-Content (Resolve-NucPath 'Verification-Result.json') -Raw|ConvertFrom-Json
+ if($candidate.VerificationRunId -cne $verificationRunId -or $candidate.Computer -cne $env:COMPUTERNAME -or $candidate.UserSID -cne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value){throw '驗證結果不是本輪、同機、同帳號的結果。'}
+ $verification=$candidate
+}catch{$errors+=('驗證結果：'+$_.Exception.Message)}
+if($null -eq $verification){$verification=[pscustomobject]@{Passed=$false;Checks=@()}}
 @{Computer=$env:COMPUTERNAME;CheckedAt=(Get-Date).ToString('o');Success=($verification.Passed -and $errors.Count -eq 0);Errors=$errors;SkippedChecks=@($verification.Checks|Where-Object Status -eq Skipped);HardwareProfile=$hardware;FailedChecks=@($verification.Checks|Where-Object {$_.Status -ne 'Skipped' -and -not $_.Passed})}|ConvertTo-Json -Depth 6|Set-Content (Resolve-NucPath 'Acceptance-Result.json') -Encoding UTF8
 if($errors.Count -or -not $verification.Passed){throw '驗收尚未全部通過。請查看 Acceptance-Result.json；若要求重新開機，手動重開後再執行此入口。'}
 Write-Host '設定及清理驗收通過。請目視確認自動登入、工作列僅釘選 Edge ；NUC 適用時再確認無 AMD 位置提示。' -ForegroundColor Green

@@ -55,13 +55,13 @@ try {
     }
     $problems=@(Get-PnpDevice -PresentOnly|Where-Object Status -ne 'OK')
     try{ & (Resolve-NucPath 'Audit-NUC.ps1') }catch{ $stageErrors+=('最終檢查：'+$_.Exception.Message);Write-Warning $stageErrors[-1] }
-    $summary=[ordered]@{Computer=$env:COMPUTERNAME;CompletedAt=(Get-Date).ToString('o');AutoLogonUser=$auto.DefaultUserName;AutoLogonEnabled=($auto.AutoAdminLogon -eq '1');RequiresNextSignIn=$true;ProblemDeviceCount=$problems.Count;StageErrors=$stageErrors;FailedModules=$failedModules;HardwareProfile=$hardware;SkippedModules=$skippedModules;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;RebootRequired=((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'))}
+    $summary=[ordered]@{Success=($stageErrors.Count -eq 0 -and $problems.Count -eq 0);Computer=$env:COMPUTERNAME;CompletedAt=(Get-Date).ToString('o');AutoLogonUser=$auto.DefaultUserName;AutoLogonEnabled=($auto.AutoAdminLogon -eq '1');RequiresNextSignIn=$true;ProblemDeviceCount=$problems.Count;StageErrors=$stageErrors;FailedModules=$failedModules;HardwareProfile=$hardware;SkippedModules=$skippedModules;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;RebootRequired=((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'))}
     $summary|ConvertTo-Json -Depth 5|Set-Content (Resolve-NucPath 'Setup-Result.json') -Encoding UTF8
     Write-Progress -Id 1 -Activity 'Windows 一鍵設定' -Completed
-    @{Step=19;Total=19;Stage='本輪執行結束';HasErrors=($stageErrors.Count -gt 0);UpdatedAt=(Get-Date).ToString('o')}|ConvertTo-Json|Set-Content (Resolve-NucPath 'Setup-Progress.json') -Encoding UTF8
+    @{Step=19;Total=19;Stage='本輪執行結束';HasErrors=($stageErrors.Count -gt 0 -or $problems.Count -gt 0);UpdatedAt=(Get-Date).ToString('o')}|ConvertTo-Json|Set-Content (Resolve-NucPath 'Setup-Progress.json') -Encoding UTF8
 
     Write-Host ('目前異常裝置數：'+$problems.Count)
-    if($stageErrors.Count -or $problems.Count){Write-Warning '部分步驟未完成，請查看 Setup-Result.json 與各步驟紀錄。'}
+    if($stageErrors.Count -or $problems.Count){throw '部分步驟或裝置檢查未完成，已寫入 Setup-Result.json 與 Setup-Progress.json；請查看紀錄後重試。'}
     else{Write-Host '本輪一鍵設定完成。' -ForegroundColor Green}
     Write-Host '請手動重新開機，再執行 Windows.cmd -AfterRestart 檢查及繼續更新。'
 } finally { $AutoLogonPassword=$null; Stop-Transcript | Out-Null }

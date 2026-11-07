@@ -2,7 +2,7 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 $count=0
-function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++;Write-Host ('PASS: '+$Message)}
+function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++;Write-Host ('PASS: '+$Message)}
 function Get-MaintenanceReferences([string]$Path){
  $text=[IO.File]::ReadAllText($Path)
  if([IO.Path]::GetExtension($Path) -eq '.ps1'){
@@ -31,4 +31,13 @@ $sample=Join-Path $fixture 'runtime.ps1'
 Assert (@(Get-MaintenanceReferences $sample).Count -eq 0) '註解中的維護路徑不誤判'
 [IO.File]::WriteAllText($sample,". (Join-Path `$PSScriptRoot '..\script\test\Run-CI.ps1')")
 Assert (@(Get-MaintenanceReferences $sample).Count -gt 0) '真正的 runtime 到維護工具引用會失敗'
+$readme=[IO.File]::ReadAllText((Join-Path $root 'README.md'))
+foreach($match in [regex]::Matches($readme,'modules[\\/]([A-Za-z_]+)')){
+ $name=$match.Groups[1].Value;$directory=Join-Path $root ('modules/'+$name)
+ Assert ((Test-Path -LiteralPath $directory -PathType Container) -and (Get-Item -LiteralPath $directory).Name -ceq $name) ('README 模組路徑存在且大小寫一致：'+$name)
+}
+foreach($match in [regex]::Matches($readme,'\]\(([^)]+)\)')){
+ $link=$match.Groups[1].Value
+ if($link -notmatch '^(https?://|#)' -and $link -notmatch '\$| '){$target=($link -split '#')[0];if($target){Assert (Test-Path -LiteralPath (Join-Path $root $target)) ('README 本機連結存在：'+$target)}}
+}
 Write-Host ('ALL PASS: '+$count+' architecture assertions; source inspection and temporary fixture only.')

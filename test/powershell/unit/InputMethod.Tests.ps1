@@ -7,7 +7,7 @@ $module=[scriptblock]::Create($body)
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('NUC-InputMethod-Test-'+[guid]::NewGuid().ToString('N'))
 $originalProgramData=$env:ProgramData
 $script:assertions=0
-function Assert([bool]$Condition,[string]$Message){if(-not $Condition){throw ('FAIL: '+$Message)};$script:assertions++;Write-Host ('PASS: '+$Message)}
+function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Message)};$script:assertions++;Write-Host ('PASS: '+$Message)}
 function Language([string]$Tag,[string[]]$Tips){
  $list=New-Object 'Collections.Generic.List[string]'
  foreach($tip in $Tips){$list.Add($tip)}
