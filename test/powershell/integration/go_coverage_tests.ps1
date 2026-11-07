@@ -50,3 +50,16 @@ $before=(Get-FileHash (Join-Path $arguments.OutputDirectory 'summary.json')).Has
 [IO.File]::AppendAllText($profile,'tampered')
 Refuse {& $attach -PublicDirectory $arguments.OutputDirectory -CoverageDirectory $producer} 'tampered raw profile cannot be attached'
 Assert ((Get-FileHash (Join-Path $arguments.OutputDirectory 'summary.json')).Hash -eq $before) 'failed attachment leaves original report untouched'
+# Exercise orchestration with a process substitute, including native failures.
+$global:coverageCalls=New-Object Collections.Generic.List[object]
+function global:go.exe {
+ $global:coverageCalls.Add(@($args))
+ $global:LASTEXITCODE=0
+ if($args[0] -eq 'test'){$global:LASTEXITCODE=19}
+}
+$measure=Join-Path $root 'script/test/measure_go_coverage.ps1'
+$failed=$false
+try{& $measure -SourceRoot $root -ReportDirectory $arguments.OutputDirectory -OutputDirectory (Join-Path $fixture 'measured_process')}catch{$failed=$_.Exception.Message -match '19'}
+Assert ($failed -and $global:coverageCalls.Count -eq 1) 'measurement stops on actual native test failure before producer or attachment'
+Assert ($global:coverageCalls[0] -contains '-coverpkg=./script/test/...' -and $global:coverageCalls[0] -contains './...') 'measurement instruments every production Go package while executing all tests'
+Remove-Item Function:/go.exe
