@@ -1,2 +1,2 @@
 @echo off
-powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0Modules\Init\Initialize-NUC.ps1" -SshScriptPath "%~dp0Modules\SSH\Apply-SSHSettings.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0modules\init\Initialize-NUC.ps1" -SshScriptPath "%~dp0modules\ssh\Apply-SSHSettings.ps1"

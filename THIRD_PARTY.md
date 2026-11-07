@@ -5,20 +5,20 @@
 ## Win11Debloat
 
 - 上游：[Raphire/Win11Debloat](https://github.com/Raphire/Win11Debloat)。
-- 本包釘選提交：`5d88bfe9ef2be5a8a643166a6400eb78a30c46ec`，依據 [Debloat-Profile.json](Modules/Debloat/Debloat-Profile.json)。
-- 原始碼與必要資產保存在 `Modules/Debloat/Win11Debloat`，包括上游的 `Assets/Images/menu.png` 與空白開始選單資產 `Assets/Start/start2.bin`。
-- 保留上游 [MIT LICENSE](Modules/Debloat/Win11Debloat/LICENSE)、作者聲明及 README。`start2.bin` 的用途見同目錄的 `What is this file.txt`；它是上游提供的空白範本，不是從使用者電腦匯出的個人開始選單。
+- 本包釘選提交：`5d88bfe9ef2be5a8a643166a6400eb78a30c46ec`，依據 [Debloat-Profile.json](modules/debloat/Debloat-Profile.json)。
+- 原始碼與必要資產保存在 `modules/debloat/Win11Debloat`，包括上游的 `Assets/Images/menu.png` 與空白開始選單資產 `Assets/Start/start2.bin`。
+- 保留上游 [MIT LICENSE](modules/debloat/win11debloat/LICENSE)、作者聲明及 README。`start2.bin` 的用途見同目錄的 `What is this file.txt`；它是上游提供的空白範本，不是從使用者電腦匯出的個人開始選單。
 - 本工具透過 CLI 呼叫上游，採用的清理項目另由 `Debloat-Apps.txt`、`Debloat-Profile.json` 控制。
 
 ## Microsoft Sysinternals Autologon
 
 - 官方來源：[Autologon](https://learn.microsoft.com/en-us/sysinternals/downloads/autologon)。
-- 本機完整包使用 `Modules/Accounts/Autologon64.exe`，檔案版本為 3.10；執行模組會驗證 Microsoft 數位簽章。
+- 本機完整包使用 `modules/accounts/Autologon64.exe`，檔案版本為 3.10；執行模組會驗證 Microsoft 數位簽章。
 - 此 EXE 不納入 Git。從官方取得工具並遵守其授權；不要因本專案包含呼叫腳本就推定可重新散布該二進位。
 
 ## 裝置驅動
 
-四個驅動封存檔只保留於本機完整包的 `Modules/Drivers/Payload`，不納入 Git。檔名及已核對的 SHA256 見 [manifest.json](Modules/Drivers/Payload/manifest.json)。
+四個驅動封存檔只保留於本機完整包的 `modules/drivers/Payload`，不納入 Git。檔名及已核對的 SHA256 見 [manifest.json](modules/drivers/Payload/manifest.json)。
 
 目前用途為晶片組、Serial IO、UCM 及 AMD 顯示驅動。這些檔案具有各供應商自己的授權，不能把本專案或 Win11Debloat 的授權視為驅動的散布許可。儲存庫只追蹤雜湊清單，不承諾第三方下載位置永久有效。
 
