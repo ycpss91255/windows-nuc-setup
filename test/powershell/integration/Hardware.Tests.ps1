@@ -68,10 +68,14 @@ Assert ((Get-SetupSavedDriverSelection $selectionFile 'machine_a' 'sid_b') -eq '
 $manifest|ConvertTo-Json|Set-Content (Join-Path $payload 'manifest.json') -Encoding UTF8
 $exported=Join-Path $fixture '獨立 驅動包'
 Push-Location $fixture
+# GitHub runner TEMP may use RUNNER~1 while the provider resolves runneradmin.
+# Derive the expected directory from the actual PowerShell location, not its 8.3 alias.
+$expectedProviderOutput=Join-Path (Get-Location).ProviderPath '獨立 驅動包'
+Assert ((Get-Location).ProviderPath -ine [Environment]::CurrentDirectory) '回歸測試確保 PowerShell 位置與 NET cwd 不同'
 Write-Host ('Export diagnostic: ProviderLocation=['+(Get-Location).ProviderPath+']; NETcwd=['+[Environment]::CurrentDirectory+']; TEMP=['+$env:TEMP+']')
 try{$exportResult=& (Join-Path $packageRoot 'script\package\Export-DriverPackage.ps1') -SourceDirectory $payload -OutputDirectory '.\獨立 驅動包'}finally{Pop-Location}
-Write-Host ('Export diagnostic: Actual=['+$exportResult.OutputDirectory+']; Expected=['+$exported+']; ActualExists=['+(Test-Path -LiteralPath $exportResult.OutputDirectory)+']; ExpectedExists=['+(Test-Path -LiteralPath $exported)+']')
-Assert ($exportResult.OutputDirectory -eq $exported) '獨立包相對輸出依 PowerShell 位置解析'
+Write-Host ('Export diagnostic: Actual=['+$exportResult.OutputDirectory+']; ExpectedProvider=['+$expectedProviderOutput+']; FixtureAlias=['+$exported+']; ActualExists=['+(Test-Path -LiteralPath $exportResult.OutputDirectory)+']; ExpectedExists=['+(Test-Path -LiteralPath $exported)+']')
+Assert ($exportResult.OutputDirectory -eq $expectedProviderOutput -and (Test-Path -LiteralPath $expectedProviderOutput -PathType Container) -and (Test-Path -LiteralPath $exported -PathType Container)) '獨立包相對輸出依 PowerShell 位置解析'
 Assert ($exportResult.Count -eq 4 -and (Test-Path (Join-Path $exported 'Install.cmd'))) '導出獨立驅動包與可攜入口'
 $standalone=& (Join-Path $exported 'modules\drivers\Install-Drivers.ps1') -DriverPackagePath $exported -PackageOnly
 Assert ($standalone.Status -eq 'Passed') '獨立包只用自身 helper 完成唯讀驗證'
