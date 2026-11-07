@@ -12,7 +12,7 @@ if(-not $VerifyOnly){
  }
  [IO.File]::SetAttributes($sshRoot,([IO.File]::GetAttributes($sshRoot) -bor [IO.FileAttributes]::Hidden))
  $readme=Join-Path $sshRoot 'readme.md'
- if(-not(Test-Path -LiteralPath $readme)){Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'CustomHostsSync\ssh_readme.md') -Destination $readme}
+ if(-not(Test-Path -LiteralPath $readme)){Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'custom_hosts_sync\ssh_readme.md') -Destination $readme}
  $encoding=New-Object Text.UTF8Encoding($false)
  if(-not(Test-Path -LiteralPath $sites)){
   [IO.File]::WriteAllText($sites,"# No sites configured yet. Network-based site synchronization is not installed.`r`n",$encoding)
