@@ -75,11 +75,14 @@ function Write-TestReports {
  }
  $xml.Save((Join-Path $OutputDirectory 'junit.xml'))
  foreach($badge in @('unit','integration','system','coverage')){
-  $label=$badge+' '+$RefType;$color='#777';$status='not measured'
-  if($badge -in @('unit','integration')){$rows=@($safe|Where-Object {$_.Layer -eq $badge -and $_.Executed});$status=if(-not $rows.Count){'not run'}elseif(@($rows|Where-Object {-not $_.Passed}).Count){'failed'}else{'passed'};$color=if($status -eq 'passed'){'#22863a'}elseif($status -eq 'failed'){'#b31d28'}else{'#777'}}
-  if($badge -eq 'system'){$status='deferred / not run'}
+  $label=$badge+' '+$RefType.ToLowerInvariant();$color='#9f9f9f';$status='not measured'
+  if($badge -in @('unit','integration')){$rows=@($safe|Where-Object {$_.Layer -eq $badge -and $_.Executed});$status=if(-not $rows.Count){'not run'}elseif(@($rows|Where-Object {-not $_.Passed}).Count){'failed'}else{'passed'};$color=if($status -eq 'passed'){'#4c1'}elseif($status -eq 'failed'){'#e05d44'}else{'#9f9f9f'}}
+  if($badge -eq 'system'){$status='not run'}
   $title=[Security.SecurityElement]::Escape($label+': '+$status)
-  $svg='<svg xmlns="http://www.w3.org/2000/svg" width="360" height="24" role="img" aria-label="'+$title+'"><title>'+$title+'</title><rect width="160" height="24" fill="#444"/><rect x="160" width="200" height="24" fill="'+$color+'"/><g fill="white" font-family="Verdana,sans-serif" font-size="12" text-anchor="middle"><text x="80" y="16">'+$label+'</text><text x="260" y="16">'+$status+'</text></g></svg>'
+  # Match base/script/release/coverage_badge.sh flat-square geometry without external fonts/services.
+  $labelWidth=$label.Length*7+12;$valueWidth=$status.Length*7+12;$width=$labelWidth+$valueWidth
+  $labelX=[Math]::Floor($labelWidth/2);$valueX=$labelWidth+[Math]::Floor($valueWidth/2)
+  $svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+$width+'" height="20" role="img" aria-label="'+$title+'"><title>'+$title+'</title><rect width="'+$labelWidth+'" height="20" fill="#555"/><rect x="'+$labelWidth+'" width="'+$valueWidth+'" height="20" fill="'+$color+'"/><g fill="#fff" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11" text-anchor="middle"><text x="'+$labelX+'" y="14">'+$label+'</text><text x="'+$valueX+'" y="14">'+$status+'</text></g></svg>'
   [IO.File]::WriteAllText((Join-Path $OutputDirectory ($badge+'.svg')),$svg,$encoding)
  }
  return [pscustomobject]$report

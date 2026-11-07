@@ -2,12 +2,14 @@
 
 [![Windows CI](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml/badge.svg)](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
 
-[![Unit](https://ycpss91255.github.io/windows_setup/main/unit.svg)](https://ycpss91255.github.io/windows_setup/)
-[![Integration](https://ycpss91255.github.io/windows_setup/main/integration.svg)](https://ycpss91255.github.io/windows_setup/)
-[![System 狀態](https://ycpss91255.github.io/windows_setup/main/system.svg)](https://ycpss91255.github.io/windows_setup/)
-[![Coverage 狀態](https://ycpss91255.github.io/windows_setup/main/coverage.svg)](https://ycpss91255.github.io/windows_setup/)
+[![Unit](https://ycpss91255.github.io/windows_setup/main/unit.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
+[![Integration](https://ycpss91255.github.io/windows_setup/main/integration.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
+[![System 狀態](https://ycpss91255.github.io/windows_setup/main/system.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
+[![Coverage 狀態](https://ycpss91255.github.io/windows_setup/main/coverage.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
 
 [最新已發布 main 報表](https://ycpss91255.github.io/windows_setup/) · [Actions 與七天報告附件](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
+
+徽章採用與 base 相同的 20px flat-square 樣式，依文字寬度排列；System `not run` 與 Coverage `not measured` 保留未驗證狀態。
 
 上方分層徽章取自最近一次成功部署的 main 報表；報表標示提交與時間。若部署失敗，請以 Windows CI 徽章及 Actions 的最新執行結果為準。PR 不更新公開報表。
 Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、模組設定與後續驗收。本文以繁體中文提供完整操作說明；版本摘要見 [變更紀錄](doc/changelog/changelog.md)，實作與驗證細節以中文 Git 提交及 GitHub Release 為準。
