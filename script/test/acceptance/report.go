@@ -94,6 +94,9 @@ func ValidateReport(read Reader, sha, run string, main bool) (Report, error) {
 	if e != nil {
 		return r, e
 	}
+	if e = validateSchema(data); e != nil {
+		return r, e
+	}
 	if e = decode(data, &r); e != nil {
 		return r, e
 	}
