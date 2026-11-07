@@ -54,3 +54,13 @@ function python.exe {$global:LASTEXITCODE=19}
 Refuse {Invoke-ContainerPython -Arguments @('fixture.py')} 'Python failure is not swallowed by container orchestration'
 Remove-Item Function:/python.exe
 Refuse {Get-ContainerAcceptancePlan $reports $fixture ('a'*40) 'example/repo' '123' '' ''} 'CI identity without ref metadata cannot silently become local branch evidence'
+# Exercise real Windows executable lookup with the image's PATH, without running setup.
+$dockerfile=[IO.File]::ReadAllText((Join-Path $root 'dockerfile/windows_tests.dockerfile'))
+$imagePath=[regex]::Match($dockerfile,'(?m)^ENV PATH="([^"]+)"').Groups[1].Value
+Assert ($imagePath -and -not $imagePath.Contains('$')) 'image PATH is explicit instead of case-sensitive inherited Docker interpolation'
+$originalPath=$env:Path
+try{
+ $env:Path=$imagePath
+ Assert ([bool](Get-Command powershell.exe -CommandType Application -ErrorAction Stop)) 'image PATH preserves actual Windows PowerShell discovery'
+ Assert ([bool](Get-Command cmd.exe -CommandType Application -ErrorAction Stop)) 'image PATH preserves actual Windows command processor discovery'
+}finally{$env:Path=$originalPath}
