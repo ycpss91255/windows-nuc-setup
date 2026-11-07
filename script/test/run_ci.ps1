@@ -64,6 +64,7 @@ $version=if(Test-Path (Join-Path $packageRoot '.version')){([IO.File]::ReadAllTe
 $refType=if($env:GITHUB_REF_TYPE -eq 'tag'){'Release'}else{'Branch'}
 $refName=if($env:GITHUB_HEAD_REF){$env:GITHUB_HEAD_REF}elseif($env:GITHUB_REF_NAME){$env:GITHUB_REF_NAME}else{'local'}
 $environment='Windows '+[Environment]::OSVersion.Version.ToString()+' / PowerShell '+$PSVersionTable.PSVersion.ToString()
+if($env:WINDOWS_SETUP_TEST_CONTEXT -ceq 'Windows container'){$environment='Windows container / '+$environment}
 $changes=@()
 $changelogPath=Join-Path $packageRoot 'doc/changelog/changelog.md'
 if(Test-Path $changelogPath){

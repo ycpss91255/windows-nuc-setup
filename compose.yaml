@@ -1,0 +1,24 @@
+services:
+  tools:
+    image: ${WINDOWS_SETUP_IMAGE:?use script/docker/docker.ps1}
+    build:
+      context: .
+      dockerfile: dockerfile/windows_tests.dockerfile
+      target: test
+    isolation: ${WINDOWS_SETUP_ISOLATION:-process}
+    network_mode: none
+    volumes:
+      - type: bind
+        source: ${WINDOWS_SETUP_SOURCE:?use script/docker/docker.ps1}
+        target: C:/workspace
+        read_only: true
+      - type: bind
+        source: ${WINDOWS_SETUP_REPORTS:?use script/docker/docker.ps1}
+        target: C:/reports
+    environment:
+      GITHUB_SHA: ${GITHUB_SHA:-}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-}
+      GITHUB_RUN_ID: ${GITHUB_RUN_ID:-}
+      GITHUB_REF_TYPE: ${GITHUB_REF_TYPE:-}
+      GITHUB_REF_NAME: ${GITHUB_REF_NAME:-}
+      GITHUB_HEAD_REF: ${GITHUB_HEAD_REF:-}

@@ -1,0 +1,7 @@
+**
+!dockerfile/
+!dockerfile/windows_tests.dockerfile
+!script/
+!script/docker/
+!script/docker/install_min_git.ps1
+!script/docker/container_test.ps1
