@@ -6,6 +6,9 @@
 
 ### Added（新增）
 
+- 新增 Windows Docker 開發與全套隔離測試入口，真容器測試及其報告需求驗收納入 ci-rollup；容器證據獨立短留七天，不冒充 Windows 桌面或完整安裝 E2E。
+
+
 - 新增 PR／main 需求驗收門檻與 Pages 部署後匿名 HTTPS 驗收，檢查真實來源、報告一致性、入口與徽章；CDN 只有限重試，人工視覺與實機驗證不冒稱自動通過。
 
 - 依真實斷言與程序結果自動產生分層 HTML／JSON／JUnit 報表及 SVG 徽章；main 公開報表由 Pages 更新，PR 僅保留七天去識別附件。

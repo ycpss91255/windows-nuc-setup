@@ -83,10 +83,63 @@ jobs:
           python test/python/integration/requirements_tests.py --artifact-dir acceptance-artifact --portal-fixture-dir acceptance-fixture
           python script/test/requirements_gate.py --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
 
+  docker-tests:
+    name: docker-tests
+    runs-on: windows-2022
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: 取得容器測試來源
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 確認真實 Windows Docker 能力
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\docker\docker.ps1 -Action doctor -Isolation process
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 建置並在 Windows 容器執行全部隔離測試
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\docker\docker.ps1 -Action test -Isolation process -ReportDirectory (Join-Path $env:RUNNER_TEMP 'windows-container-results')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 證明真實容器失敗會保留非零退出碼
+        run: |
+          . .\script\docker\library.ps1
+          $context = Get-ContainerContext -Root $env:GITHUB_WORKSPACE -ReportDirectory (Join-Path $env:RUNNER_TEMP 'failure-probe-unused') -Isolation process
+          $observed = 0
+          try {
+            Invoke-ContainerDocker -Arguments @('run','--rm','--isolation','process','--network','none','--entrypoint','powershell.exe',$context.Image,'-NoProfile','-Command','exit 23')
+          } catch {
+            if (-not $_.Exception.Data.Contains('ExitCode')) { throw }
+            $observed = [int]$_.Exception.Data['ExitCode']
+          }
+          if ($observed -ne 23) { throw ('Expected real container exit 23; observed ' + $observed) }
+          $global:LASTEXITCODE = 0
+      - name: 驗證容器真實報告與來源
+        if: always()
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $public = Join-Path $env:RUNNER_TEMP 'windows-container-results/public'
+          $report = Get-Content (Join-Path $public 'summary.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+          if ($report.Environment -notmatch 'Windows container') { throw '報告未標示實際 Windows 容器環境。' }
+          python script/test/requirements_gate.py --artifact-dir $public --source-root . --expected-sha $env:EXPECTED_SHA --expected-run-url $env:EXPECTED_RUN_URL
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 僅保留容器去識別報告七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: docker-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-container-results/public/
+          retention-days: 7
+          if-no-files-found: error
+
   ci-rollup:
     name: ci-rollup
     if: always()
-    needs: [isolated-tests, requirements-gate]
+    needs: [isolated-tests, requirements-gate, docker-tests]
     runs-on: windows-2022
     timeout-minutes: 5
     steps:
@@ -95,8 +148,9 @@ jobs:
         env:
           TEST_RESULT: ${{ needs.isolated-tests.result }}
           REQUIREMENTS_RESULT: ${{ needs.requirements-gate.result }}
+          DOCKER_RESULT: ${{ needs.docker-tests.result }}
         run: |
-          if ($env:TEST_RESULT -ne 'success' -or $env:REQUIREMENTS_RESULT -ne 'success') { throw '必要測試失敗、取消或跳過，不能合併或發布。' }
+          if ($env:TEST_RESULT -ne 'success' -or $env:REQUIREMENTS_RESULT -ne 'success' -or $env:DOCKER_RESULT -ne 'success') { throw '必要測試失敗、取消或跳過，不能合併或發布。' }
 
   release:
     name: 發布 GitHub 來源版本
@@ -142,8 +196,8 @@ jobs:
 
   build-portal:
     name: 建立 main 與不可變版本品質索引
-    if: always() && needs.requirements-gate.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
-    needs: [isolated-tests, requirements-gate, release]
+    if: always() && needs.requirements-gate.result == 'success' && needs.docker-tests.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
+    needs: [isolated-tests, requirements-gate, docker-tests, release]
     runs-on: windows-2022
     timeout-minutes: 15
     permissions:
