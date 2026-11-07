@@ -4,12 +4,12 @@ FROM mcr.microsoft.com/windows/servercore:ltsc2022@sha256:b52799a67fa596d4bddcd8
 SHELL ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
 COPY script/docker/install_min_git.ps1 C:/tools/install_min_git.ps1
 RUN C:/tools/install_min_git.ps1
-COPY script/docker/install_python.ps1 C:/tools/install_python.ps1
-RUN C:/tools/install_python.ps1
+COPY script/docker/install_go.ps1 C:/tools/install_go.ps1
+RUN C:/tools/install_go.ps1
 # The pinned Windows image has case-sensitive Docker metadata but Windows treats
 # Path case-insensitively. Do not expand ${PATH}: it can erase system tools.
-ENV PATH="C:\git\cmd;C:\python;C:\Windows\System32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0" GIT_OPTIONAL_LOCKS="0"
-RUN $ErrorActionPreference='Stop'; foreach ($tool in @('powershell.exe','cmd.exe','git.exe','python.exe')) { Get-Command $tool -CommandType Application -ErrorAction Stop | Out-Null }; git.exe --version; if ($LASTEXITCODE -ne 0) { throw 'Git unavailable' }; python.exe --version; if ($LASTEXITCODE -ne 0) { throw 'Python unavailable' }
+ENV PATH="C:\git\cmd;C:\go\bin;C:\Windows\System32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0" GIT_OPTIONAL_LOCKS="0" GOTOOLCHAIN="local" GOPROXY="off" GOSUMDB="off" GOFLAGS="-mod=vendor" CGO_ENABLED="0" GOWORK="off" GOENV="off"
+RUN $ErrorActionPreference='Stop'; foreach ($tool in @('powershell.exe','cmd.exe','git.exe','go.exe')) { Get-Command $tool -CommandType Application -ErrorAction Stop | Out-Null }; git.exe --version; if ($LASTEXITCODE -ne 0) { throw 'Git unavailable' }; go.exe version; if ($LASTEXITCODE -ne 0) { throw 'Go unavailable' }
 USER ContainerUser
 WORKDIR C:/workspace
 CMD ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoLogo", "-NoProfile"]
