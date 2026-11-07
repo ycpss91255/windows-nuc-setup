@@ -3,7 +3,9 @@ function Get-TestIdentityMap {
  param($Snapshot)
  $map=@{}
  foreach($suite in @($Snapshot.Checks)){
-  $map[$suite.Layer+' / '+$suite.Name+' / [suite execution]']=if(-not $suite.Executed){'NotRun'}elseif($suite.Passed){'Passed'}else{'Failed'}
+  $suiteId=$suite.Layer+' / '+$suite.Name+' / [suite execution]'
+  if($map.ContainsKey($suiteId)){throw ('重複測試識別：'+$suiteId)}
+  $map[$suiteId]=if(-not $suite.Executed){'NotRun'}elseif($suite.Passed){'Passed'}else{'Failed'}
   $items=@($suite.Assertions)
   if(-not $items.Count){$items=@([pscustomobject]@{Name='[suite]';Passed=$suite.Passed})}
   foreach($item in $items){
@@ -21,7 +23,10 @@ function Compare-TestSnapshots {
  if($Baseline.SchemaVersion -ne $Candidate.SchemaVersion -or $Baseline.RequestedLayer -cne 'All' -or $Candidate.RequestedLayer -cne 'All' -or $Baseline.Environment -cne $Candidate.Environment -or -not $Baseline.Environment -or $Baseline.Environment -eq 'Unknown'){
   return [pscustomobject]@{Status='Unknown';Reason='測試範圍、schema 或量測環境不相容，不能推論測試差異。';CoverageDelta='Unknown / NotMeasured';Added=@();Removed=@();NewFailures=@();Fixed=@();NotRun=@()}
  }
- $a=Get-TestIdentityMap $Baseline;$b=Get-TestIdentityMap $Candidate
+ try{$a=Get-TestIdentityMap $Baseline;$b=Get-TestIdentityMap $Candidate}catch{
+  if(-not $_.Exception.Message.StartsWith('重複測試識別：')){throw}
+  return [pscustomobject]@{Status='Unknown';Reason=($_.Exception.Message+'；無法唯一對應測試，不能推論版本差異。');CoverageDelta='Unknown / NotMeasured';Added=@();Removed=@();NewFailures=@();Fixed=@();NotRun=@()}
+ }
  [pscustomobject]@{Status='Compared';BaselineVersion=$Baseline.Version;CandidateVersion=$Candidate.Version;BaselineCommit=$Baseline.Commit;CandidateCommit=$Candidate.Commit;BaselineMeasuredAt=$Baseline.MeasuredAt;CandidateMeasuredAt=$Candidate.MeasuredAt;CoverageDelta='Unknown / NotMeasured';Added=@($b.Keys|Where-Object {-not $a.ContainsKey($_)}|Sort-Object);Removed=@($a.Keys|Where-Object {-not $b.ContainsKey($_)}|Sort-Object);NewFailures=@($b.Keys|Where-Object {$b[$_] -eq 'Failed' -and (-not $a.ContainsKey($_) -or $a[$_] -ne 'Failed')}|Sort-Object);Fixed=@($b.Keys|Where-Object {$b[$_] -eq 'Passed' -and $a.ContainsKey($_) -and $a[$_] -eq 'Failed'}|Sort-Object);NotRun=@($b.Keys|Where-Object {$b[$_] -eq 'NotRun'}|Sort-Object)}
 }
 function Write-SnapshotView {

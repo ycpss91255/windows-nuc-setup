@@ -51,6 +51,22 @@ Assert ((Get-Content (Join-Path $portal1 'compare.js') -Raw).Contains("if(data.S
 $portal3=Join-Path $fixture 'portal3'; & (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $portal3|Out-Null
 $versions=Get-Content (Join-Path $portal3 'versions.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert (($versions|Where-Object Version -eq 'v1.0.0').Status -eq 'Invalid' -and ($versions|Where-Object Version -eq 'v1.0.1').Status -eq 'Verified') 'corrupt version is Invalid while valid history remains available'
+# Parameterized tests can emit duplicate display names: retain evidence but refuse ambiguous comparisons.
+$savedAssertions=$checks[0].Assertions
+$checks[0].Assertions=@([pscustomobject]@{Name='VerifyOnly rejects incomplete state';Passed=$true},[pscustomobject]@{Name='VerifyOnly rejects incomplete state';Passed=$true})
+$duplicate=MakeEvidence 'v1.0.2' ('9'*40) ''
+$duplicateSnapshot=Get-Content $duplicate.SnapshotPath -Raw -Encoding UTF8|ConvertFrom-Json
+$comparison=Compare-TestSnapshots $duplicateSnapshot $duplicateSnapshot
+Assert ($comparison.Status -eq 'Unknown' -and $comparison.Reason.Contains('重複測試識別') -and -not $comparison.Added.Count) 'duplicate assertion names produce explicit Unknown without deduplication'
+$duplicateCatalog=Join-Path $fixture 'duplicate_catalog.json'
+ConvertTo-Json -InputObject @($duplicate) -Depth 12|Set-Content $duplicateCatalog -Encoding UTF8
+$duplicatePortal=Join-Path $fixture 'duplicate_portal'
+& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $duplicateCatalog -MainSnapshotPath (Join-Path $mainDir 'summary.json') -OutputDirectory $duplicatePortal|Out-Null
+$comparisonFile=Get-Content (Join-Path $duplicatePortal 'comparisons/v1.0.2--v1.0.2.json') -Raw -Encoding UTF8|ConvertFrom-Json
+Assert ($comparisonFile.Status -eq 'Unknown' -and (Test-Path (Join-Path $duplicatePortal 'main/unit.svg'))) 'ambiguous release comparison does not block main report deployment'
+$preserved=Get-Content (Join-Path $duplicatePortal 'versions/v1.0.2/summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
+Assert ($preserved.Checks[0].Assertions.Count -eq 2) 'both measured assertions remain in immutable evidence'
+$checks[0].Assertions=$savedAssertions
 # Mock GitHub only: exercise the real draft/upload verification/publish ordering.
 $publish=Join-Path $root 'script/report/publish_quality_release.ps1'
 $notes=Join-Path $fixture 'notes.md';[IO.File]::WriteAllText($notes,'fixture notes')
