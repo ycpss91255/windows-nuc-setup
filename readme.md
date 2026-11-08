@@ -17,12 +17,18 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 
 ### A．還在地區／Wi-Fi 初始設定畫面
 
-1. 直接按 `Ctrl+Shift+F3`，電腦會重新開機進入稽核桌面。
-2. 按「取消」關閉 Sysprep 視窗，再按 `Windows+E` 開啟檔案總管。
-3. 從「本機／此電腦」打開 USB → `windows_setup` → 雙擊 `init.cmd`，依提示輸入新帳號與密碼。
-4. 等 Init 顯示準備成功，再手動重開並完成剩餘設定，登入剛建立的帳號。
-5. 接上網路，再從 USB 雙擊 `init.cmd`，這次會沿用帳號並安裝 SSH。成功後依下面「接著套用設定」繼續。
+使用完整發行包：`modules/init/assets` 必須包含 `hide_oobe.ppkg`、`hide_oobe.xml` 與 `provenance.json`。缺少或驗證失敗時，Init 會在詢問帳密、建立帳號前停止；不能只複製腳本或自行用空檔代替。當前工作分支的真設定包與內容驗收仍待完成，不應當作已完成的發行包使用。
 
+1. 插入 USB，按 `Shift+F10`（部分鍵盤需加 Fn）。在 CMD 輸入以下一行找入口，不需要 diskpart：
+
+```cmd
+for %d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do @if exist "%d:\windows_setup\init.cmd" echo %d:\windows_setup\init.cmd
+```
+
+2. 使用找到的完整路徑，例如顯示 `E:\windows_setup\init.cmd` 時輸入 `call "E:\windows_setup\init.cmd"`。E: 只是例子；若列出多份，請選你剛準備的完整工具包。
+3. 依中文提示輸入新本機帳號、密碼與確認密碼。設定包套用前會明確詢問是否繼續，因 Windows 可能立即重新啟動；輸入 `YES` 才繼續。取消會保留帳號與無密碼續跑紀錄。
+4. 登入剛建立的正式帳號，按 `Win+R` 輸入 `%ProgramData%\windows_setup_init.cmd`，允許同一帳號的管理員權限，安裝 SSH。此步不需要 USB；缺少網路／元件來源時，連網後用同一入口重試。
+5. 等顯示「Init 完成」及中文 SSH 連線資訊，再執行下面的 Windows 設定流程。
 ### B．已經進入正式帳號的 Windows 桌面
 
 1. 接上網路，按 `Windows+E` →「本機／此電腦」→ USB → `windows_setup`。
@@ -34,9 +40,9 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 2. 等整輪結束、查看結果後再手動重開機。從 USB 開啟 `windows_setup\core`，雙擊 `verify_after_restart.cmd` 續跑與驗收。
 3. 處理畫面列出的失敗，再雙擊 `verify_only.cmd` 檢查，最後依[目視確認](#6-最後目視確認)核對桌面、工具列及顯示。
 
-桌面清理會刪除一般桌面檔案，開始前先移走要保留的資料。套用 Windows 設定與驗收時使用正式目標本機管理員帳號；稽核模式只用於前面的帳號初始化。執行中保持 USB 連接。
+桌面清理會刪除一般桌面檔案，開始前先移走要保留的資料。套用 Windows 設定與驗收時使用正式目標本機管理員帳號。執行中保持 USB 連接。
 
-找不到 USB 或需要命令列時，再展開下方的排錯說明；正常流程不需要 `Shift+F10` 或 `diskpart`。
+找不到 USB 或需要命令列時，再展開下方的排錯說明；初始設定使用 `Shift+F10`；不必用 `diskpart`。
 
 ## 目錄
 
@@ -72,7 +78,7 @@ Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不�
 
 本機維護的 `windows_setup` 可整份複製到 USB；腳本依自己所在位置解析主程式，不綁定 Downloads、USB 磁碟代號或使用者名稱。驅動獨立放在 `windows_driver_packages/nuc8`，主程式不含驅動封存檔。每次換機使用前要確認 USB 是最新完整副本；舊 USB 不會自動同步本機修改。
 
-完整流程需要你允許管理員權限、輸入現有帳號密碼，以及依提示手動重新開機，並非完全無人值守。腳本不會自行重新開機或關機。
+完整流程需要你允許管理員權限、輸入現有帳號密碼，以及依提示手動重新開機，並非完全無人值守。一般 Windows 設定不自行重新開機或關機；OOBE 套用設定包前會先明確詢問，Windows 可能在同意後重新啟動。
 
 ## 準備 USB
 
@@ -119,7 +125,7 @@ call init.cmd
 
 `cd /d` 會一起切換磁碟與資料夾；`dir` 應列出兩個入口。請確認前兩行成功才執行第三行，這不是直接把所有指令一次貼上的步驟。
 
-5. OOBE 的這次 `init.cmd` **只顯示稽核模式指引，不會建立帳號**。入口會開啟 PowerShell 並保留視窗。確認指引已顯示完畢後，若提示字元以 `PS` 開頭，先輸入 `exit` 返回原 CMD；再輸入一次 `exit` 關閉 CMD。回到初始設定畫面按 `Ctrl+Shift+F3`；電腦會重開進入稽核桌面。取消自動出現的 Sysprep 視窗，再按下節方式從 USB 執行 `init.cmd`，繼續情境 A。
+5. 依 Init 畫面提示繼續。缺少設定包時會在帳號建立前停止；完整工具包會先核對環境、資產與權限，再詢問必要帳密。套用前明確同意 Windows 可能重新啟動。
 
 #### 找不到資料夾或 USB 沒有磁碟代號
 
@@ -176,23 +182,16 @@ call windows.cmd -VerifyOnly
 
 ### 情境 A：全新安裝，仍在初始設定／連接 Wi-Fi 畫面
 
-1. 保持離線，按 `Ctrl+Shift+F3`（部分鍵盤需加 Fn），Windows 會重新啟動進入「稽核模式」。這一步不會重新安裝 Windows。若已按 Shift+F10 開啟命令窗，可先關閉它再按快捷鍵。
-2. 進入內建 Administrator 桌面後，按「取消」關閉自動出現的「系統準備工具」視窗，避免兩個 Sysprep 同時執行。
-3. 打開 USB 上完整的 `windows_setup` 資料夾，雙擊 `init.cmd`。依畫面輸入 `AUDIT` 確認這是剛安裝系統的稽核模式，再輸入自己要建立的本機帳號、密碼與確認密碼。每臺可使用不同帳號，不必使用範例帳密。
-4. Init 使用 Windows answer file 建立本機管理員並準備返回 OOBE。成功後依提示手動重新開機。不要在此稽核帳號執行 windows.cmd。
-5. 完成仍顯示的地區、隱私等設定，以新帳號登入。此流程不替你同意授權或隱私選項。
-6. 接上網路，從同一完整工具包再執行 `init.cmd`，這次會處理正式帳號的 SSH，不再建立帳號。
-7. Init 成功後執行 `windows.cmd`，依提示選擇驅動包或略過，輸入目前帳號密碼並等整輪完成。
-8. 手動重新開機，以同一帳號登入並重新找到工具包，執行 `windows.cmd -AfterRestart`；若提示仍需重開，等本輪結束再重開續跑。
-9. 最後執行 `windows.cmd -VerifyOnly`，確認無未解決失敗，再做下方「最後目視確認」。
+依[快速開始 A](#快速開始)從 USB 的 `init.cmd` 執行。腳本要求 Windows 11 22H2 以上 x64 桌面版，使用官方唯讀 `OOBEComplete` 判斷初始設定，並拒絕 WinPE 與一般 SYSTEM 工作。帳號與密碼由你輸入；不重設或提升既有同名帳號。
 
-同一 init.cmd 若從 OOBE 的 Shift+F10 命令窗呼叫，只會辨識環境並引導進入稽核模式；不會在 SYSTEM 身分直接執行 Sysprep。Microsoft 不支援以 SYSTEM 執行 Sysprep，因此這個方式需要上述稽核模式切換，不能保證在 Wi-Fi 畫面一次呼叫就直接進桌面。
+設定包只包含 `HideOobe=True`，不含帳密或 Microsoft 工具。先建立並讀回確認正式管理員帳號，才會詢問是否套用；Windows 可能因套用設定包重新啟動，因此必須先輸入 `YES` 同意。腳本不會在 SYSTEM 下執行 Sysprep。
 
-帳號建立時的必要 answer file 只暫存在本機受管理員／SYSTEM 權限保護的目錄，不存於 USB；其中密碼可還原，不應視為加密。首次正式帳號登入會清理本工具的密碼 answer file，保留不含密碼的狀態與清理紀錄。詳細限制與清理紀錄見 `modules\init\readme.md`。此 OOBE 新流程尚未在實機完整跑過，失敗時查看提示並停止，不要手動修改 Setup 狀態強行略過。
+續跑檔案放在 `%ProgramData%\windows_setup_init`，只允許 SYSTEM 與管理員讀寫；同層的 `windows_setup_init.cmd` 供一般使用者唯讀啟動提權。正式登入後用此入口繼續；會核對同一臺機器、目標 SID、家目錄與桌面，再真正安裝 OpenSSH Server。USB 可拔除，帳密不保存在設定包或續跑 JSON。中途取消或缺網時保留狀態，可用同一入口重試；若帳號已建立但寫入所有權紀錄失敗，會保留帳號並停止，請先查看錯誤，不會猜測接管同名帳號。
 
+Init 成功後才從完整工具包執行 `windows.cmd`。Windows 更新等流程結束後依提示手動重新開機，使用 `windows.cmd -AfterRestart` 續跑，再用 `windows.cmd -VerifyOnly` 檢查。
 ### 情境 B：已有正式本機帳號，從 Windows 桌面開始
 
-此情境保留現有帳號，不進稽核模式，也不重新建立帳號。USB 與本機的完整工具包都可使用，不必先移到 Downloads。
+此情境保留現有帳號，不重新建立帳號。USB 與本機的完整工具包都可使用，不必先移到 Downloads。
 
 1. 登入要套用設定的本機管理員帳號，確認記得現有密碼；先取走桌面要保留的檔案，接上網路並保持電源穩定。
 2. 準備完整工具包：可以直接開啟 USB 的 `windows_setup`，或開啟自行完整複製到本機可寫入、非桌面位置的副本。依上方「已進入稽核或正式桌面」的步驟找到資料夾，再從位址欄開啟 CMD。
@@ -225,7 +224,7 @@ windows_setup\
 ├─ readme.md                   本文件
 ├─ core\                      主流程、驗證與路徑表
 ├─ modules\                   每個功能自己的腳本、資產與獨立入口
-│  ├─ init\                   OOBE／稽核模式帳號建立
+│  ├─ init\                   OOBE 帳號初始化與正式登入續跑
 │  ├─ ssh\                    SSH 及 hosts 同步
 │  ├─ drivers\
 │  │  └─ manifests\           驅動清單範本（不含封存檔）
@@ -460,7 +459,7 @@ Hosts／SSH 獨立入口為 `modules\ssh\apply_hosts_sync.cmd`、`sync_hosts.cmd
 
    檢查會核對主程式檔案與語法，不安裝軟體、不變更 Windows 設定，也不代表已通過實機驗收；它不取代上一步數位簽章核對。出現缺檔或錯誤時先依訊息修正，不繼續。未選擇驅動包不要求驅動檔；`Generic` 是此離線檢查使用的設定檔，實際套用時仍自動辨識機型，不能用它強制套用特定硬體設定。
 7. 檢查成功後，將**整個**工具包根資料夾複製到可寫入的 USB；可保留名稱 `windows_setup`。確認 USB 副本內有兩個入口、`core`、`modules` 及剛補入的 EXE，不只複製 `.cmd`。也可直接在 USB 完成以上準備與檢查；不依賴固定磁碟代號或使用者名稱。
-8. 在目標電腦插上 USB：還在選擇地區／Wi-Fi 畫面時，接著按 [快速開始 A](#快速開始) 進入稽核模式並執行 Init；已登入正式帳號時，按 [快速開始 B](#快速開始) 執行 Init。兩者最後都依「接著套用設定」執行 Windows 流程及手動重開後驗收。離線稽核 Init 可先建立帳號；後續 SSH 元件安裝、Windows Update 與未快取的下載仍需要網路。
+8. 在目標電腦插上 USB：仍在地區／Wi-Fi 畫面時，依快速開始 A 以 Shift+F10 呼叫 Init；已登入正式帳號時依快速開始 B。OOBE 流程需要完整自有設定包；SSH 元件、Windows Update 與未快取下載需要網路。
 
 若要一併檢查已準備的 NUC 獨立包，將上述檢查參數改為 `-PackageOnly -HardwareProfile NUC8 -DriverPackagePath "實際獨立包目錄"`；這只驗證檔案，不安裝驅動。完整來源包準備不代表主程式自帶各硬體驅動，詳見下一節。以上採用官方下載與既有套件檢查，無需額外開發環境。
 
