@@ -1,4 +1,4 @@
-﻿{
+{
   "desktop_icons.cs": "modules/desktop/native/desktop_icons.cs",
   "display.cs": "modules/display/native/display.cs",
   "explorer.cs": "modules/explorer/native/explorer.cs",
@@ -23,6 +23,7 @@
   "initialize_ssh_client.ps1": "modules/ssh/initialize_ssh_client.ps1",
   "apply_lan_ping_settings.ps1": "modules/ssh/apply_lan_ping_settings.ps1",
   "apply_hosts_sync.ps1": "modules/ssh/apply_hosts_sync.ps1",
+  "hosts_sync_library.ps1": "modules/ssh/hosts_sync_library.ps1",
   "apply_hosts_sync.cmd": "modules/ssh/apply_hosts_sync.cmd",
   "sync_hosts.cmd": "modules/ssh/sync_hosts.cmd",
   "sync_ssh.cmd": "modules/ssh/sync_ssh.cmd",
