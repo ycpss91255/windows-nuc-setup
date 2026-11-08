@@ -35,6 +35,15 @@ try{
  $originalContext=[IO.File]::ReadAllText((Join-Path $stage.CodeRoot 'context.json'));$invalid=$originalContext|ConvertFrom-Json;$invalid.Files+=@($invalid.Files[0]);[IO.File]::WriteAllText((Join-Path $stage.CodeRoot 'context.json'),($invalid|ConvertTo-Json -Depth 6))
  Reject {Read-SetupGuiContext -CodeRoot $stage.CodeRoot -CommonDataRoot $common -Role Explorer -RunId $stage.Context.RunId} '清單' 'duplicate source entry cannot satisfy fixed manifest'
  [IO.File]::WriteAllText((Join-Path $stage.CodeRoot 'context.json'),$originalContext)
+ foreach($field in @('Schema','Role','CallerSID','VerifyOnly')){
+  $bad=$originalContext|ConvertFrom-Json
+  switch($field){Schema{$bad.Schema=2}Role{$bad.Role='Theme'}CallerSID{$bad.CallerSID='S-1-5-21-1-2-3-1002'}VerifyOnly{$bad.VerifyOnly='true'}}
+  [IO.File]::WriteAllText((Join-Path $stage.CodeRoot 'context.json'),($bad|ConvertTo-Json -Depth 6))
+  Reject {Read-SetupGuiContext -CodeRoot $stage.CodeRoot -CommonDataRoot $common -Role Explorer -RunId $stage.Context.RunId} '身分' ('context rejects altered '+$field)
+ }
+ [IO.File]::WriteAllText((Join-Path $stage.CodeRoot 'context.json'),$originalContext)
+ Reject {Read-SetupGuiContext -CodeRoot $source -CommonDataRoot $common -Role Explorer -RunId $stage.Context.RunId} '固定角色' 'source package directory cannot be substituted for protected code root'
+ Reject {Read-SetupGuiContext -CodeRoot $stage.CodeRoot -CommonDataRoot $common -Role Explorer -RunId 'not-a-guid'} '本輪ID' 'worker rejects noncanonical run identity'
  Write-SetupGuiResult -DataRoot $stage.DataRoot -Context $context -Result @{Success=$true;Error=$null;ShellShowsHidden=$true}
  $result=Read-SetupGuiResult -Stage $stage
  Assert ($result.Success -and $result.RunId -ceq $context.RunId -and $result.UserSID -ceq $call.UserSid -and $result.SessionId -eq 3 -and $result.VerifyOnly) 'result is read only from protected current-run data and carries exact scope'
