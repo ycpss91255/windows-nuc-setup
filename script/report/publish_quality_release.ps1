@@ -14,7 +14,7 @@ $manifestPath=Join-Path $PublicDirectory 'quality-manifest.json'
 $existing=& gh api --paginate ('repos/'+$Repository+'/releases?per_page=100') --jq '.[].tag_name'
 if($LASTEXITCODE -ne 0){throw '無法確認既有版本。'}
 if($existing -ccontains $Version){throw '版本已存在；不覆寫或重用草稿。'}
-$ghArguments=@('release','create',$Version,'--repo',$Repository,'--verify-tag','--draft','--title',('Windows 設定工具 '+$Version),'--notes-file',$NotesPath)
+$ghArguments=@('release','create',$Version,'--repo',$Repository,'--verify-tag','--draft','--title',$Version,'--notes-file',$NotesPath)
 if($Prerelease){$ghArguments+=@('--prerelease','--latest=false')}
 $attachments=@($quality,$manifestPath)+@($files|Where-Object {$_ -ne 'summary.json'}|ForEach-Object {Join-Path $PublicDirectory $_})
 $ghArguments+=$attachments
