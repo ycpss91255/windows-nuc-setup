@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 param([Parameter(Mandatory=$true)][string]$BaselineXml,[Parameter(Mandatory=$true)][string]$BaselineEvidence,[Parameter(Mandatory=$true)][string]$CoverageXml,[Parameter(Mandatory=$true)][string]$Evidence,[int]$MinimumNewLines=120)
 $ErrorActionPreference='Stop'
-$files=@('modules/init/provisioning_library.ps1','core/gui_stage_library.ps1','core/hardware.ps1')
+$files=@('modules/init/provisioning_library.ps1','core/gui_stage_library.ps1','core/hardware.ps1','modules/updates/update_stage_library.ps1')
 $before=Get-Content -LiteralPath $BaselineEvidence -Raw -Encoding UTF8|ConvertFrom-Json
 $after=Get-Content -LiteralPath $Evidence -Raw -Encoding UTF8|ConvertFrom-Json
 [xml]$beforeXml=Get-Content -LiteralPath $BaselineXml -Raw -Encoding UTF8
