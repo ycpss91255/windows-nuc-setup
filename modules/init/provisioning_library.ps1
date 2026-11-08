@@ -67,3 +67,26 @@ function Save-InitProvisioningState {
   if(Test-Path -LiteralPath $StatePath){[IO.File]::Replace($temporary,$StatePath,$backup)}else{[IO.File]::Move($temporary,$StatePath)}
  }finally{foreach($path in @($temporary,$backup)){if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Force}}}
 }
+function Invoke-InitSshContinuation {
+ param($State,[string]$StatePath,[hashtable]$Context,[string]$SshScriptPath)
+ Assert-InitProvisioningState -State $State -MachineGuid $Context.MachineGuid -PackageHash $State.PackageHash
+ if($State.Phase -notin @('AwaitingLogon','SshPending','Complete')){throw '尚未完成初始設定包階段，不能續跑 SSH。'}
+ if($Context.Sid -ne $State.TargetSid -or $Context.Sid -eq 'S-1-5-18' -or $Context.ImageState -ne 'IMAGE_STATE_COMPLETE' -or -not $Context.DesktopOwned -or -not $Context.IsAdministrator){throw '請以本輪建立的正式管理員帳號登入桌面再續跑。'}
+ if([string]::IsNullOrWhiteSpace($Context.ProfilePath) -or [string]::IsNullOrWhiteSpace($Context.RegisteredProfile) -or [IO.Path]::GetFullPath($Context.ProfilePath).TrimEnd('\') -ine [IO.Path]::GetFullPath($Context.RegisteredProfile).TrimEnd('\')){throw '正式帳號 SID 與家目錄登錄不一致。'}
+ if(-not(Test-Path -LiteralPath $SshScriptPath -PathType Leaf)){throw '缺少已暫存的 SSH 模組，不能繼續。'}
+ $State.Phase='SshPending';$State.LastErrorCode=''
+ Save-InitProvisioningState -State $State -StatePath $StatePath
+ try{
+  Write-Host '正在正式帳號設定 SSH；缺少元件來源時請連網後重試。' -ForegroundColor Cyan
+  & $SshScriptPath
+  $service=Get-CimInstance -ClassName Win32_Service -Filter "Name='sshd'" -ErrorAction Stop
+  if(-not $service -or $service.State -ne 'Running' -or $service.StartMode -ne 'Auto'){throw 'SSH 服務尚未以自動方式啟動。'}
+ }catch{
+  $State.LastErrorCode='SshSetupFailed'
+  Save-InitProvisioningState -State $State -StatePath $StatePath
+  throw
+ }
+ $State.Phase='Complete';$State.LastErrorCode=''
+ Save-InitProvisioningState -State $State -StatePath $StatePath
+ Write-Host 'Init 完成：正式帳號與 SSH 已確認。' -ForegroundColor Green
+}
