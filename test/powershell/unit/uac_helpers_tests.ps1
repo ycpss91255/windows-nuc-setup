@@ -2,7 +2,7 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
-function Reject([scriptblock]$Action,[string]$Name){$caught=$false;try{& $Action|Out-Null}catch{$caught=$true};Assert $caught $Name}
+function Reject([scriptblock]$Action,[string]$Name){$caught=$false;try{& $Action|Out-Null}catch{Assert (-not ($_.Exception -is [Management.Automation.ParameterBindingException])) ($Name+'：必須進入真函式而非參數繫結失敗');$caught=$true};Assert $caught $Name}
 $lib=Join-Path $root 'modules/uac/uac_library.ps1'
 Assert (Test-Path $lib) 'UAC有無副作用具名函式來源'
 . $lib
@@ -33,4 +33,11 @@ Assert (-not $script:values.ContainsKey('ConsentPromptBehaviorAdmin')) '原值�
 Reject {Invoke-SetupUac @args -VerifyOnly -Restore} '拒絕互斥模式'
 [IO.File]::WriteAllText($args.StatePath,'{}');Reject {Invoke-SetupUac @args} '損壞快照拒絕不覆寫'
 Assert ([IO.File]::ReadAllText($args.StatePath) -eq '{}') '損壞快照原位保存'
+$args.StatePath=Join-Path $dir 'not_created.json'
+Reject {Invoke-SetupUac @args -Restore} '沒有首份快照不可猜測還原值'
+$args.ReportPath=$args.StatePath
+Reject {Invoke-SetupUac @args} '快照與報告不可共用檔案'
+$args.ReportPath=Join-Path $dir 'result.json';$script:values.ConsentPromptBehaviorAdmin='5';$script:kinds.ConsentPromptBehaviorAdmin='String'
+Reject {Invoke-SetupUac @args} '首次原值型別不正確不覆寫'
+Assert (-not(Test-Path $args.StatePath)) '拒絕原值時不產生錯誤快照'
 Write-Host 'ALL PASS: UAC TEMP/mock only'
