@@ -48,13 +48,13 @@ function Format-SetupMdnsConnectionInfo {
  'DNS Client：'+$Status.DnsClientState+'；EnableMDNS 原則：'+$(if(-not $Status.GroupPolicyReadSucceeded){'未知（讀取失敗）'}elseif($null -eq $Status.GroupPolicyEnableMDNS){'未設定'}else{$Status.GroupPolicyEnableMDNS})+'；本機：'+$(if(-not $Status.LocalPolicyReadSucceeded){'未知（讀取失敗）'}elseif($null -eq $Status.LocalEnableMDNS){'系統預設'}else{$Status.LocalEnableMDNS})+'；UDP 5353 端點：'+$(if($Status.Udp5353Observed){'已觀測'}else{'未觀測（可能按需啟用）'})
  foreach($ip in $Status.ActiveAddresses){'本機 '+$ip.AddressFamily+'：'+$ip.IPAddress+'；介面 '+$ip.InterfaceIndex+' '+$ip.InterfaceAlias}
  foreach($query in $Status.Queries){'本機 '+$query.Type+' 查詢：'+($query.Addresses -join ', ')+'；吻合本機 '+$query.MatchedAddresses.Count+' 個'+$(if($query.Error){'；錯誤：'+$query.Error}else{''})}
- '另一臺測試：ping -4 '+$nameArgument+'；ping -6 '+$nameArgument
- '名稱連線：ssh -l '+$userArgument+' '+$nameArgument
+ '另一臺 PowerShell 測試：ping -4 '+$nameArgument+'；ping -6 '+$nameArgument
+ '名稱連線（PowerShell）：ssh -l '+$userArgument+' '+$nameArgument
  $fallback=@($Status.ActiveAddresses|Where-Object {-not $_.IsLinkLocal}|Sort-Object AddressFamily,IPAddress|Select-Object -First 1)
  if(-not $fallback.Count){$fallback=@($Status.ActiveAddresses|Select-Object -First 1)}
  if($fallback.Count){$ip=$fallback[0];$target=$ip.IPAddress;$flag=if($ip.AddressFamily -eq 'IPv4'){'-4'}else{'-6'}
   if($ip.AddressFamily -eq 'IPv6' -and $ip.IsLinkLocal){$target=($target -split '%')[0]+'%<用戶端介面索引>'; 'IPv6 link-local 的 scope 必須使用另一臺電腦該網段的介面索引，不能直接沿用上列本機索引。'}
-  'IP 備援範例：ssh '+$flag+' -l '+$userArgument+" '"+$target+"'"
+  'IP 備援範例（PowerShell）：ssh '+$flag+' -l '+$userArgument+" '"+$target+"'"
  }else{'目前沒有作用中本機 IP；接上區域網路後重新查看。'}
  foreach($note in $Status.Notes){'名稱觀測說明：'+$note}
  foreach($failure in $Status.ReadErrors){'名稱觀測失敗：'+$failure}
