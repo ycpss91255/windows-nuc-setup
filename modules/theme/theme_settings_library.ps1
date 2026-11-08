@@ -32,7 +32,7 @@ function Invoke-SetupThemeSettings {
   Get-Process explorer -ErrorAction SilentlyContinue|Where-Object SessionId -eq $sessionId|Stop-Process -Force
   $shellReloaded=$true
   Start-Sleep -Seconds 3
-  if(-not @(Get-Process explorer -ErrorAction SilentlyContinue|Where-Object SessionId -eq $sessionId).Count){Start-Process explorer.exe}
+  if(-not @(Get-Process explorer -ErrorAction SilentlyContinue|Where-Object SessionId -eq $sessionId).Count){Start-Process -FilePath (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::Windows)) 'explorer.exe')}
   for($attempt=0;$attempt -lt 20;$attempt++){
    Start-Sleep -Milliseconds 500
    try{$taskbarColor=[NUC8Theme]::TaskbarColor();$taskbarDark=($taskbarColor[0]+$taskbarColor[1]+$taskbarColor[2])/3 -lt 128;if($taskbarDark){break}}catch{}
