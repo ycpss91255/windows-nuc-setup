@@ -11,7 +11,7 @@ function Expand-DriverArchive {
   foreach($entry in $zip.Entries){
    $target=[IO.Path]::GetFullPath((Join-Path $Destination $entry.FullName))
    if(-not $target.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)){throw '封存檔包含不合法路徑。'}
-   if($entry.FullName.EndsWith('/')){[void][IO.Directory]::CreateDirectory($target);continue}
+   if($entry.FullName.EndsWith('/') -or $entry.FullName.EndsWith('\')){[void][IO.Directory]::CreateDirectory($target);continue}
    [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))
    $inputStream=$entry.Open();$outputStream=[IO.File]::Open($target,[IO.FileMode]::Create,[IO.FileAccess]::Write)
    try{
