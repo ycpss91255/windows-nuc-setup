@@ -78,8 +78,9 @@ namespace NUC8Display {
    if(!supported)throw new Exception("The connected primary display does not advertise 1920x1080.");
    current.dmPelsWidth=1920;current.dmPelsHeight=1080;current.dmFields=0x180000;
    int test=api.Change(ref current,2);if(test!=0)throw new Exception("Display mode test failed: "+test);
-   int status=api.Change(ref current,1);if(status!=0 && status!=1)throw new Exception("Display mode change failed: "+status);
-   Mode after=NewMode();api.Enumerate(null,-1,ref after);
+   int status=api.Change(ref current,1);if(status==1)throw new Exception("Display mode change requires a manual restart; the active mode is not confirmed.");if(status!=0)throw new Exception("Display mode change failed: "+status);
+   Mode after=NewMode();if(!api.Enumerate(null,-1,ref after))throw new Exception("Unable to read active primary display mode after change.");
+   if(after.dmPelsWidth!=1920 || after.dmPelsHeight!=1080)throw new Exception("Active primary display mode does not match 1920x1080 after change.");
    return new uint[]{oldW,oldH,after.dmPelsWidth,after.dmPelsHeight,(uint)status,api.Dpi()};
   }
  }
