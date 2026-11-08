@@ -18,7 +18,12 @@ Assert ($html.IndexOf('<h2>Go 程式敘述覆蓋率</h2>') -lt $html.IndexOf('<h
 $markdown=[IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'summary.md'))
 Assert ($markdown.Contains('Go 程式敘述覆蓋率：80.0%；範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。') -and $markdown.Contains('Go statements: 8/10；門檻 80%')) 'Markdown keeps actual Go percentage scope and raw counts on complete lines'
 $badge=[IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_coverage.svg'))
-Assert ($badge.Contains('go coverage branch: 80.0%') -and $badge.Contains('#4c1')) 'Go badge identifies scope and actual passing percentage'
+Assert ($badge.Contains('go coverage branch: 80.0%') -and $badge.Contains('#97ca00')) 'Go badge identifies scope and actual passing percentage with base 80 percent colour'
+[xml]$goSvg=$badge
+Assert ($goSvg.svg.g.text[0].InnerText -eq 'go coverage' -and $goSvg.svg.'aria-label'.Contains('branch')) 'Go badge uses short visible label and retains branch scope accessibly'
+[xml]$psSvg=Get-Content (Join-Path $arguments.OutputDirectory 'coverage.svg') -Raw
+Assert ($psSvg.svg.g.text[0].InnerText -eq 'ps coverage' -and $psSvg.svg.'aria-label'.Contains('branch')) 'PowerShell badge visibly identifies its unmeasured language without duplicate branch text'
+foreach($case in @(@(79.9,'#a4a61d'),@(80,'#97ca00'),@(89.9,'#97ca00'),@(90,'#4c1'))){Assert ((Get-GoCoverageColor ([double]$case[0])) -eq $case[1]) ('base palette boundary '+$case[0])}
 Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'coverage.svg'))).Contains('not measured')) 'existing coverage badge never changes into an overall Go percentage'
 Assert ((Get-Content (Join-Path $arguments.OutputDirectory 'go_coverage.json') -Raw|ConvertFrom-Json).Commit -eq $arguments.Commit) 'Go sidecar retains measured source identity'
 $coverage.Commit='c'*40
@@ -30,7 +35,7 @@ Refuse {Write-TestReports @arguments -GoCoverage $coverage} 'zero denominator ca
 $coverage.TotalStatements=10;$coverage.Percent=70;$coverage.Covered=7
 $arguments.OutputDirectory=Join-Path $fixture 'below_threshold'
 $null=Write-TestReports @arguments -GoCoverage $coverage
-Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_coverage.svg'))).Contains('#e05d44')) 'below-threshold measured result stays visible as failed coverage'
+Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_coverage.svg'))).Contains('#a4a61d')) 'below-threshold measured result retains base 70 percent colour'
 
 # Attach real file bytes and preserve them through the actual main portal renderer.
 $producer=Join-Path $fixture 'producer';New-Item -ItemType Directory $producer|Out-Null

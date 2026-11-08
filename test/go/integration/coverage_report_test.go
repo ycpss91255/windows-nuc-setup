@@ -30,10 +30,10 @@ func TestGoCoveragePublishedEvidence(t *testing.T) {
 	json.Unmarshal(data["summary.json"], &s)
 	s["GoCoverage"] = c
 	data["summary.json"], _ = json.Marshal(s)
-	label := "go coverage " + strings.ToLower(r.RefType)
+	label := "go coverage"
 	value := "80.0%"
 	left, right := len(label)*7+12, len(value)*7+12
-	data["go_coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d"><rect width="%d" fill="#555"/><rect width="%d" fill="#4c1"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, left+right, left, right, label, value))
+	data["go_coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" aria-label="go coverage branch: 80.0%%" width="%d"><title>go coverage branch: 80.0%%</title><rect width="%d" fill="#555"/><rect width="%d" fill="#97ca00"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, left+right, left, right, label, value))
 	goBlock:=`<h2>Go 程式敘述覆蓋率</h2><p>80.0% · 8/10 statements；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。</p><p>PowerShell 覆蓋率：尚未量測</p><a href="go_coverage.json">Go JSON</a><a href="go_coverage.out">Go profile</a>`
 	data["index.html"]=append(data["index.html"],[]byte(goBlock)...);data["summary.md"]=append(data["summary.md"],[]byte("\nGo 程式敘述覆蓋率：80.0%；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。\nGo statements: 8/10；PowerShell 覆蓋率未量測。")...)
 	if e = a.ValidateGoCoverageReport(reader(data), owned, r.Commit, r.RunUrl, true); e != nil {
