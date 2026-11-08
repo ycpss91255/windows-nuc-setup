@@ -13,7 +13,7 @@ $entry=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core
 Assert (@($entry.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Invoke-SetupVerification'},$true)).Count -eq 1) '正式入口呼叫具名驗收彙整一次'
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('verify_aggregate_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
 $script:fixtureScripts=Join-Path $fixture 'scripts';[void][IO.Directory]::CreateDirectory($script:fixtureScripts)
-foreach($name in @('apply_uac_settings.ps1','audit_nuc.ps1','initialize_ssh_client.ps1','apply_lan_ping_settings.ps1','apply_hosts_sync.ps1','apply_privacy_settings.ps1','apply_display_settings.ps1','apply_theme_settings.ps1','desktop_icon_layout.ps1','apply_pagefile_settings.ps1','apply_copilot_settings.ps1','apply_amd_privacy_settings.ps1','apply_start_menu_settings.ps1','apply_input_method_settings.ps1','apply_terminal_hotkey.ps1','remove_setup_residue.ps1','remove_one_drive.ps1','apply_explorer_settings.ps1')){Copy-Item -LiteralPath (Join-Path $root 'test/powershell/fixtures/verification_module.ps1') -Destination (Join-Path $script:fixtureScripts $name)}
+foreach($name in @('apply_uac_settings.ps1','apply_debloat.ps1','audit_nuc.ps1','initialize_ssh_client.ps1','apply_lan_ping_settings.ps1','apply_hosts_sync.ps1','apply_privacy_settings.ps1','apply_display_settings.ps1','apply_theme_settings.ps1','desktop_icon_layout.ps1','apply_pagefile_settings.ps1','apply_copilot_settings.ps1','apply_amd_privacy_settings.ps1','apply_start_menu_settings.ps1','apply_input_method_settings.ps1','apply_terminal_hotkey.ps1','remove_setup_residue.ps1','remove_one_drive.ps1','apply_explorer_settings.ps1')){Copy-Item -LiteralPath (Join-Path $root 'test/powershell/fixtures/verification_module.ps1') -Destination (Join-Path $script:fixtureScripts $name)}
 $script:fixtureApps=Join-Path $fixture 'apps.txt';[IO.File]::WriteAllText($script:fixtureApps,'Fixture.App')
 @'
 function Invoke-SetupDriverVerification {param($DriverRoot,$VerificationRunId) [pscustomobject]@{Success=($global:AggregateFixtureMode -notin @('False','Throw','Missing','Stale','WrongComputer','WrongUser'));VerificationRunId=$VerificationRunId;Computer=[Environment]::MachineName;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;Targets=@([pscustomobject]@{Status='Current'})}}
@@ -43,7 +43,7 @@ function Test-SetupDriverPayload {param($Hardware,$DriverPackagePath) if($global
 function Test-Path {param($Path,$LiteralPath,$PathType) if($Path -like 'HKLM:*'){return ($global:AggregateFixtureMode -eq 'Throw')};Microsoft.PowerShell.Management\Test-Path @PSBoundParameters}
 $previousProgramData=$env:ProgramData
 try{
- foreach($mode in @('Pass','False','Throw','Missing','Stale','WrongComputer','WrongUser')){
+ foreach($mode in @('Pass','False','Throw','Missing','Stale','WrongComputer','WrongUser','DebloatFeatureFailure')){
   $global:AggregateFixtureMode=$mode;$env:ProgramData=Join-Path $fixture $mode
   $data=Join-Path $env:ProgramData 'NUC8-Setup';[void][IO.Directory]::CreateDirectory((Join-Path $data 'WindowsUpdate'))
   [IO.File]::WriteAllText((Join-Path $data 'TaskbarLayout.xml'),'<Layout><TaskbarPinList><DesktopApp DesktopApplicationID="MSEdge" /></TaskbarPinList></Layout>')
