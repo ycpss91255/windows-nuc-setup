@@ -32,6 +32,8 @@ function Test-Path {param($Path);if([string]$Path -like 'HKLM:*'){return $false}
 '@
 foreach($mode in @('success','module-fail','device-fail')){
  $dir=Join-Path $fixture $mode;New-Item -ItemType Directory $dir|Out-Null
+ foreach($helper in @('start_pins_policy_library.ps1','start_pins_asset_library.ps1')){Copy-Item -LiteralPath (Join-Path $root ('modules/start_menu/'+$helper)) -Destination (Join-Path $dir $helper)}
+ [IO.File]::WriteAllText((Join-Path $dir 'apply_start_menu_settings.ps1'),'param([switch]$NonInteractive);[pscustomobject]@{Success=$true;Status=''Confirmed'';PinCount=0}')
  Assert (Test-Path (Join-Path $dir 'start_pins_policy_library.ps1')) 'controller fixture includes actual Start completion helper'
  $runner=Join-Path $dir 'run.ps1';[IO.File]::WriteAllText($runner,$prefix+"`n"+$body,[Text.UTF8Encoding]::new($true))
  $oldMode=$env:CASE_MODE;$env:CASE_MODE=$mode;$oldPreference=$ErrorActionPreference;$ErrorActionPreference='Continue'
