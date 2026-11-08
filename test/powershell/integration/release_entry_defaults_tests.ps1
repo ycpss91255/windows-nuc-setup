@@ -11,7 +11,7 @@ foreach($entry in @('script/release/stage_driver_release.ps1','script/report/pub
 $stageStub=@'
 function Invoke-StageDriverRelease {
  param($Version,$Repository,$AssetDirectory,$MetadataPath,$PackageRoot)
- if([IO.Path]::GetFullPath($MetadataPath) -cne $env:WINDOWS_SETUP_BINDING_EXPECTED){throw 'fixture metadata binding mismatch'}
+ if([IO.Path]::GetFullPath($MetadataPath) -cne [IO.Path]::GetFullPath($env:WINDOWS_SETUP_BINDING_EXPECTED)){throw 'fixture metadata binding mismatch'}
  if([IO.Path]::GetFullPath($PackageRoot) -cne [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))){throw 'fixture package root mismatch'}
  Write-Output 'FIXTURE_METADATA_BINDING_MATCH';exit 0
 }
@@ -20,7 +20,7 @@ function gh {throw 'fixture forbids remote commands'}
 $publisherStub=@'
 function Assert-TestReportSnapshot {
  param($Report,[switch]$Release)
- if([IO.Path]::GetFullPath($DriverAssetManifestPath) -cne $env:WINDOWS_SETUP_BINDING_EXPECTED){throw 'fixture metadata binding mismatch'}
+ if([IO.Path]::GetFullPath($DriverAssetManifestPath) -cne [IO.Path]::GetFullPath($env:WINDOWS_SETUP_BINDING_EXPECTED)){throw 'fixture metadata binding mismatch'}
  Write-Output 'FIXTURE_METADATA_BINDING_MATCH';exit 0
 }
 function gh {throw 'fixture forbids remote commands'}
