@@ -45,12 +45,22 @@ function Assert-LocalDriverReleaseAsset {
  $archive=[IO.Compression.ZipFile]::OpenRead($file)
  try{
   $names=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  $files=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  $directories=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
   foreach($entry in $archive.Entries){
    $name=$entry.FullName
    if($name.Contains('\') -or $name.StartsWith('/')){throw 'Driver archive contains a noncanonical Windows path.'}
-   if($name.EndsWith('/')){$name=$name.Substring(0,$name.Length-1)}
+   $isDirectory=$name.EndsWith('/')
+   if($isDirectory){$name=$name.Substring(0,$name.Length-1)}
    $segments=@($name.Split('/'))
    if(@($segments|Where-Object {[string]::IsNullOrEmpty($_) -or $_ -in @('.','..') -or $_.EndsWith('.') -or $_.EndsWith(' ') -or $_.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0}).Count -or -not $names.Add($name)){throw 'Driver archive contains an aliased or duplicate Windows path.'}
+   for($index=1;$index -lt $segments.Count;$index++){
+    $parent=$segments[0..($index-1)] -join '/'
+    if($files.Contains($parent)){throw 'Driver archive uses a file as a directory.'}
+    [void]$directories.Add($parent)
+   }
+   if($isDirectory){if($files.Contains($name)){throw 'Driver archive uses a file as a directory.'};[void]$directories.Add($name)}
+   else{if($directories.Contains($name)){throw 'Driver archive uses a directory as a file.'};[void]$files.Add($name)}
   }
   $licenses=@($archive.Entries|Where-Object FullName -ieq 'license')
   if($licenses.Count -ne 1 -or $licenses[0].FullName -cne 'license' -or $licenses[0].Length -ne 11358){throw 'Driver archive must contain exactly one canonical root license.'}
@@ -62,8 +72,18 @@ function Assert-LocalDriverReleaseAsset {
    if($entries.Count -ne 1 -or $entries[0].Length -gt 10485760){throw 'Driver archive identity entry missing or oversized.'}
    $stream=$entries[0].Open();$memory=[IO.MemoryStream]::new()
    try{$stream.CopyTo($memory);$bytes=$memory.ToArray()}finally{$stream.Dispose();$memory.Dispose()}
-   if($name -ceq 'manifest.json'){$sha=[Security.Cryptography.SHA256]::Create();try{$hash=([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()};if($hash -cne $Asset.ManifestSHA256){throw 'Driver manifest digest mismatch.'}}
+   if($name -ceq 'manifest.json'){$sha=[Security.Cryptography.SHA256]::Create();try{$hash=([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()};if($hash -cne $Asset.ManifestSHA256){throw 'Driver manifest digest mismatch.'};$payloadManifest=[Text.Encoding]::UTF8.GetString($bytes).TrimStart([char]0xFEFF)|ConvertFrom-Json}
    else{$identity=[Text.Encoding]::UTF8.GetString($bytes).TrimStart([char]0xFEFF)|ConvertFrom-Json;if($identity.SchemaVersion -ne 2 -or $identity.ProfileId -cne $Asset.ProfileId){throw 'Driver archive profile mismatch.'}}
+  }
+  $expected=@('manifest.json','package.json','license','readme.md','install.cmd','core/hardware.ps1','modules/drivers/install_drivers.ps1','modules/drivers/driver_archive_library.ps1','modules/drivers/driver_plan_library.ps1','modules/drivers/driver_installation_library.ps1','modules/updates/update_stage_library.ps1',('drivers/'+$Asset.ProfileId+'/profile.json'))
+  if($payloadManifest.SchemaVersion -ne 2 -or -not @($payloadManifest.Packages).Count){throw 'Driver archive must declare its payload files.'}
+  foreach($payload in $payloadManifest.Packages){if($payload.File -isnot [string] -or $payload.File -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_.-]*\.zip$' -or $payload.File.Contains('..') -or $payload.File -in $expected){throw 'Driver archive payload name is invalid or duplicated.'};$expected+=@($payload.File)}
+  $profileReadme='drivers/'+$Asset.ProfileId+'/readme.md'
+  if(@($archive.Entries|Where-Object FullName -ceq $profileReadme).Count){$expected+=@($profileReadme)}
+  $actual=@($archive.Entries|Where-Object {-not $_.FullName.EndsWith('/')}|ForEach-Object {$_.FullName})
+  if($actual.Count -ne $expected.Count -or @($expected|Where-Object {$_ -cnotin $actual}).Count){throw 'Driver archive file set does not match its self-contained distribution.'}
+  foreach($directoryName in @($archive.Entries|Where-Object {$_.FullName.EndsWith('/')}|ForEach-Object {$_.FullName})){
+   if(-not @($expected|Where-Object {$_.StartsWith($directoryName,[StringComparison]::Ordinal)}).Count){throw 'Driver archive contains an unexpected directory.'}
   }
  }finally{$archive.Dispose()}
 }

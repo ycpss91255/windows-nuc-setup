@@ -7,9 +7,10 @@ function Reject([scriptblock]$Action,[string]$Name){$failed=$false;try{& $Action
 Assert ([bool](Get-Command Invoke-StageDriverRelease -ErrorAction SilentlyContinue)) '正式草稿入口須先核對來源與資產再上傳'
 $temp=Join-Path $env:TEMP ('driver_stage_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
 $package=Join-Path $temp 'package';[void][IO.Directory]::CreateDirectory($package)
-[IO.File]::WriteAllText((Join-Path $package 'manifest.json'),'{}')
+[IO.File]::WriteAllText((Join-Path $package 'manifest.json'),'{"SchemaVersion":2,"Packages":[{"File":"payload.zip"}]}')
 [IO.File]::WriteAllText((Join-Path $package 'package.json'),'{"SchemaVersion":2,"ProfileId":"fixture"}')
 Copy-Item -LiteralPath (Join-Path $root 'license') -Destination (Join-Path $package 'license')
+foreach($name in @('readme.md','install.cmd','payload.zip','core/hardware.ps1','modules/drivers/install_drivers.ps1','modules/drivers/driver_archive_library.ps1','modules/drivers/driver_plan_library.ps1','modules/drivers/driver_installation_library.ps1','modules/updates/update_stage_library.ps1','drivers/fixture/profile.json')){$path=Join-Path $package $name;[void][IO.Directory]::CreateDirectory((Split-Path $path));[IO.File]::WriteAllText($path,'inert fixture data')}
 $zip=Join-Path $temp 'driver_fixture.zip';New-DeterministicDriverArchive $package $zip
 $metadata=Join-Path $temp 'assets.json';$asset=@{Name='driver_fixture.zip';Size=(Get-Item $zip).Length;SHA256=(Get-FileHash $zip).Hash.ToLowerInvariant();ProfileId='fixture';ManifestSHA256=(Get-FileHash (Join-Path $package 'manifest.json')).Hash.ToLowerInvariant()}
 @{SchemaVersion=1;Releases=@(@{Version='v1.0.0';Assets=@($asset)})}|ConvertTo-Json -Depth 8|Set-Content $metadata -Encoding UTF8
