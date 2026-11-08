@@ -23,7 +23,16 @@ function Invoke-StartPinsLegacyPolicy {
 }
 function Get-StartPinsExportState {
  param([string]$ExportPath,$PolicyState)
- Export-StartLayout -Path $ExportPath -ErrorAction Stop
+ try{Export-StartLayout -Path $ExportPath -ErrorAction Stop}catch{
+  $native=$_.Exception
+  while($native.InnerException -and $native.HResult -ne -2147023728){$native=$native.InnerException}
+  if($native.HResult -ne -2147023728 -or -not $PolicyState.PolicyInstalled){throw}
+  $session=(Get-Process -Id $PID -ErrorAction Stop).SessionId
+  $hosts=@(Get-Process -ErrorAction Stop|Where-Object {$_.ProcessName -eq 'StartMenuExperienceHost' -and $_.SessionId -eq $session})
+  if($hosts.Count -gt 0){throw}
+  # ERROR_NOT_FOUND is not proof of an empty layout; retain a pending observation.
+  return [ordered]@{Success=$false;Status='PendingSignIn';PinCount=$null;ExportPath=$null;ExportStatus='Unavailable';NativeHResult='0x80070490';Reason='開始選單原生匯出尚不可用，且目前工作階段未啟動 Start Host；登入後請再驗證。';CheckedAt=(Get-Date).ToString('o')}
+ }
  $actual=[IO.File]::ReadAllText($ExportPath)|ConvertFrom-Json -ErrorAction Stop
  if(-not $actual -or 'pinnedList' -notin @($actual.PSObject.Properties.Name) -or $null -eq $actual.pinnedList -or $actual.pinnedList -isnot [Array]){throw '開始選單原生匯出缺少有效 pinnedList，不能視為空白。'}
  $count=@($actual.pinnedList).Count
