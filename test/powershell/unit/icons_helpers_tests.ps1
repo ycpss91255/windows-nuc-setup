@@ -5,6 +5,7 @@ function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name
 $library=Join-Path $root 'modules/desktop/icons_settings_library.ps1'
 Assert (Test-Path -LiteralPath $library) 'Icons native algorithm has a named original-source leaf'
 . $library
+function Get-SetupSystemIconNames {@('控制台','本機','網路','資源回收筒')}
 Add-Type -TypeDefinition 'using System;using System.Collections.Generic;namespace NUC8Icons{public static class Desktop{public static Queue<object> Frames=new Queue<object>();public static int Moves;public static object Capture(){return Frames.Dequeue();}public static void Position(int i,int x,int y){Moves++;}}}'
 function Frame($names=@('控制台','本機','網路','資源回收筒'),$offset=0){$i=0;[pscustomobject]@{Width=1920;Height=1080;Icons=@(foreach($n in $names){[pscustomobject]@{Name=$n;Index=$i;X=($i*100+$offset);Y=10};$i++})}}
 $reference=Frame
@@ -26,10 +27,12 @@ foreach($names in @(@('控制台','本機','網路'),@('控制台','本機','網
  $r=Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Load -Reference $reference
  Assert (-not $r.Success -and $r.Error) ('after Capture refuses missing duplicate or extra icons: '+($names -join ','))
 }
-function Get-SetupSystemIconNames {@('控制台','本機','網路','資源回收筒')}
 [NUC8Icons.Desktop]::Frames.Enqueue((Frame -names @('a','b','c','d')));$failure=''
 try{Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Save|Out-Null}catch{$failure=$_.Exception.Message}
 Assert (-not [string]::IsNullOrWhiteSpace($failure)) 'Save refuses four arbitrary icons instead of the four system CLSIDs'
 [NUC8Icons.Desktop]::Frames.Enqueue((Frame))
 $r=Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Save
 Assert ($r.Success -and @($r.Reference.Icons).Count -eq 4 -and $r.Reference.Width -eq 1920) 'Save returns the validated reference without writing mutable staged input'
+$wrong=Frame -names @('a','b','c','d');[NUC8Icons.Desktop]::Frames.Enqueue($wrong);[NUC8Icons.Desktop]::Frames.Enqueue($wrong);$failure=''
+try{Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Load -Reference $wrong|Out-Null}catch{$failure=$_.Exception.Message}
+Assert (-not [string]::IsNullOrWhiteSpace($failure)) 'Load refuses a template with four arbitrary non-system names before native Position'
