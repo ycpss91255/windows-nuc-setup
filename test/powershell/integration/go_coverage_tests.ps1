@@ -8,23 +8,24 @@ $fixture=Join-Path $env:TEMP ('go_coverage_render_'+[guid]::NewGuid().ToString('
 $checks=@([pscustomobject]@{Name='fixture_unit';Layer='Unit';Executed=$true;Passed=$true;Status='Passed';ExitCode=0;Assertions=@([pscustomobject]@{Name='unit';Passed=$true})},[pscustomobject]@{Name='fixture_integration';Layer='Integration';Executed=$true;Passed=$true;Status='Passed';ExitCode=0;Assertions=@([pscustomobject]@{Name='integration';Passed=$true})})
 $arguments=@{Checks=$checks;OutputDirectory=(Join-Path $fixture 'legacy');Commit=('a'*40);RunUrl='https://github.com/example/repo/actions/runs/123';SourceState='Clean';Version='v1.0.0';Environment='Windows fixture';RefType='Branch';RefName='main';MeasuredAt='2026-11-08T00:00:00Z'}
 $legacy=Write-TestReports @arguments
-Assert ($legacy.Coverage -eq 'NotMeasured' -and -not $legacy.PSObject.Properties['GoCoverage']) 'historical reports keep unmeasured PowerShell coverage without invented Go evidence'
+Assert ($legacy.Coverage -eq 'NotMeasured' -and -not $legacy.PSObject.Properties['GoCoverage']) 'reports without coverage retain unmeasured overall state without invented Go evidence'
 $coverage=[pscustomobject]@{SchemaVersion=1;Scope='all-owned-go-including-cli';Metric='statements';Covered=8;TotalStatements=10;Percent=80.0;Threshold=80;Commit=('a'*40);RunUrl=$arguments.RunUrl;MeasuredAt='2026-11-08T00:00:01Z';SourceState='Clean';GoVersion='go1.27.3';Environment='windows/amd64';ProfileSHA256=('b'*64);Packages=@('windows_setup/script/test/acceptance','windows_setup/script/test/requirements_gate','windows_setup/script/test/verify_deployment')}
 $arguments.OutputDirectory=Join-Path $fixture 'measured'
 $measured=Write-TestReports @arguments -GoCoverage $coverage
 $html=[IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'index.html'))
-Assert ($measured.Coverage -eq 'NotMeasured' -and $measured.GoCoverage.Covered -eq 8 -and $html.Contains('Go 程式敘述覆蓋率') -and $html.Contains('80.0%')) 'actual renderer displays measured Go percentage separately from unmeasured PowerShell'
-Assert ($html.IndexOf('<h2>Go 程式敘述覆蓋率</h2>') -lt $html.IndexOf('<h2>各項檢查結果</h2>') -and $html.IndexOf('href="go_coverage.out"') -lt $html.IndexOf('<h2>各項檢查結果</h2>')) 'visible Go percentage and evidence downloads precede the long individual-check section'
+Assert ($measured.Coverage -eq 'NotMeasured' -and $measured.GoCoverage.Covered -eq 8 -and $html.Contains('Go 程式敘述覆蓋率') -and $html.Contains('80.0%')) 'actual renderer displays measured Go as a distinct component without claiming whole-repo coverage'
+$overallIndex=$html.IndexOf('<h2>整體覆蓋率</h2>');$detailIndex=$html.IndexOf('<summary>分項量測明細</summary>');$testsIndex=$html.IndexOf('<h2>測試明細</h2>');$profileIndex=$html.IndexOf('href="go_coverage.out"')
+Assert ($overallIndex -ge 0 -and $detailIndex -gt $overallIndex -and $testsIndex -gt $detailIndex -and $profileIndex -gt $detailIndex -and $profileIndex -lt $testsIndex -and $html.Contains('不等於整體覆蓋率')) '整體先於分項，Go百分比及可下載證據先於測試長列表且範圍明確'
 $markdown=[IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'summary.md'))
-Assert ($markdown.Contains('Go 程式敘述覆蓋率：80.0%；範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。') -and $markdown.Contains('Go statements: 8/10；門檻 80%')) 'Markdown keeps actual Go percentage scope and raw counts on complete lines'
+Assert ($markdown.Contains('Go 程式敘述覆蓋率（分項）：80.0%') -and $markdown.Contains('8/10 statements') -and $markdown.Contains('不含 PowerShell 或第三方程式') -and $markdown.Contains('不等於整體覆蓋率')) 'Markdown分項保留真實百分比計數與明確排除範圍'
 $badge=[IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_coverage.svg'))
 Assert ($badge.Contains('go coverage branch: 80.0%') -and $badge.Contains('#97ca00')) 'Go badge identifies scope and actual passing percentage with base 80 percent colour'
 [xml]$goSvg=$badge
 Assert ($goSvg.SelectSingleNode('//*[local-name()="text"]').InnerText -eq 'go coverage' -and $goSvg.svg.'aria-label'.Contains('branch')) 'Go badge uses short visible label and retains branch scope accessibly'
 [xml]$psSvg=Get-Content (Join-Path $arguments.OutputDirectory 'coverage.svg') -Raw
-Assert ($psSvg.SelectSingleNode('//*[local-name()="text"]').InnerText -eq 'ps coverage' -and $psSvg.svg.'aria-label'.Contains('branch')) 'PowerShell badge visibly identifies its unmeasured language without duplicate branch text'
+Assert ($psSvg.SelectSingleNode('//*[local-name()="text"]').InnerText -eq 'coverage' -and $psSvg.svg.'aria-label'.Contains('branch')) '整體徽章只標示coverage並保留來源分支'
 Assert ($goSvg.svg.defs.clipPath.rect.rx -eq '3' -and $goSvg.svg.defs.linearGradient.id -eq 's' -and $goSvg.svg.g[0].'clip-path' -eq 'url(#r)' -and @($goSvg.svg.g[1].text).Count -eq 4) 'Go coverage uses flat rounded clip gradient and shadow text'
-Assert ($psSvg.svg.defs.clipPath.rect.rx -eq '3' -and @($psSvg.svg.g[1].text).Count -eq 4) 'PowerShell coverage uses the same portable flat SVG template'
+Assert ($psSvg.svg.defs.clipPath.rect.rx -eq '3' -and @($psSvg.svg.g[1].text).Count -eq 4) '整體coverage使用相同可攜flat SVG模板'
 foreach($case in @(@(79.9,'#a4a61d'),@(80,'#97ca00'),@(89.9,'#97ca00'),@(90,'#4c1'))){Assert ((Get-GoCoverageColor ([double]$case[0])) -eq $case[1]) ('base palette boundary '+$case[0])}
 Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'coverage.svg'))).Contains('not measured')) 'existing coverage badge never changes into an overall Go percentage'
 Assert ((Get-Content (Join-Path $arguments.OutputDirectory 'go_coverage.json') -Raw|ConvertFrom-Json).Commit -eq $arguments.Commit) 'Go sidecar retains measured source identity'
@@ -56,11 +57,13 @@ $portal=Join-Path $fixture 'portal'
 & (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $portal -MainSnapshotPath (Join-Path $arguments.OutputDirectory 'summary.json') -RequireGoCoverage|Out-Null
 Assert ((Get-FileHash (Join-Path $portal 'main/go_coverage.out')).Hash -eq (Get-FileHash $profile).Hash -and (Test-Path (Join-Path $portal 'main/go_coverage.svg'))) 'main portal preserves dedicated Go coverage artifacts'
 $portalHome=[IO.File]::ReadAllText((Join-Path $portal 'index.html'))
-Assert ($portalHome.Contains('Go 程式敘述覆蓋率：80.0%') -and $portalHome.Contains('8/10 statements') -and $portalHome.Contains('PowerShell 覆蓋率尚未量測') -and -not $portalHome.Contains('程式碼覆蓋率也尚未量測')) 'actual portal homepage presents measured Go separately from unmeasured PowerShell'
+Assert ($portalHome.Contains('整體覆蓋率') -and $portalHome.Contains('尚未提供完整量測') -and -not $portalHome.Contains('80.0%') -and $portalHome.Contains('main/index.html')) '首頁不以Go分項冒充整體，提供真實分項報告入口'
+$portalDetail=[IO.File]::ReadAllText((Join-Path $portal 'main/index.html'))
+Assert ($portalDetail.Contains('Go 程式敘述覆蓋率：80.0%') -and $portalDetail.Contains('8/10 statements') -and $portalDetail.Contains('不等於整體覆蓋率')) '首頁簡化不丟失報告中的Go量測分項'
 $legacyPortal=Join-Path $fixture 'legacy_portal'
 & (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $legacyPortal -MainSnapshotPath (Join-Path $fixture 'legacy/summary.json')|Out-Null
 $legacyHome=[IO.File]::ReadAllText((Join-Path $legacyPortal 'index.html'))
-Assert ($legacyHome.Contains('程式碼覆蓋率尚未量測') -and -not $legacyHome.Contains('Go 程式敘述覆蓋率：')) 'legacy portal without measured Go never invents a percentage'
+Assert (($legacyHome.Contains('整體覆蓋率') -and $legacyHome.Contains('尚未提供完整量測')) -and -not $legacyHome.Contains('Go 程式敘述覆蓋率：')) 'legacy portal without measured Go never invents a percentage'
 Refuse {& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory (Join-Path $fixture 'missing') -MainSnapshotPath (Join-Path $fixture 'legacy/summary.json') -RequireGoCoverage} 'current main publication cannot silently omit measured Go coverage'
 $before=(Get-FileHash (Join-Path $arguments.OutputDirectory 'summary.json')).Hash
 [IO.File]::AppendAllText($profile,'tampered')
