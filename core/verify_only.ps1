@@ -5,6 +5,7 @@ $currentSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 if($ExpectedUserSID -and $ExpectedUserSID -ne $currentSID){throw '提權後帳號已改變，請使用原帳號的管理員權限。'}
 . (Join-Path $PSScriptRoot 'paths.ps1')
 . (Join-Path $PSScriptRoot 'verification.ps1')
+. (Resolve-NucPath 'ssh_firewall.ps1')
 Initialize-NucReports
 $DriverPackagePath=Get-SetupSavedDriverSelection -ResultPath (Resolve-NucPath 'Setup-Result.json')
 $hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath
@@ -28,8 +29,8 @@ Add-Check 'SSH' ($ssh.State -eq 'Running' -and $ssh.StartMode -eq 'Auto') ($ssh.
 try{ & (Resolve-NucPath 'initialize_ssh_client.ps1') -VerifyOnly|Out-Null;Add-Check 'SSH 客戶端目錄' $true '目前使用者 .ssh/config、active-sites.conf、config.d 已存在' }catch{Add-Check 'SSH 客戶端目錄' $false $_.Exception.Message}
 try{ & (Resolve-NucPath 'apply_lan_ping_settings.ps1') -VerifyOnly|Out-Null;Add-Check '同網段 IPv4/IPv6 Ping' $true 'LocalSubnet 入站回應規則啟用' }catch{Add-Check '同網段 IPv4/IPv6 Ping' $false $_.Exception.Message}
 try{ & (Resolve-NucPath 'apply_hosts_sync.ps1') -VerifyOnly|Out-Null;Add-Check '依網路自動匯入框架' $true '各啟用輸出、目前帳號、背景程序及來源收斂均通過' }catch{Add-Check '依網路自動匯入框架' $false $_.Exception.Message}
-$scope=@(Get-NetFirewallRule -Name OpenSSH-Server-In-TCP -ErrorAction SilentlyContinue|Get-NetFirewallAddressFilter|Select-Object -ExpandProperty RemoteAddress)
-Add-Check 'SSH 防火牆範圍' ($scope -contains 'LocalSubnet') ($scope -join ', ')
+$sshFirewall=Get-SetupSSHFirewallStatus
+Add-Check 'SSH 防火牆規則' $sshFirewall.Passed $sshFirewall.Detail
 foreach($setting in @('STANDBYIDLE','HIBERNATEIDLE')){
  $text=(& powercfg.exe /query SCHEME_CURRENT SUB_SLEEP $setting) -join "`n"
  $match=[regex]::Match($text,'(?im)^.*AC.*:\s*0x([0-9a-f]+)\s*$')
