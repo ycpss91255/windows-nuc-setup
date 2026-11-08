@@ -20,6 +20,8 @@ try {
  try {
   $rejected=$false;try{Assert-RunnerOwnedDirectory -Path $link -Parent $owned -Name (Split-Path $link -Leaf)|Out-Null}catch{$rejected=$true}
   Assert $rejected '真 owned junction 拒絕刪除並保護外部目錄'
+  $rejected=$false;try{Assert-RunnerOwnedDirectory -Path $owned -Parent $parent -Name $name|Out-Null}catch{$rejected=$true}
+  Assert $rejected 'owned 目錄包含子 junction 時拒絕整個遞迴刪除'
  }finally{[IO.Directory]::Delete($link)}
  $self=[Diagnostics.Process]::GetCurrentProcess();$ticks=$self.StartTime.ToUniversalTime().Ticks
  Assert (Test-RunnerProcessIdentity -Process $self -Identifier $PID -StartTicks $ticks) '真程序 handle 與 PID／StartTime 相符'

@@ -5,6 +5,7 @@ function Assert([bool]$Passed,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$N
 $library=Join-Path $root 'script/docker/runner_daemon_library.ps1'
 Assert (Test-Path -LiteralPath $library) 'hosted Docker 有界就緒檢查可供真 CI 呼叫'
 . $library
+. (Join-Path $root 'test/powershell/support/runner_fixture.ps1')
 $hosted=@{GITHUB_ACTIONS='true';RUNNER_ENVIRONMENT='github-hosted';RUNNER_OS='Windows'}
 function Invoke-Scenario([string]$Mode,[hashtable]$Identity=$hosted){
  $script:calls=@();$script:clock=0L;$script:probes=0
@@ -52,7 +53,9 @@ try{Invoke-RunnerBoundedProcess -File (Join-Path $PSHOME 'powershell.exe') -Argu
 Assert ($timedOut -and $watch.ElapsedMilliseconds -lt 5000) '真 owned 睡眠子程序在期限內被終止並傳遞失敗'
 $result=Invoke-RunnerBoundedProcess -File (Join-Path $PSHOME 'powershell.exe') -Arguments @('-NoProfile','-Command','[Console]::Out.Write((''x''*100000));[Console]::Error.Write((''y''*100000));exit 17') -TimeoutMilliseconds 10000
 Assert ($result.ExitCode -eq 17 -and $result.Output.Length -eq 100000) '真 owned 大量雙管輸出不死鎖且保留非零退出碼'
-$owned=Join-Path $env:TEMP ('runner_native_'+[guid]::NewGuid().ToString('N'))
+$ownedParent=(Get-Item -LiteralPath $env:TEMP -Force).FullName
+$ownedName='runner_native_'+[guid]::NewGuid().ToString('N')
+$owned=Join-Path $ownedParent $ownedName
 $null=New-Item -ItemType Directory -Path $owned
 try {
  $fake=Join-Path $owned 'probe.exe'
@@ -69,8 +72,8 @@ public class Probe {
   File.AppendAllText(Path.Combine(folder,"calls"),string.Join(" ",a)+"\n");
   if(mode=="pipe") {
    var p=new ProcessStartInfo(Environment.GetEnvironmentVariable("OWNED_POWERSHELL"),"-NoProfile -Command Start-Sleep -Seconds 8");
-   p.UseShellExecute=false;var child=Process.Start(p);
-   File.WriteAllText(Path.Combine(folder,"child"),child.Id.ToString());
+   p.UseShellExecute=false;p.CreateNoWindow=true;p.WindowStyle=ProcessWindowStyle.Hidden;var child=Process.Start(p);
+   File.WriteAllText(Path.Combine(folder,"child"),child.Id.ToString()+"|"+child.StartTime.ToUniversalTime().Ticks.ToString());
    return 0;
   }
   string calls=File.ReadAllText(Path.Combine(folder,"calls"));
@@ -120,7 +123,15 @@ public class Probe {
   }finally{$env:PATH=$previousPath;$env:GITHUB_ACTIONS=$previousActions;$env:RUNNER_ENVIRONMENT=$previousRunner;$env:RUNNER_OS=$previousOS}
  }finally{
   $childFile=Join-Path $owned 'child'
-  if(Test-Path -LiteralPath $childFile){$childId=[int][IO.File]::ReadAllText($childFile);$child=Get-Process -Id $childId -ErrorAction SilentlyContinue;if($child){$child.Kill()}}
+  if(Test-Path -LiteralPath $childFile){
+   $identity=[IO.File]::ReadAllText($childFile).Split('|');$childId=0;$startTicks=0L
+   if($identity.Count -ne 2 -or -not [int]::TryParse($identity[0],[ref]$childId) -or -not [long]::TryParse($identity[1],[ref]$startTicks)){throw 'Invalid owned child identity.'}
+   $child=Get-Process -Id $childId -ErrorAction SilentlyContinue
+   if($child){try{if(Test-RunnerProcessIdentity -Process $child -Identifier $childId -StartTicks $startTicks){$child.Kill()}}finally{$child.Dispose()}}
+  }
   $env:OWNED_DOCKER_PROBE=$previousProbe;$env:OWNED_POWERSHELL=$previousPowerShell
  }
-}finally{Remove-Item -LiteralPath $owned -Recurse -Force}
+}finally{
+ $checked=Assert-RunnerOwnedDirectory -Path $owned -Parent $ownedParent -Name $ownedName
+ Remove-Item -LiteralPath $checked -Recurse -Force
+}
