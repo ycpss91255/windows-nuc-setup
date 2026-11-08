@@ -49,6 +49,7 @@ $failed=@()
 foreach($entry in $Entries){
  Write-Host ('=== 驅動套件：'+$entry.File+' ===') -ForegroundColor Cyan
  $dest=New-SetupDriverExtractionRoot
+ try{
  Expand-DriverArchive -Archive (Join-Path $DriverRoot $entry.File) -Destination $dest
  $infFiles=@()
  if($entry.File -like 'Chipset*'){$infFiles=@(Get-ChildItem $dest -Recurse -Filter '*.inf'|Where-Object FullName -match 'Windows10-x64')}
@@ -78,6 +79,7 @@ foreach($entry in $Entries){
   $code=$native.ExitCode
   if($code -eq 3010){$reboot=$true}elseif($code -notin @(0,259)){$failed+=($inf.Name+': '+$code)}
  }
+ }finally{try{$null=Remove-SetupDriverExtractionRoot -Path $dest}catch{Write-Warning ('驅動暫存未清理：'+$_.Exception.Message)}}
 }
  [pscustomobject]@{Failures=@($failed);RebootRequired=$reboot;Results=@()}
 }

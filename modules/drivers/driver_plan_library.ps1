@@ -125,8 +125,11 @@ function Get-SetupDriverExtensionReadback {
 function Invoke-SetupDriverInfInstall {
  param([Parameter(Mandatory=$true)][string]$InfPath,[Parameter(Mandatory=$true)][string]$LogPath,[switch]$StageOnly)
  $arguments=@('/add-driver',$InfPath);if(-not $StageOnly){$arguments+='/install'}
+ $lease=$null
+ if($script:SetupDriverExtractionLeases){foreach($key in @($script:SetupDriverExtractionLeases.Keys)){if([IO.Path]::GetFullPath($InfPath).StartsWith($key.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)){$lease=$script:SetupDriverExtractionLeases[$key];$lease.NativeActive=$true;break}}}
  $output=& (Get-SetupDriverPnpTool) @arguments 2>&1
  $code=$LASTEXITCODE
+ if($lease){$lease.NativeActive=$false}
  $output|Out-File -LiteralPath $LogPath -Append -Encoding utf8
  [pscustomobject]@{ExitCode=$code}
 }
@@ -172,14 +175,48 @@ function Invoke-SetupDriverExtensionTarget {
  foreach($result in $results){if($result.Status -notin @('Current','Updated','NewerInstalled','Absent','NotApplicable')){$failures+=($Target.InfPath+': '+$result.Status+' / '+$result.Reason)}}
  [pscustomobject]@{Results=@($results);Failures=@($failures);RebootRequired=$reboot}
 }
+function Get-SetupDriverCacheParent {
+ return (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)) 'windows_setup_driver_cache')
+}
+function Register-SetupDriverExtractionLease {
+ param([Parameter(Mandatory=$true)][string]$Path)
+ $full=[IO.Path]::GetFullPath($Path);$parent=[IO.Path]::GetFullPath((Get-SetupDriverCacheParent))
+ if([IO.Path]::GetDirectoryName($full) -cne $parent -or [IO.Path]::GetFileName($full) -cnotmatch '^[a-f0-9]{32}$'){throw '解壓租約不是固定快取下的本輪 GUID。'}
+ Assert-SetupUpdateProtectedPath -Path $parent -Directory
+ Assert-SetupUpdateProtectedPath -Path $full -Directory
+ if(-not $script:SetupDriverExtractionLeases){$script:SetupDriverExtractionLeases=@{}}
+ if($script:SetupDriverExtractionLeases.ContainsKey($full)){throw '解壓租約重複。'}
+ $script:SetupDriverExtractionLeases[$full]=[pscustomobject]@{NativeActive=$false;Token=[guid]::NewGuid().ToString('N')}
+}
+function Remove-SetupDriverExtractionRoot {
+ param([Parameter(Mandatory=$true)][string]$Path)
+ $full=[IO.Path]::GetFullPath($Path);$parent=[IO.Path]::GetFullPath((Get-SetupDriverCacheParent))
+ if([IO.Path]::GetDirectoryName($full) -cne $parent -or [IO.Path]::GetFileName($full) -cnotmatch '^[a-f0-9]{32}$'){return $false}
+ if(-not $script:SetupDriverExtractionLeases -or -not $script:SetupDriverExtractionLeases.ContainsKey($full) -or $script:SetupDriverExtractionLeases[$full].NativeActive){return $false}
+ Assert-SetupUpdateAncestors -CommonDataRoot ([IO.Path]::GetDirectoryName($parent))
+ Assert-SetupUpdateProtectedPath -Path $parent -Directory
+ Assert-SetupUpdateProtectedPath -Path $full -Directory
+ $directories=[Collections.Generic.Stack[string]]::new();$directories.Push($full)
+ while($directories.Count){
+  foreach($item in @(Get-ChildItem -LiteralPath $directories.Pop() -Force -ErrorAction Stop)){
+   if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw '解壓清理拒絕重新解析點；保留資料。'}
+   Assert-SetupUpdateAcl -Acl (Get-Acl -LiteralPath $item.FullName -ErrorAction Stop) -Directory:$item.PSIsContainer
+   if($item.PSIsContainer){$directories.Push($item.FullName)}
+  }
+ }
+ Remove-Item -LiteralPath $full -Recurse -Force -ErrorAction Stop
+ $script:SetupDriverExtractionLeases.Remove($full)
+ return $true
+}
 function New-SetupDriverExtractionRoot {
  . (Join-Path $PSScriptRoot '../updates/update_stage_library.ps1')
  $common=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
  Assert-SetupUpdateAncestors -CommonDataRoot $common
- $parent=Join-Path $common 'windows_setup_driver_cache'
+ $parent=Get-SetupDriverCacheParent
  New-SetupUpdateProtectedDirectory -Path $parent
  $stage=Join-Path $parent ([guid]::NewGuid().ToString('N'))
  New-SetupUpdateProtectedDirectory -Path $stage
+ Register-SetupDriverExtractionLease -Path $stage
  return $stage
 }
 function Assert-SetupDriverPayloadFiles {
@@ -216,6 +253,7 @@ function Invoke-SetupOfficialDriverPackage {
   return [pscustomobject]@{PackageId=$Entry.Id;Results=@($Entry.Drivers|ForEach-Object {New-SetupDriverScopeSkippedResult -Target $_});Failures=@();RebootRequired=$false;ExtractionRoot=''}
  }
  $stage=New-SetupDriverExtractionRoot
+ try{
  Expand-DriverArchive -Archive $Archive -Destination $stage
  Assert-SetupDriverPayloadFiles -Entry $Entry -Root $stage
  $results=@();$failures=@();$reboot=$false
@@ -244,4 +282,5 @@ function Invoke-SetupOfficialDriverPackage {
   catch{$results+=[pscustomobject]@{InfPath=$extension.InfPath;Status='Unverified';Association='Unknown';Reason=$_.Exception.Message};$failures+=($extension.InfPath+': '+$_.Exception.Message)}
  }
  [pscustomobject]@{PackageId=$Entry.Id;Results=@($results);Failures=@($failures);RebootRequired=$reboot;ExtractionRoot=$stage}
+ }finally{try{$null=Remove-SetupDriverExtractionRoot -Path $stage}catch{Write-Warning ('驅動暫存未清理：'+$_.Exception.Message)}}
 }

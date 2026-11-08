@@ -8,6 +8,7 @@ $parent=Join-Path $fixture 'windows_setup_driver_cache';[void][IO.Directory]::Cr
 function Get-SetupDriverCacheParent {$parent}
 function Assert-SetupUpdateProtectedPath {param($Path,[switch]$Directory) if($script:denyAcl){throw 'fixture owner/acl rejected'}}
 function Assert-SetupUpdatePlainPath {param($Path)}
+function Assert-SetupUpdateAncestors {param($CommonDataRoot)}
 function Assert-SetupUpdateAcl {param($Acl,[switch]$Directory)}
 function NewStage { $p=Join-Path $parent ([guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($p);[IO.File]::WriteAllText((Join-Path $p 'payload.sys'),'owned');Register-SetupDriverExtractionLease -Path $p;return $p }
 $one=NewStage;$two=NewStage
