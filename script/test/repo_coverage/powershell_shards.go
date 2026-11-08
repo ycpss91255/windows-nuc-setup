@@ -39,6 +39,28 @@ type PowerShellShardInput struct {
 	Read     func(string) ([]byte, error)
 }
 
+// Context is written by the actual collector child, using its own PID and the
+// suite/wrapper bytes it executed. Outer artifact packaging cannot add it later.
+// Legacy non-sharded evidence may omit it; new shard aggregation requires it.
+type PowerShellWorkerContext struct {
+	Commit, RunUrl                                             string
+	RunAttempt, ShardIndex, ShardCount, GlobalIndex, ProcessId int
+	TestFile, TestSHA256, WrapperFile, WrapperSHA256           string
+}
+
+func validNativePowerShellContext(context *PowerShellWorkerContext, pid int) bool {
+	if context == nil || pid <= 0 || context.ProcessId != pid {
+		return false
+	}
+	if !regexp.MustCompile(`^[a-f0-9]{40}$`).MatchString(context.Commit) || !regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+$`).MatchString(context.RunUrl) || context.RunAttempt < 1 {
+		return false
+	}
+	if context.ShardCount < 1 || context.ShardCount > 4 || context.ShardIndex < 0 || context.ShardIndex >= context.ShardCount || context.GlobalIndex < 0 || context.GlobalIndex%context.ShardCount != context.ShardIndex {
+		return false
+	}
+	return validShardFile(context.TestFile, context.TestSHA256) && validShardFile(context.WrapperFile, context.WrapperSHA256) && context.TestFile != context.WrapperFile
+}
+
 func validShardFile(file, hash string) bool {
 	canonical, err := RelativePath(file)
 	return err == nil && canonical == file && !strings.ContainsAny(file, "\r\n\t\\") && strings.HasSuffix(file, ".ps1") && regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(hash)
@@ -88,6 +110,10 @@ func validateShardCatalog(catalog PowerShellShardCatalog, inventory Inventory) e
 // unrelated strings into otherwise validated raw files that we preserve.
 func exactShardFields(data []byte, shape reflect.Type, required bool) error {
 	switch shape.Kind() {
+	case reflect.Pointer:
+		if strings.TrimSpace(string(data)) != "null" {
+			return exactShardFields(data, shape.Elem(), true)
+		}
 	case reflect.Struct:
 		var object map[string]json.RawMessage
 		if err := json.Unmarshal(data, &object); err != nil {
@@ -223,6 +249,10 @@ func MergePowerShellShards(identity PowerShellShardIdentity, catalog PowerShellS
 			}
 			if err := exactShardFields(data, reflect.TypeOf(worker), false); err != nil {
 				return nil, err
+			}
+			actualContext := PowerShellWorkerContext{Commit: identity.Commit, RunUrl: identity.RunUrl, RunAttempt: identity.RunAttempt, ShardIndex: manifest.ShardIndex, ShardCount: identity.ShardCount, GlobalIndex: global, ProcessId: worker.ProcessId, TestFile: test.File, TestSHA256: test.SHA256, WrapperFile: catalog.Wrapper.File, WrapperSHA256: catalog.Wrapper.SHA256}
+			if worker.Context == nil || *worker.Context != actualContext {
+				return nil, fmt.Errorf("native PowerShell execution context does not match canonical suite or run")
 			}
 			spans := map[string]bool{}
 			for _, command := range worker.Commands {
