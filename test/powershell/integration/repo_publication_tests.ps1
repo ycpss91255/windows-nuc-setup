@@ -87,6 +87,25 @@ $forged=New-LocalEntry
 Refuse {Test-PortalReleaseEvidence -Entry $forged -CoverageToolPath $tool} '即使外層digest重簽仍拒絕與coverage內層hash不同的附件'
 [IO.File]::WriteAllText((Join-Path $public 'coverage.xml'),$xmlOriginal,$utf8)
 $entry=New-LocalEntry
+$global:repoDownloadSource=$public
+$global:repoDownloadRelease=[pscustomobject]@{draft=$false;tag_name='v1.0.0';immutable=$true;html_url=$entry.ReleaseUrl;assets=@($entry.AssetDigests|ForEach-Object {@{name=$_.Name;digest=$_.Digest}})}
+function gh {
+ $words=@($args);$global:LASTEXITCODE=0
+ if($words[0] -eq 'api' -and $words -contains '--paginate'){return ($global:repoDownloadRelease|ConvertTo-Json -Depth 10 -Compress)}
+ if($words[0] -eq 'api' -and $words[1] -like '*/commits/*'){return 'a'*40}
+ if($words[0] -eq 'api' -and $words[1] -like '*/actions/workflows/*'){return}
+ if($words[0] -eq 'release' -and $words[1] -eq 'download'){
+  $destination=$words[[Array]::IndexOf($words,'--dir')+1]
+  for($i=0;$i -lt $words.Count;$i++){if($words[$i] -eq '--pattern'){Copy-Item -LiteralPath (Join-Path $global:repoDownloadSource $words[$i+1]) -Destination (Join-Path $destination $words[$i+1])}}
+  return
+ }
+ throw ('Unexpected download call: '+($words -join ' '))
+}
+$inputs=& (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository example/repo -OutputDirectory (Join-Path $fixture 'download')
+$downloaded=@(Get-Content $inputs.CatalogPath -Raw -Encoding UTF8|ConvertFrom-Json)[0]
+foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml')){Assert (Test-Path -LiteralPath (Join-Path $downloaded.AssetDirectory $name)) ('實際Release匯入完整覆蓋率附件：'+$name)}
+$null=Test-PortalReleaseEvidence -Entry $downloaded -CoverageToolPath $tool
+Remove-Item Function:\gh
 $before=(Get-FileHash (Join-Path $public 'summary.json')).Hash
 [IO.File]::AppendAllText((Join-Path $evidence 'coverage.xml'),'tampered')
 Refuse {& (Join-Path $root 'script/test/attach_repo_coverage.ps1') -PublicDirectory $public -CoverageDirectory $evidence -CoverageToolPath $tool} '篡改逐行證據不得附加'
