@@ -47,6 +47,7 @@ try{
   Assert ((-not $caught) -eq $pass) ('例外與摘要一致 '+$mode)
   Assert (@($global:restartFixture.Calls|Where-Object {$_ -eq 'install_windows_updates.ps1'}).Count -eq 1 -and $global:restartFixture.Calls.Contains('remove_setup_residue.ps1')) ('更新只呼叫一次且後續清理持續 '+$mode)
   Assert ($global:restartFixture.SleepCalls -eq 1) ('登入政策等待使用安全替身 '+$mode)
+  if($mode -eq 'success'){$calls=@($global:restartFixture.Calls);Assert ($calls[0] -eq 'install_windows_updates.ps1' -and $calls.IndexOf('install_windows_updates.ps1') -lt $calls.IndexOf('apply_power_settings.ps1')) '續跑先更新才重試驅動與GUI，不能以舊排列先執行'}
   $saved=Get-Content -LiteralPath $result -Raw|ConvertFrom-Json
   if($mode -eq 'success'){Assert ($saved.PendingModules.Count -eq 0 -and $saved.Success -and $global:restartFixture.Driver.NonInteractive -and $global:restartFixture.Driver.Board -eq 'NUC8i7HVB') '本輪驗證清除 Start pending 並保留驅動參數'}
   if($mode -eq 'retry_failure'){Assert ($saved.FailedModules -contains 'apply_power_settings.ps1') '失敗模組仍留可續跑'}
