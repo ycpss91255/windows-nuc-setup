@@ -1,4 +1,7 @@
 {
+  "update_progress_library.ps1": "modules/updates/update_progress_library.ps1",
+  "update_worker_library.ps1": "modules/updates/update_worker_library.ps1",
+  "update_callback.cs": "modules/updates/native/update_callback.cs",
   "uac_library.ps1": "modules/uac/uac_library.ps1",
   "apply_uac_settings.ps1": "modules/uac/apply_uac_settings.ps1",
   "apply_uac_settings.cmd": "modules/uac/apply_uac_settings.cmd",
