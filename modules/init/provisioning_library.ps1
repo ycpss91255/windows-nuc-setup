@@ -199,3 +199,25 @@ function Invoke-InitOobeFlow {
  Invoke-InitProvisioningApply $state $statePath (Join-Path $StageRoot 'runtime/modules/init/assets') { (Read-Host '是否現在繼續？Windows 可能重新啟動；同意請輸入 YES') -ceq 'YES' }
  if($state.Phase -eq 'AwaitingLogon'){Write-Host '請依 Windows 畫面登入剛建立的正式帳號，再開啟上述續跑入口完成 SSH。'}
 }
+function Get-InitIdentityContext {
+ $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+ $principal=New-Object Security.Principal.WindowsPrincipal($identity)
+ return @{Sid=$identity.User.Value;IsAdministrator=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);SessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId}
+}
+function Get-InitProvisioningContext {
+ $identity=Get-InitIdentityContext
+ $os=Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+ $setup=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\Setup' -ErrorAction Stop
+ $image=Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\State' -ErrorAction Stop
+ $machine=Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Cryptography' -ErrorAction Stop
+ $processes=@(Get-CimInstance -ClassName Win32_Process -Filter "Name='msoobe.exe' OR Name='CloudExperienceHostBroker.exe' OR Name='CloudExperienceHostApp.exe' OR Name='oobenetworkconnectionflow.exe' OR Name='explorer.exe'" -ErrorAction Stop)
+ $session=@($processes|Where-Object {$_.SessionId -eq $identity.SessionId})
+ $oobe=@($session|Where-Object {$_.Name -in @('msoobe.exe','CloudExperienceHostBroker.exe','CloudExperienceHostApp.exe','oobenetworkconnectionflow.exe')}).Count -gt 0
+ $desktop=$false;$registered=''
+ if($identity.Sid -ne 'S-1-5-18'){
+  $profile=Get-ItemProperty -LiteralPath ('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\'+$identity.Sid) -ErrorAction Stop
+  $registered=[Environment]::ExpandEnvironmentVariables([string]$profile.ProfileImagePath)
+  foreach($process in @($session|Where-Object {$_.Name -eq 'explorer.exe'})){if((Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop).Sid -eq $identity.Sid){$desktop=$true}}
+ }
+ return @{Sid=$identity.Sid;IsAdministrator=$identity.IsAdministrator;Build=[int]$os.BuildNumber;ProductType=[int]$os.ProductType;Is64Bit=([Environment]::Is64BitProcess -and $env:PROCESSOR_ARCHITECTURE -eq 'AMD64');IsWinPE=[bool](Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT');OobeInProgress=[int]$setup.OOBEInProgress;SetupInProgress=[int]$setup.SystemSetupInProgress;OobeProcessInSession=$oobe;MachineGuid=[string]$machine.MachineGuid;ComputerName=$env:COMPUTERNAME;ImageState=[string]$image.ImageState;DesktopOwned=$desktop;ProfilePath=$env:USERPROFILE;RegisteredProfile=$registered}
+}
