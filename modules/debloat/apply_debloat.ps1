@@ -19,6 +19,8 @@ $result|ConvertTo-Json -Depth 5|Set-Content (Join-Path $PSScriptRoot 'Debloat-Re
 Write-Host ('本次實際移除：'+($result.RemovedApps -join ', '))
 Write-Host ('清單中仍存在：'+($remaining -join ', '))
 if($code -ne 0 -or $remaining.Count -or $provisioned.Count){throw '清理未完全成功，請查看 Debloat 紀錄及 Debloat-Result.json。'}
+. (Join-Path $PSScriptRoot '../privacy/privacy_library.ps1')
+Invoke-CurrentUserPrivacy|Out-Null
 Write-Host 'Win11Debloat 清理完成。' -ForegroundColor Green
 
 
