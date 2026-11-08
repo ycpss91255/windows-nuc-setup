@@ -3,6 +3,7 @@ $ErrorActionPreference='Stop'
 $init=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\modules\init'))
 . (Join-Path $init 'oobe_library.ps1')
 . (Join-Path $init 'provisioning_library.ps1')
+$realFileGuard=${function:Assert-InitProtectedFile};$realFileProtect=${function:Protect-InitStateFile};$realFolderGuard=${function:Assert-InitProtectedDirectory}
 $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 Assert ([bool](Get-Command Save-InitProvisioningState -ErrorAction SilentlyContinue)) 'state persistence validates protected directory before writing'
@@ -34,4 +35,19 @@ $state.PSObject.Properties.Remove('Password');$state.LastErrorCode='synthetic'
 Save-InitProvisioningState $state $path
 Assert (([IO.File]::ReadAllText($path)|ConvertFrom-Json).LastErrorCode -eq 'synthetic') 'atomic replacement retains latest non-secret status'
 Assert (@(Get-ChildItem -LiteralPath $temp -File).Count -eq 1) 'successful persistence leaves no temporary state copies'
+function Set-Acl {param($LiteralPath,$AclObject,$ErrorAction) $script:memoryAcl=$AclObject}
+function Get-Acl {param($LiteralPath,$ErrorAction) return $script:memoryAcl}
+& $realFileProtect $path
+& $realFileGuard $path
+Assert ($script:memoryAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq 'S-1-5-32-544') 'real file ACL constructor explicitly sets Administrators owner'
+$everyone=New-Object Security.Principal.SecurityIdentifier('S-1-1-0')
+$script:memoryAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($everyone,'Write','Allow')))
+$rejected=$false;try{& $realFileGuard $path}catch{$rejected=$true}
+Assert $rejected 'real file ACL guard rejects Everyone Write in memory descriptor'
+Protect-InitFolder $temp
+& $realFolderGuard $temp
+Assert $script:memoryAcl.AreAccessRulesProtected 'real folder guard accepts exact protected constructor descriptor'
+$script:memoryAcl.SetAccessRuleProtection($false,$true)
+$rejected=$false;try{& $realFolderGuard $temp}catch{$rejected=$true}
+Assert $rejected 'real folder guard rejects inherited permissions'
 Write-Host ('ALL PASS: '+$script:count+' TEMP state assertions; ACL mocked, no host ACL changes')
