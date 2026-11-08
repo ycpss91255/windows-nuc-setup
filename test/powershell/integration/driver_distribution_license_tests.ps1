@@ -61,3 +61,23 @@ foreach($before in @($false,$true)){
  }finally{$archive.Dispose();$inputArchive.Dispose()}
  Reject {Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $bad)} ('檔案不得同時作為目錄前綴，與ZIP入口順序無關：'+$before)
 }
+$extra=Join-Path $temp 'unexpected.zip';Copy-Item -LiteralPath $good -Destination $extra
+$archive=[IO.Compression.ZipFile]::Open($extra,[IO.Compression.ZipArchiveMode]::Update)
+try{$entry=$archive.CreateEntry('unexpected.txt');$s=$entry.Open();$s.Dispose()}finally{$archive.Dispose()}
+Reject {Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $extra)} '正式驅動ZIP不接受manifest與執行結構之外的額外檔案'
+$missingRuntime=Join-Path $temp 'missing_runtime.zip';Copy-Item -LiteralPath $good -Destination $missingRuntime
+$archive=[IO.Compression.ZipFile]::Open($missingRuntime,[IO.Compression.ZipArchiveMode]::Update)
+try{$archive.GetEntry('core/hardware.ps1').Delete()}finally{$archive.Dispose()}
+Reject {Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $missingRuntime)} '正式驅動ZIP不可缺必要自有執行檔'
+$explicitDirectory=Join-Path $temp 'explicit_directory.zip';Copy-Item -LiteralPath $good -Destination $explicitDirectory
+$archive=[IO.Compression.ZipFile]::Open($explicitDirectory,[IO.Compression.ZipArchiveMode]::Update)
+try{$entry=$archive.CreateEntry('core/')}finally{$archive.Dispose()}
+Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $explicitDirectory)
+Assert $true '合法明確目錄入口仍可作為必要檔案的祖先'
+[IO.File]::Delete($profileReadme)
+$withoutDoc=Join-Path $temp 'without_profile_doc'
+$null=& (Join-Path $root 'script/package/export_driver_package.ps1') -SourceDirectory $package -OutputDirectory $withoutDoc -ProfileId synthetic_board -ProfilesRoot $registry
+[IO.File]::WriteAllText($profileReadme,$original,[Text.UTF8Encoding]::new($false))
+$optional=Join-Path $temp 'optional_doc.zip';New-DeterministicDriverArchive $withoutDoc $optional
+Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $optional)
+Assert $true '沒有機型README的合法自訂profile仍可獨立分發'
