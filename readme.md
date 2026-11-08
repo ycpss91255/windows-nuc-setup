@@ -558,15 +558,17 @@ Hosts／SSH 獨立入口為 `modules\ssh\apply_hosts_sync.cmd`、`sync_hosts.cmd
 
 若要一併檢查已準備的 NUC 獨立包，將上述檢查參數改為 `-PackageOnly -HardwareProfile NUC8 -DriverPackagePath "實際獨立包目錄"`；這只驗證檔案，不安裝驅動。完整來源包準備不代表主程式自帶各硬體驅動，詳見下一節。以上採用官方下載與既有套件檢查，無需額外開發環境。
 
-### 準備獨立 NUC 驅動包
+### 準備獨立驅動包
 
-既有可用包放在 `windows_driver_packages/nuc8`，包含 `install.cmd`、自身的 `core`／`modules` helper、`package.json`、`manifest.json` 與四個 ZIP；不依賴原主程式路徑。需要重新建包時，準備符合 `modules\drivers/manifests/nuc8.json` 的四個封存檔，並將此範本複製為來源目錄的 `manifest.json`，再執行：
+既有可用包放在 `windows_driver_packages/nuc8`，包含 `install.cmd`、自身的 `core`／`modules` helper、`drivers` 設定檔、`package.json`、`manifest.json` 與十二個 ZIP；不依賴原主程式路徑。需要重新建包時，準備符合 [drivers/nuc8i7hvk_hnk/manifest.json](drivers/nuc8i7hvk_hnk/manifest.json) 的十二個封存檔，並將此範本複製為來源目錄的 `manifest.json`，再執行：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_driver_package.ps1 -SourceDirectory "已核對的驅動來源目錄" -OutputDirectory "新的獨立包目錄"
 ```
 
-輸出目錄必須不存在。導出會驗證四個封存檔雜湊、產生可攜入口及機型識別；不安裝驅動。取得新驅動應使用原廠可信來源，改版需要重新驗證，不能直接修改 SHA256 來略過檢查。
+設定檔依主機板 Product 精準選擇，沒有對應型號或未選獨立包時略過；已知其他板號不能手動偽裝成 NUC。機型與套件／INF 版本、依賴及官方來源見 [驅動設定檔](drivers/readme.md)。新增電腦設定檔使用相同安裝引擎，另建立板號白名單與已查核 manifest，不複製安裝程式。
+
+輸出目錄必須不存在。導出會驗證全部封存檔雜湊、產生可攜入口及設定檔雜湊綁定的機型識別；不安裝驅動。取得新驅動應使用原廠可信來源，改版需要重新驗證，不能直接修改 SHA256 來略過檢查。
 
 `package_hashes.json` 是本機主程式交付快照，不追蹤於 Git，也不把外部驅動納入主程式。獨立驅動依自身 manifest 核對；Git clone 缺少交付快照不代表程式損壞。
 ### 不納入 Git 的內容
