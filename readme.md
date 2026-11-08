@@ -4,12 +4,11 @@
 
 ![Language](https://img.shields.io/badge/Language-Go%20%2F%20PowerShell-blue?style=flat)
 ![Testing](https://img.shields.io/badge/Testing-Go%20test%20%2F%20PS5.1-orange?style=flat)
-[![Go coverage](https://ycpss91255.github.io/windows_setup/main/go_coverage.svg?style=flat-v2)](https://ycpss91255.github.io/windows_setup/main/index.html)
-[![PowerShell coverage](https://ycpss91255.github.io/windows_setup/main/coverage.svg?style=flat-v2)](https://ycpss91255.github.io/windows_setup/main/index.html)
+[![Coverage](https://ycpss91255.github.io/windows_setup/main/coverage.svg?style=flat-v2)](https://ycpss91255.github.io/windows_setup/main/index.html)
 
 [最新已發布 main 報表](https://ycpss91255.github.io/windows_setup/) · [Actions 與七天報告附件](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
 
-上方 Go／PowerShell 覆蓋率徽章取自最近一次成功部署的 main 報表；Go 顯示實測值，PowerShell 尚未量測。System／完整 E2E 尚未執行；報表標示提交與時間。若部署失敗，請以 Windows CI 徽章及 Actions 的最新執行結果為準。PR 不更新公開報表。
+上方覆蓋率徽章顯示最近一次成功部署 main 的整體自有程式碼覆蓋率，量測範圍、分項及來源可在報表查閱。徽章與報表標示提交及時間；若部署失敗，以 Windows CI 與 Actions 最新執行結果為準。PR 不更新公開報表。
 Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、模組設定與後續驗收。本文以繁體中文提供完整操作說明；版本摘要見 [變更紀錄](doc/changelog/changelog.md)，實作與驗證細節以中文 Git 提交及 GitHub Release 為準。
 
 ## 快速開始
@@ -520,28 +519,24 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_
 
 ### 自動報表與徽章
 
-CI 使用與 base 相同的 GitHub Actions 原生徽章；Language／Testing 使用 Shields flat，Go／PowerShell coverage 使用 20px 圓角 SVG。Go 顯示實測值，PowerShell 顯示 `not measured`；報表中的 System `not run` 保留未驗證狀態。
+CI 使用與 base 相同的 GitHub Actions 原生徽章；整體覆蓋率使用儲存庫自行產生的 flat SVG。Pages 保留簡潔報表，提供測試結論、版本、提交、時間、整體覆蓋率、語言明細，以及 Release、README、Actions 與可下載證據。不依賴 Codecov、Coveralls 或外部報表平台。
 
-每次測試從實際斷言的結構化事件與程序退出碼產生 JSON、Markdown、自含 HTML、JUnit XML 及分層 SVG。報告先顯示一般使用者結論、宣告版本／分支或 Release 範圍、變更、已知限制與下載，再列所選層級、斷言結果、套件耗時、提交及工作樹狀態；新增 `test/powershell/unit` 或 `integration` 測試會自動列入執行清單。程序崩潰、缺少斷言事件或任何失敗均不能標成通過。
+README 只展示整體覆蓋率，語言分項放在報表與 Actions 摘要。整體以自有正式程式碼的可執行行計算，從各語言量測結果換算相同計量後加總覆蓋行與總行數，不取各語言百分比平均。測試、第三方內容及非執行設定檔依來源清單明確分類；缺來源、未支援語言或缺量測時不公布假的總率。
 
-正式測試證據只上傳去識別的 `public` 報表子目錄，附件保留 7 天；原始程序 log 留在 runner 暫存，不公開至 Pages。main 僅在必要測試、Go 覆蓋率與需求驗收全部通過後更新公開 HTML／SVG；失敗結果請查看 Actions 與短期附件，公開徽章保留最後一次成功部署。PR 只有短期附件；main 首頁呈現最新分支報表；版本頁由各 Release 保存的品質 JSON 快照重建，保留原 Version／Commit／MeasuredAt。舊版缺少快照時顯示 Unknown，不拿新測試補寫舊版證據。實機 reports 仍獨立保留，不納入 Git 或 Pages。
+每次測試從實際斷言事件及程序退出碼產生 JSON、Markdown、自含 HTML、JUnit XML 與徽章。程序崩潰、缺少斷言事件或任何失敗均不能標成通過。新增 `test/powershell/unit` 或 `integration` 測試會自動列入執行清單。公開報表只包含靜態檢查、單元與隔離整合結果。
 
-Go 徽章顯示最近一次成功部署 main 的實際 **statement coverage**，不是手填百分比或全儲存庫覆蓋率。量測涵蓋所有自有 Go 正式套件及 CLI；完整測試使用 `-coverpkg=./script/test/...`，命令列子程序另外 instrumentation，合併原始計數後以 `Covered × 100 >= TotalStatements × 80` 判定 CI 門檻，不以四捨五入後的顯示值過關。第三方 vendor、測試程式、PowerShell 與 Windows 系統操作不在 Go 分母內。
+PR 的去識別測試附件保留七天；main 通過全部必要門檻後更新 Pages，失敗時公開徽章仍保留上次成功部署的證據。Release 長期保存 `repo_coverage.json`、`coverage_inventory.json`、`coverage.xml` 與測試摘要，核對來源、計量、雜湊及計數。歷史版本依原始證據整理頁面並連回不可變原始附件；缺紀錄就如實說明，不以目前測試回填。
 
-[Go 量測 JSON](https://ycpss91255.github.io/windows_setup/main/go_coverage.json)與[原始合併 profile](https://ycpss91255.github.io/windows_setup/main/go_coverage.out)可下載核對數量、套件範圍、提交、執行來源、量測時間及 SHA256。徽章數值、來源提交與時間以已部署產物為準，不能代表尚未部署的修改。歷史 Release 沒有 Go 量測時維持未量測，不回填目前結果；既有不可變 Release 附件格式不變。
-
-PowerShell `Coverage` 與既有 `coverage.svg` 仍顯示 `NotMeasured`：目前沒有對 PowerShell 原始碼作行／分支執行量測，斷言數不是覆蓋率。沿用 base 由真實量測產生徽章的原則；覆蓋率採與上方原生 CI 相近的 flat 圓角外觀，不把 Go 百分比套用為 PowerShell 或整體覆蓋率。System／完整 E2E 保持 `Deferred / NotRun`，不計入已通過項目。
+各機續跑及排錯的 `reports` 保留於該機，不納入 Git 或 Pages。`windows.cmd -AfterRestart` 與 `windows.cmd -VerifyOnly` 是產品功能，繼續供設定後續跑及檢查。
 
 ### 測試分層與本機入口
 
-測試依 base 的 tool-first 方式放在 `test/powershell/<層級>`；不引入額外測試框架。純函式／模擬 Windows API 的單元測試與實際跨元件的隔離整合測試分開執行，不把同一套測試重複掛名兩層。
+測試依 base 的 tool-first 方式放在 `test/powershell/<層級>`；純函式／模擬 Windows API 的單元測試與實際跨元件的隔離整合測試分開執行，不把同一套測試重複掛名兩層。
 
 | 層級 | 範圍 | 執行環境與限制 |
 | --- | --- | --- |
 | `unit` | Init 路由、帳號／密碼與 XML；硬體適用性、略過與結果彙總；輸入法模組 | Windows API 以 mock 取代，不建立真實帳號或修改使用者語言 |
 | `integration` | 清理器與暫存 Windows 目錄；硬體入口、包身分／雜湊、獨立驅動包導出；hosts 規劃；真實 Git 發布；來源結構與入口路由 | 使用暫存檔案及隔離 Git，實際組件協作，不安裝驅動或套用系統偏好 |
-| `system` | 目標電腦既有設定的驗收 | 必須明確 opt-in；CI 不執行，預設 `NotRun` |
-| 完整安裝 E2E | 全新 Windows → Init → Windows 設定 → 手動重開機 → 續跑與驗收 | 尚未完成全流程實測，不以 unit／integration 成功替代 |
 
 ```powershell
 # 全部單元與隔離整合測試（預設）
@@ -551,7 +546,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\run_ci.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\run_ci.ps1 -Layer Integration
 ```
 
-報告每項包含 `Layer`、`Status`、`Executed`。System 與完整 E2E 固定列 `NotRun`／`Executed=false`，不算成通過；未選擇的隔離層不宣稱已執行。`SourceOnly` 只略過 Git 不含的安裝二進位，仍檢查程式、資產、驅動中繼資料及入口。
+報告每項包含 `Layer`、`Status`、`Executed`。未選擇的隔離層不宣稱已執行。`SourceOnly` 只略過 Git 不含的安裝二進位，仍檢查程式、資產、驅動中繼資料及入口。
 
 ### 開發用 Windows Docker 環境
 
@@ -582,23 +577,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\docker\docker.p
 
 CI 的 `docker-tests` 使用真正的 `windows-2022` runner 執行 Docker build/run；容器內執行全部 PS5.1 單元／隔離整合測試，再產生明確的合成首頁樣本並執行 Go 需求正負例、全套 Go 覆蓋率量測與產物驗收。主機另核對容器報告中的提交、執行來源、測試狀態與環境，不以主機驗收代替容器內 Go 執行。PS5.1 報表的套件／斷言統計不把 Go 驗收數量混入；Go 結果與實際退出碼另列於 Docker 工作日誌。`ci-rollup` 同時要求主機測試、需求驗收及 Docker 測試成功。在 [Actions](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml) 開啟該次執行，於 Artifacts 下載 `docker-test-reports-執行ID-重試次數`，解壓後開 `index.html`；這是容器的獨立 public 報告，只保留七天。原始 logs 不上傳。Pages 仍展示 Windows runner 的報告，與明確標記 Windows container 的短期報告分開；Docker 門檻未通過時不發布新的 Pages 報表，避免混淆兩個環境的證據。
 
-### 實機 system 驗收與完整安裝驗證
-
-在指定測試機先依本文完成 Init／Windows，手動重新開機並執行 `windows.cmd -AfterRestart`。再以該機目標使用者的管理員 PowerShell 明確呼叫：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\test\powershell\system\invoke_acceptance.ps1 -RunOnThisComputer
-```
-
-此入口只呼叫既有 `Verify-Only`、更新驗收報告並檢查本輪結果，不安裝更新、不重新套用偏好、不重新開機；不帶開關只回傳 `NotRun`。它能證明既有狀態驗收，不能單獨證明曾從全新系統完整安裝。自動登入、實際工作列、顯示、Terminal 快捷鍵與適用時的 AMD 提示仍須人工目視確認。
-
-完整 E2E 必須在可重建的測試機或 VM 記錄起始 Windows 映像／版本、主機型號、使用者、是否選驅動包、工具版本，依本文從 Init 跑到重開後驗收；保留該機 reports 與每一階段的失敗／略過。沒有執行過的階段必須記為未執行。此輪未執行這項完整安裝測試，CI 不會自動修改 runner 來模擬通過。
-
 每次 CI 將去識別的 HTML／JSON／Markdown／JUnit 與徽章上傳為 windows-test-reports artifact，保留 7 天；原始套件 log 不上傳。另有 requirements-fixture artifact，只含程式明確建立的合成首頁樣本，固定假 SHA、示例執行網址及 Synthetic 環境標記，不含帳密或實機資料，同樣保留 7 天供需求門檻驗證。這份樣本不是正式測試證據，不混入 windows-test-reports、Release 或 Pages。其他測試副本、帳號 answer XML、每機 Reports 與秘密均不上傳。Actions 本身執行 log 的保留天數另由儲存庫設定控制，不是 YAML artifact 保留期。
 
 實機 Setup-Result.json、Setup-Progress.json、Acceptance-Result.json 與驗證結果是續跑或排錯資料，原有 Git 忽略規則保留；CI 不清理這些檔案。設定未完成時不要刪除 Setup-Result.json。雲端通過僅代表來源／隔離測試成功，不表示 NUC 硬體或 OOBE 已通過實機驗收。
 
-目前尚未取得合適的 Windows 11 x64 可丟棄測試環境，依使用者決定暫緩 System／完整安裝 E2E；未執行不等於通過。合併仍要求 PR 與 ci-rollup，暫不將尚無環境的 system-e2e 設為必要檢查。v0.2.0 保持預覽版及未完成完整驗證的聲明。
 
 ## 維護者版本發布
 
