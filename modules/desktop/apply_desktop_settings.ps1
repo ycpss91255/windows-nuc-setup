@@ -1,16 +1,22 @@
 ﻿#Requires -Version 5.1
 #Requires -RunAsAdministrator
-param([switch]$Worker)
+param([switch]$Worker,[string]$SourcePackageRoot)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'desktop_safety.ps1')
+if(-not $Worker){$SourcePackageRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))}
+if([string]::IsNullOrWhiteSpace($SourcePackageRoot)){throw '桌面 worker 缺少原始套件位置，拒絕清理。'}
+Assert-DesktopSourceLocation -SourceRoot $SourcePackageRoot -DesktopRoots @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))
 $root=Join-Path $env:ProgramData 'NUC8-Setup'
 New-Item -ItemType Directory $root -Force|Out-Null
 if(-not $Worker -and [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0){
  $workerPath=Join-Path $root 'Desktop-Worker.ps1'
  Copy-Item -LiteralPath $PSCommandPath -Destination $workerPath -Force
+ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'desktop_safety.ps1') -Destination (Join-Path $root 'desktop_safety.ps1') -Force
  $resultPath=Join-Path $root 'Desktop-Result.json'
  if(Test-Path $resultPath){Remove-Item -LiteralPath $resultPath -Force}
  $name='NUC8-Apply-Desktop'
- $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$workerPath+'" -Worker')
+ $command="& '"+$workerPath.Replace("'","''")+"' -Worker -SourcePackageRoot '"+$SourcePackageRoot.Replace("'","''")+"'"
+ $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)))
  $principal=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
  Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -Force|Out-Null
  Start-ScheduledTask -TaskName $name

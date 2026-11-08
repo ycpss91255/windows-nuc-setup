@@ -1,4 +1,5 @@
-﻿{
+{
+  "desktop_safety.ps1": "modules/desktop/desktop_safety.ps1",
   "apply_autologon_settings.ps1": "modules/accounts/apply_autologon_settings.ps1",
   "apply_autologon_settings.cmd": "modules/accounts/apply_autologon_settings.cmd",
   "Autologon64.exe": "modules/accounts/Autologon64.exe",

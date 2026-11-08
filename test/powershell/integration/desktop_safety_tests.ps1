@@ -9,6 +9,7 @@ $source=[IO.File]::ReadAllText((Join-Path $root 'modules/desktop/apply_desktop_s
 $prefix=$source.Substring(0,$source.IndexOf('$root=Join-Path'))
 $prefix=($prefix -split "`r?`n"|Where-Object {$_ -notmatch '^#Requires' -and $_ -notmatch '^param\('}) -join "`n"
 $prefix=$prefix.Replace("Join-Path `$PSScriptRoot 'desktop_safety.ps1'","Join-Path `$root 'modules/desktop/desktop_safety.ps1'").Replace("@([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))",'$fixtureDesktopRoots')
+$prefix=$prefix.Replace('$PSScriptRoot','$moduleDirectory')
 foreach($case in @(
  @{Name='nested package';Package=(Join-Path $desktop 'windows_setup');Worker=$false;Reject=$true},
  @{Name='package equals desktop';Package=$desktop;Worker=$false;Reject=$true},
@@ -22,7 +23,7 @@ foreach($case in @(
  $moduleDirectory=if($case.Worker){Join-Path $fixture 'ProgramData/NUC8-Setup'}else{Join-Path $packageRoot 'modules/desktop'}
  $Worker=$case.Worker;$SourcePackageRoot=if($case.Worker){$packageRoot}else{''};$PSScriptRoot=$moduleDirectory
  $refused=$false
- try{& ([scriptblock]::Create($prefix))}catch{$refused=$true}
+ try{& ([scriptblock]::Create($prefix))}catch{$refused=$true;if(-not $case.Reject){Write-Host $_.Exception.Message}}
  Assert ($refused -eq $case.Reject) ('actual desktop module pre-mutation guard: '+$case.Name)
  if($packageRoot){Assert (([IO.File]::ReadAllText((Join-Path $packageRoot 'keep.txt'))) -eq 'keep') ('package contents retained: '+$case.Name)}
 }
@@ -40,12 +41,12 @@ foreach($location in @($desktop,(Join-Path $desktop '中文 子目錄'),$common,
 }
 # Execute worker staging only; no task is registered and no desktop is deleted.
 $ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors)
-$workerBranch=$ast.Find({param($a)$a -is [Management.Automation.Language.IfStatementAst] -and $a.Clauses[0].Item1.Extent.Text -like '-not $Worker*'},$true)
+$workerBranch=$ast.Find({param($a)$a -is [Management.Automation.Language.IfStatementAst] -and $a.Clauses[0].Item1.Extent.Text -like '-not $Worker*SessionId*'},$true)
 $staging=@();foreach($statement in $workerBranch.Clauses[0].Item2.Statements){$staging+=$statement.Extent.Text;if($statement.Extent.Text -match '^\$action='){break}}
 function New-ScheduledTaskAction {param($Execute,$Argument);[pscustomobject]@{Arguments=$Argument}}
 $originalRoot=$root;$root=Join-Path $fixture 'ProgramData/NUC8-Setup';New-Item -ItemType Directory $root -Force|Out-Null
 $PSScriptRoot=Join-Path $originalRoot 'modules/desktop';$PSCommandPath=Join-Path $PSScriptRoot 'apply_desktop_settings.ps1';$SourcePackageRoot=Join-Path $fixture "safe package ' 中文"
-$stagingText=($staging -join "`n").Replace('$PSCommandPath','$fixtureScriptPath');$fixtureScriptPath=$PSCommandPath
+$stagingText=($staging -join "`n").Replace('$PSCommandPath','$fixtureScriptPath').Replace('$PSScriptRoot','$fixtureModuleDirectory');$fixtureScriptPath=$PSCommandPath;$fixtureModuleDirectory=$PSScriptRoot
 . ([scriptblock]::Create($stagingText))
 $workerCommand=$action.Arguments
 if($workerCommand.Contains('-EncodedCommand ')){$workerCommand=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($workerCommand -split '-EncodedCommand ')[1]))}

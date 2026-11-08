@@ -6,7 +6,7 @@ foreach($entry in @('init.cmd','windows.cmd','readme.md')){if(-not(Test-Path -Li
 $config=[IO.File]::ReadAllText((Resolve-NucPath 'configure_nuc.ps1'))
 $modules=@('apply_autologon_settings.ps1')+@([regex]::Matches($config,"File='([^']+\.ps1)'" )|ForEach-Object {$_.Groups[1].Value})
 if($modules.Count -ne 19 -or @($modules|Select-Object -Unique).Count -ne 19){throw '模組清單不是 19 個不重複項目。'}
-$required=$modules+@('paths.ps1','verification.ps1','paths.json','start_windows.ps1','initialize_nuc.ps1','oobe_library.ps1','cleanup_oobe.ps1','run_module.ps1','Autologon64.exe','finalize_taskbar.ps1','desktop_layout.json','terminal_hotkey_listener.ps1','remove_one_drive.ps1','initialize_ssh_client.ps1','apply_lan_ping_settings.ps1','apply_hosts_sync.ps1','CustomHostsSync\network_sites.ps1','CustomHostsSync\sync_custom_hosts.ps1','CustomHostsSync\watch_custom_hosts.ps1','CustomHostsSync\sites.json','CustomHostsSync\hosts_readme.md','CustomHostsSync\ssh_readme.md','debloat_apps.txt','debloat_profile.json','win11debloat\Win11Debloat.ps1','verify_only.ps1','audit_nuc.ps1')
+$required=$modules+@('paths.ps1','verification.ps1','paths.json','start_windows.ps1','initialize_nuc.ps1','oobe_library.ps1','cleanup_oobe.ps1','run_module.ps1','Autologon64.exe','finalize_taskbar.ps1','desktop_layout.json','desktop_safety.ps1','terminal_hotkey_listener.ps1','remove_one_drive.ps1','initialize_ssh_client.ps1','apply_lan_ping_settings.ps1','apply_hosts_sync.ps1','CustomHostsSync\network_sites.ps1','CustomHostsSync\sync_custom_hosts.ps1','CustomHostsSync\watch_custom_hosts.ps1','CustomHostsSync\sites.json','CustomHostsSync\hosts_readme.md','CustomHostsSync\ssh_readme.md','debloat_apps.txt','debloat_profile.json','win11debloat\Win11Debloat.ps1','verify_only.ps1','audit_nuc.ps1')
 foreach($file in $required){if(-not(Test-Path -LiteralPath (Resolve-NucPath $file) -PathType Leaf)){throw ('缺少工具包檔案：'+$file)}}
 $scriptFiles=@(Get-ChildItem -LiteralPath (Join-Path $script:NucPackageRoot 'core') -Filter '*.ps1')+@(Get-ChildItem -LiteralPath (Join-Path $script:NucPackageRoot 'modules') -Recurse -Filter '*.ps1'|Where-Object {$_.FullName -notmatch '[\/]Win11Debloat[\/]'})
 foreach($file in $scriptFiles){
@@ -35,9 +35,8 @@ if(-not $PackageOnly){
  $owners=@($explorers|ForEach-Object {(Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid).Sid})
  if($identity.User.Value -notin $owners){throw '請以目前登入桌面的本機管理員帳號執行，不可用另一個管理員帳號提權。'}
  foreach($cmd in @('wt.exe','winget.exe')){if(-not(Get-Command $cmd -ErrorAction SilentlyContinue)){throw ('缺少 '+$cmd+'；請先安裝 Windows Terminal / App Installer。')}}
- foreach($desktop in @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))){
-  if([IO.Path]::GetFullPath($script:NucPackageRoot).StartsWith($desktop.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)){throw '工具包不可放在桌面內執行，因流程會清理桌面。請從 USB 或 Downloads 執行。'}
- }
+ . (Resolve-NucPath 'desktop_safety.ps1')
+ Assert-DesktopSourceLocation -SourceRoot $script:NucPackageRoot -DesktopRoots @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))
 }
 Write-Host ('前置檢查通過：19 個模組、必要檔案及 '+$payload.Count+' 個驅動封存檔；帳號及路徑動態取得。') -ForegroundColor Green
 
