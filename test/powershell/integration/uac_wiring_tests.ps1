@@ -25,4 +25,7 @@ $fresh=@($verify.FindAll({param($n) $n -is [Management.Automation.Language.Comma
 Assert ($fresh.Count -eq 1) '總驗收讀取本輪UAC結果'
 $dispatcher=Get-Content (Join-Path $root 'core/run_module.ps1') -Raw
 Assert ($dispatcher.Contains("'Apply-UACSettings'") -and $dispatcher.Contains('if($Restore)') -and $dispatcher.Contains(' -Restore')) 'dispatcher保留還原參數跨UAC提權'
+function Get-ItemProperty {param($LiteralPath,$Name,$ErrorAction) [pscustomobject]@{MachineGuid=''}}
+$failed=$false;try{Invoke-CurrentUserUac}catch{$failed=$true}
+Assert $failed '缺少機器識別不繼續套用'
 Write-Host 'ALL PASS: UAC routing without host writes'
