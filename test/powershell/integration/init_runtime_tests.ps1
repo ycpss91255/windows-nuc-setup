@@ -36,7 +36,9 @@ function Passwords([string]$Second='fixture&<密碼'){$script:first=ConvertTo-Se
 function Disposed($Value){try{$copy=$Value.Copy();$copy.Dispose();return $false}catch{return $true}}
 try{
  ResetCase;$script:handled=$true;RunInit
- Assert ($script:provisioning.SourceRoot -eq (Join-Path $fixture 'source') -and -not $script:starts.Count) 'ShiftF10 provisioning fastpath保留且不進legacy提示'
+  $actualRoot=[string]$script:provisioning.SourceRoot;$expectedRoot=Join-Path $fixture 'source'
+ $safeActual=if($actualRoot.StartsWith($fixture,[StringComparison]::OrdinalIgnoreCase)){'<FIXTURE>'+$actualRoot.Substring($fixture.Length)}else{'<outside fixture; length='+$actualRoot.Length+'>'}
+ Assert ($actualRoot -eq $expectedRoot -and -not $script:starts.Count) ('ShiftF10 provisioning fastpath保留且不進legacy提示; sourceRoot='+$safeActual+' expectedRoot=<FIXTURE>\source starts='+$script:starts.Count)
  Invoke-SetupInit -EntryPath $entry -ModuleRoot $module -ResumeStatePath (Join-Path $fixture 'resume.json') -ExpectedUserSID fixture_expected
  Assert ($script:provisioning.ResumeStatePath -eq (Join-Path $fixture 'resume.json') -and $script:provisioning.ExpectedUserSID -eq 'fixture_expected') 'F10續跑狀態及預期SID原樣傳遞'
  ResetCase;RunInit;Assert (-not $script:starts.Count -and -not(Test-Path $env:ProgramData)) '正式桌面不重設帳號、不需第二Init或SSH'
