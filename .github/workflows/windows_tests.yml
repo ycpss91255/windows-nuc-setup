@@ -73,7 +73,7 @@ jobs:
 
   isolated-tests:
     runs-on: windows-2022
-    timeout-minutes: 45
+    timeout-minutes: 90
     defaults:
       run:
         shell: powershell
@@ -97,6 +97,13 @@ jobs:
       - name: 列出 runner 本機 SDK
         run: |
           dotnet --list-sdks
+      - name: 準備固定的 workflow 語義檢查器
+        run: |
+          . .\script\docker\install_managed_tools.ps1
+          $artifact = Get-ContainerWorkflowLintArtifact
+          $directory = Join-Path $env:RUNNER_TEMP 'actionlint-1.7.12'
+          Install-ContainerToolArtifact -Artifact $artifact -Destination $directory -ArchiveDirectory (Join-Path $env:RUNNER_TEMP 'actionlint-download')
+          "WINDOWS_SETUP_ACTIONLINT=$(Join-Path $directory 'actionlint.exe')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - name: 執行 Windows PowerShell 5.1 隔離測試
         run: |
           & .\script\test\run_ci.ps1 -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results')
@@ -271,8 +278,6 @@ jobs:
     needs: [ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 10
-    env:
-      WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
     permissions:
       contents: write
     steps:
@@ -299,6 +304,8 @@ jobs:
           cache: false
       - name: 建立真正整體覆蓋率驗證器
         shell: powershell
+        env:
+          WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
         run: |
           go build -o $env:WINDOWS_SETUP_COVERAGE_TOOL ./script/test/repo_coverage_tool
       - name: 下載同一次執行的去識別品質證據
@@ -309,6 +316,7 @@ jobs:
       - name: 草稿附齊品質證據後發布不可變版本
         shell: powershell
         env:
+          WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
@@ -324,8 +332,6 @@ jobs:
     needs: [isolated-tests, requirements-gate, docker-tests, release, ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 15
-    env:
-      WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
     permissions:
       contents: read
       actions: read
@@ -346,11 +352,14 @@ jobs:
           cache: false
       - name: 建立真正整體覆蓋率驗證器
         shell: powershell
+        env:
+          WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
         run: |
           go build -o $env:WINDOWS_SETUP_COVERAGE_TOOL ./script/test/repo_coverage_tool
       - name: 核對版本品質附件並本地產生索引
         shell: powershell
         env:
+          WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           EVENT_REF: ${{ github.ref }}
