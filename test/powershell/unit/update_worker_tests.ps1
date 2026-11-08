@@ -7,9 +7,9 @@ Assert (Test-Path $lib) '真更新worker可安全呼叫具名來源'
 . (Join-Path $root 'modules/updates/update_progress_library.ps1');. $lib
 function Start-Transcript {param($Path)};function Stop-Transcript {}
 function Restart-Computer {throw '禁止重開機'}
-$script:ops=@();$script:failInstall=$false;$script:downloaded=$true
+$script:searchCode=2;$script:searchEmpty=$false;$script:ops=@();$script:failInstall=$false;$script:downloaded=$true
 $script:update=[pscustomobject]@{Title='fixture update';InstallationBehavior=[pscustomobject]@{CanRequestUserInput=$false};EulaAccepted=$true;IsDownloaded=$true}
-$script:searcher=New-Object PSObject;$script:searcher|Add-Member ScriptMethod Search {param($query) [pscustomobject]@{Updates=@($script:update)}}
+$script:searcher=New-Object PSObject;$script:searcher|Add-Member ScriptMethod Search {param($query) [pscustomobject]@{ResultCode=$script:searchCode;Warnings=@();Updates=$(if($script:searchEmpty){@()}else{@($script:update)})}}
 $script:session=[pscustomobject]@{ClientApplicationID=''};$script:session|Add-Member ScriptMethod CreateUpdateSearcher {$script:searcher};$script:session|Add-Member ScriptMethod CreateUpdateDownloader {[pscustomobject]@{Updates=$null}};$script:session|Add-Member ScriptMethod CreateUpdateInstaller {[pscustomobject]@{Updates=$null}}
 function New-Object {param([Parameter(Position=0)]$TypeName,[Parameter(Position=1)]$ArgumentList,$ComObject) if($ComObject){switch($ComObject){'Microsoft.Update.Session'{return $script:session};'Microsoft.Update.UpdateColl'{return ,(New-Object Collections.ArrayList)};'Microsoft.Update.SystemInfo'{return [pscustomobject]@{RebootRequired=$true}};default{throw '禁止未知COM'}}};Microsoft.PowerShell.Utility\New-Object @PSBoundParameters}
 function Invoke-SetupUpdateOperation {param($Operation,$Client,$Titles,$ProgressPath) $script:ops+=@($Operation);if($Operation -eq 'Download'){return [pscustomobject]@{ResultCode=2}};$o=[pscustomobject]@{RebootRequired=$true};$o|Add-Member ScriptMethod GetUpdateResult {param($Index) [pscustomobject]@{ResultCode=$(if($script:failInstall){4}else{2});HResult=0}};return $o}
@@ -29,4 +29,14 @@ Assert ($failed -and ($script:ops -join ',') -eq 'Download') '未下載完成不
 Write-SetupUpdateProgress -Path (Join-Path $d 'progress.json') -Stage '下載更新' -Detail test -PercentComplete 47 -CurrentUpdate 2 -TotalUpdates 4 -CurrentTitle '真標題' -CurrentPercent 53
 $p=Get-Content (Join-Path $d 'progress.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert ($p.PercentComplete -eq 47 -and $p.CurrentUpdate -eq 2 -and $p.TotalUpdates -eq 4 -and $p.CurrentTitle -eq '真標題' -and $p.CurrentPercent -eq 53 -and $p.UpdatedAt) '原子進度JSON保存真值與心跳'
+$script:searchEmpty=$true
+foreach($code in @(3,4,5)){
+ $script:searchCode=$code;$script:ops=@();$failed=$false;try{Invoke-SetupWindowsUpdateWorker -StateRoot $d}catch{$failed=$true}
+ Assert ($failed -and $script:ops.Count -eq 0) ('搜尋失敗或部分成功不可假稱零更新成功 '+$code)
+ $r=Get-Content (Join-Path $d 'WindowsUpdate-Result.json') -Raw -Encoding UTF8|ConvertFrom-Json
+ Assert ($r.SearchResultCode -eq $code -and $r.Selected -eq 0) ('保留真搜尋結果碼 '+$code)
+}
+$script:searchCode=2;Invoke-SetupWindowsUpdateWorker -StateRoot $d
+$r=Get-Content (Join-Path $d 'WindowsUpdate-Result.json') -Raw -Encoding UTF8|ConvertFrom-Json
+Assert ($r.SearchResultCode -eq 2 -and $r.Selected -eq 0) '搜尋成功且零更新才能正常完成'
 Write-Host 'ALL PASS: original worker with mocked COM only'
