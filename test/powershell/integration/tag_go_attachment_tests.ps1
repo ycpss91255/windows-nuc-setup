@@ -65,6 +65,8 @@ foreach($mutation in @('commit','run','profile','missing_profile','missing_metad
 }
 # Execute the actual producer step for both events, using only synthetic local reports.
 $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
+$measureAt=$workflow.IndexOf('measure_go_coverage.ps1');$attachAt=$workflow.IndexOf('attach_go_coverage.ps1');$repoAt=$workflow.IndexOf('run_repo_coverage.ps1');$publishAt=$workflow.IndexOf('publish_quality_release.ps1')
+Assert ($measureAt -ge 0 -and $measureAt -lt $attachAt -and $attachAt -lt $repoAt -and $repoAt -lt $publishAt) 'workflow measures Go before attachment and preserves strict repo validation before publication'
 $step=[regex]::Match($workflow,'(?ms)^      - name: 附加分項 Go 證據\r?\n(?<body>.*?)(?=^      - name:|\z)').Groups['body'].Value
 Assert ($step -and $step -notmatch '(?m)^        if:') 'both branch and Tag events execute the Go producer step'
 $run=[regex]::Match($step,'(?ms)^        run: \|\r?\n(?<run>.*)').Groups['run'].Value -replace '(?m)^          ',''
