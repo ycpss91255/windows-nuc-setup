@@ -85,13 +85,35 @@ function Get-SetupDriverDeviceInventory {
 function Get-SetupDriverPnpTool {
  return Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'pnputil.exe'
 }
+function Get-SetupDriverExtensionXmlNodes {
+ param([Parameter(Mandatory=$true)][Xml.XmlDocument]$Inventory)
+ $root=$Inventory.DocumentElement
+ if(-not $root -or $root.NamespaceURI -or $Inventory.DocumentType){throw '原生延伸驅動盤點不是預期XML。'}
+ $child=switch -CaseSensitive ($root.Name){'PnpUtil'{'Driver'} 'pnputil'{'driver'} default{throw '原生延伸驅動盤點不是預期XML。'}}
+ $drivers=@($root.SelectNodes('*'))
+ foreach($driver in $drivers){
+  if($driver.Name -cne $child -or $driver.NamespaceURI){throw '原生延伸驅動XML子結構不符。'}
+  foreach($field in @('OriginalName','ClassGuid')){if(@($driver.SelectNodes($field)).Count -ne 1){throw '原生延伸驅動XML必要欄位缺少或重複。'}}
+  $original=[string]$driver.OriginalName;$class=[guid]::Empty
+  if($original -notmatch '^[a-zA-Z0-9_ .()-]+\.inf$' -or $original.StartsWith('..') -or -not [guid]::TryParse([string]$driver.ClassGuid,[ref]$class)){throw '原生延伸驅動XML的INF檔名或ClassGuid無效。'}
+  if($class -eq [guid]'{e2f84ce7-8efa-411c-aa69-97454ca4cb57}'){
+   foreach($field in @('ProviderName','ExtensionId','DriverVersion')){if(@($driver.SelectNodes($field)).Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$driver.$field)){throw '原生延伸驅動XML必要欄位缺少或重複。'}}
+   $id=[guid]::Empty;$date=[datetime]::MinValue;$version=$null
+   $parts=[regex]::Match([string]$driver.DriverVersion,'^(\d{2}/\d{2}/\d{4})\s+(\d+\.\d+\.\d+\.\d+)$')
+   if(-not [guid]::TryParse([string]$driver.ExtensionId,[ref]$id) -or -not $parts.Success -or -not [datetime]::TryParseExact($parts.Groups[1].Value,'MM/dd/yyyy',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$date) -or -not [version]::TryParse($parts.Groups[2].Value,[ref]$version)){throw '原生延伸驅動XML版本、日期或ExtensionId無效。'}
+   if($driver.GetAttribute('DriverName') -notmatch '^[a-zA-Z0-9_ .()-]+\.inf$' -or @($driver.SelectNodes('Devices')).Count -gt 1){throw '原生延伸驅動XML發布名稱或關聯結構無效。'}
+   foreach($device in @($driver.SelectNodes('Devices/*'))){if($device.Name -cne 'Device' -or $device.NamespaceURI -or -not $device.GetAttribute('InstanceId')){throw '原生延伸驅動XML裝置關聯無效。'}}
+  }
+ }
+ return $drivers
+}
 function Get-SetupDriverExtensionInventory {
  $output=& (Get-SetupDriverPnpTool) /enum-drivers /devices /format xml 2>&1
  if($LASTEXITCODE -ne 0){throw ('原生延伸驅動XML盤點失敗：'+$LASTEXITCODE+'；不能以僅存在DriverStore當作已套用。')}
  $settings=New-Object Xml.XmlReaderSettings;$settings.DtdProcessing=[Xml.DtdProcessing]::Prohibit;$settings.XmlResolver=$null;$settings.MaxCharactersInDocument=52428800
  $reader=[Xml.XmlReader]::Create([IO.StringReader]::new(($output -join "`n")),$settings)
  try{$document=New-Object Xml.XmlDocument;$document.XmlResolver=$null;$document.Load($reader)}finally{$reader.Dispose()}
- if($document.DocumentElement.LocalName -cne 'pnputil'){throw '原生延伸驅動盤點不是預期XML。'}
+ $null=Get-SetupDriverExtensionXmlNodes -Inventory $document
  return $document
 }
 function Get-SetupDriverExtensionReadback {
@@ -99,7 +121,7 @@ function Get-SetupDriverExtensionReadback {
  $matches=@($Devices|Where-Object {$ids=@($_.HardwareIds);@($Target.HardwareIds|Where-Object {$_ -in $ids}).Count -gt 0})
  if($Build -lt $Target.MinimumBuild -or $Target.Architecture -ne 'amd64'){return [pscustomobject]@{InfPath=$Target.InfPath;Status='NotApplicable';Association='None';InstanceId='';TargetVersion=$Target.DriverVersion}}
  if(-not $matches){return [pscustomobject]@{InfPath=$Target.InfPath;Status='Absent';Association='None';InstanceId='';TargetVersion=$Target.DriverVersion}}
- $lineage=@($Inventory.SelectNodes('/pnputil/driver')|Where-Object {[string]$_.ClassGuid -ieq '{e2f84ce7-8efa-411c-aa69-97454ca4cb57}' -and [string]$_.ExtensionId -ieq $Target.ExtensionId -and [string]$_.OriginalName -ieq [IO.Path]::GetFileName($Target.InfPath)})
+ $lineage=@((Get-SetupDriverExtensionXmlNodes -Inventory $Inventory)|Where-Object {[string]$_.ClassGuid -ieq '{e2f84ce7-8efa-411c-aa69-97454ca4cb57}' -and [string]$_.ExtensionId -ieq $Target.ExtensionId -and [string]$_.OriginalName -ieq [IO.Path]::GetFileName($Target.InfPath)})
  $candidates=@($lineage|Where-Object {[string]$_.ProviderName -eq $Target.Provider -or [string]$_.ProviderName -in @($Target.ProviderAliases)})
  $targetDate=[datetime]::MinValue
  if(-not [datetime]::TryParseExact([string]$Target.DriverDate,'MM/dd/yyyy',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$targetDate)){throw '延伸驅動目標缺少可信DriverVer日期。'}

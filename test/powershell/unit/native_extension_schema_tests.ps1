@@ -14,7 +14,7 @@ $device=[pscustomobject]@{InstanceId='PCI\GPU_FIXTURE';HardwareIds=$target.Hardw
 $inventory=Get-SetupDriverExtensionInventory
 $r=Get-SetupDriverExtensionReadback -Target $target -Devices @($device) -Inventory $inventory -Build 26200
 Assert ($inventory.DocumentElement.Name -ceq 'PnpUtil' -and $r.Status -ceq 'Current' -and $r.Association -ceq 'Active') '原生PascalCase schema能讀回精確ExtensionId/版本/供應商/本輪裝置關聯'
-foreach($case in @('root','child','missing','duplicate','path','date','namespace','native','dtd')){
+foreach($case in @('root','child','missing','duplicate','path','date','namespace','class','extension','version','published','association','duplicateDevices','native','dtd')){
  $script:xml=$native;$script:exit=0
  switch($case){
   root{$script:xml=$native.Replace('PnpUtil','UnknownInventory')}
@@ -24,6 +24,12 @@ foreach($case in @('root','child','missing','duplicate','path','date','namespace
   path{$script:xml=$native.Replace('amdwddme.inf','../amdwddme.inf')}
   date{$script:xml=$native.Replace('06/28/2023','99/99/2023')}
   namespace{$script:xml=$native.Replace('<PnpUtil>','<PnpUtil xmlns="urn:unknown">')}
+  class{$script:xml=$native.Replace('{e2f84ce7-8efa-411c-aa69-97454ca4cb57}','invalid-guid')}
+  extension{$script:xml=$native.Replace('{07a2a561-d001-4503-b239-ef2fe0379efb}','invalid-guid')}
+  version{$script:xml=$native.Replace('31.0.21001.46001','latest')}
+  published{$script:xml=$native.Replace('oem_fixture.inf','../oem_fixture.inf')}
+  association{$script:xml=$native.Replace(' InstanceId="PCI\GPU_FIXTURE"','')}
+  duplicateDevices{$script:xml=$native.Replace('<Devices>','<Devices/><Devices>')}
   native{$script:exit=87}
   dtd{$script:xml='<!DOCTYPE PnpUtil [<!ENTITY bad SYSTEM "file:///private">]><PnpUtil>&bad;</PnpUtil>'}
  }
