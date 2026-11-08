@@ -21,4 +21,15 @@ try{
  $result=Get-Content (Join-Path $fixture 'NUC8-Setup/OneDrive-Result.json') -Raw|ConvertFrom-Json
  Assert ($result.Success -and $result.VerifiedAbsent -and $result.ExitCodes[0] -eq -2147219813) 'actual entry persists exit code with verified absent evidence'
  Assert (([IO.File]::ReadAllText((Join-Path $fixture 'OneDrive/keep.txt'))) -eq 'personal data') 'personal cloud data retained'
+ foreach($profileAlias in @(($fixture+'\.'),($fixture+'\'))){
+  $env:USERPROFILE=$profileAlias;$script:removed=$false;$continued=$false;$failure=''
+  try{& ([scriptblock]::Create($entry));$continued=$true}catch{$failure=$_.Exception.Message}
+  Assert $continued ('same actual profile represented by dot or trailing separator must not fail; error='+$failure)
+  Assert (([IO.File]::ReadAllText((Join-Path $fixture 'OneDrive/keep.txt'))) -eq 'personal data') 'alias profile cleanup retains actual personal cloud data'
+ }
+ foreach($invalidProfile in @([IO.Path]::GetPathRoot($fixture),'\\fixture.invalid\share\')){
+  $env:USERPROFILE=$invalidProfile;$script:removed=$false;$failure=''
+  try{& ([scriptblock]::Create($entry))}catch{$failure=$_.Exception.Message}
+  Assert ($failure -match 'OneDrive 路徑不符' -and $failure.Contains('raw=') -and $failure.Contains('canonical=')) 'drive and share roots are refused with safe raw and canonical path diagnostics'
+ }
 }finally{$env:USERPROFILE=$oldProfile;$env:ProgramData=$oldData}
