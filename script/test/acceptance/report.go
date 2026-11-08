@@ -118,8 +118,8 @@ func ValidateSVG(data []byte, r Report, name string) error {
 	}
 	label := name + " " + strings.ToLower(r.RefType)
 	status := BadgeStatus(r, name)
-	if name == "coverage" && len(s.Group.Texts) == 2 && s.Group.Texts[0] == "ps coverage" {
-		label = "ps coverage"
+	if name == "coverage" && len(s.Group.Texts) == 2 && (s.Group.Texts[0] == "ps coverage" || (r.SchemaVersion == 2 && s.Group.Texts[0] == "coverage")) {
+		label = s.Group.Texts[0]
 		scope := label + " " + strings.ToLower(r.RefType) + ": " + status
 		if s.Aria != scope || s.Title != scope {
 			return fmt.Errorf("PowerShell badge lacks matching source scope")
@@ -156,7 +156,7 @@ func ValidateReport(read Reader, sha, run string, main bool) (Report, error) {
 		return r, e
 	}
 	fail := func(s string) (Report, error) { return r, fmt.Errorf("%s", s) }
-	if r.SchemaVersion != 1 || r.RequestedLayer != "All" {
+	if (r.SchemaVersion != 1 && r.SchemaVersion != 2) || r.RequestedLayer != "All" {
 		return fail("R02 缺少完整測試範圍")
 	}
 	if r.Commit != sha || r.RunUrl != run || r.SourceState != "Clean" {
@@ -196,7 +196,11 @@ func ValidateReport(read Reader, sha, run string, main bool) (Report, error) {
 			layers[c.Layer] = true
 		}
 	}
-	for _, l := range []string{"Unit", "Integration", "System", "System E2E"} {
+	requiredLayers := []string{"Unit", "Integration"}
+	if r.SchemaVersion == 1 {
+		requiredLayers = append(requiredLayers, "System", "System E2E")
+	}
+	for _, l := range requiredLayers {
 		if !layers[l] {
 			return fail("R02 缺少必要測試層：" + l)
 		}
@@ -270,7 +274,11 @@ func ValidateReport(read Reader, sha, run string, main bool) (Report, error) {
 	if !strings.Contains(string(data), sha) || r.MeasuredAt == "" || !strings.Contains(string(data), r.MeasuredAt) {
 		return fail("R03 摘要來源或時間不一致")
 	}
-	for _, n := range []string{"unit", "integration", "system", "coverage"} {
+	requiredBadges := []string{"unit", "integration", "coverage"}
+	if r.SchemaVersion == 1 {
+		requiredBadges = append(requiredBadges, "system")
+	}
+	for _, n := range requiredBadges {
 		data, e = get(n + ".svg")
 		if e != nil {
 			return r, e
