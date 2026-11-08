@@ -17,7 +17,7 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 
 ### A．還在地區／Wi-Fi 初始設定畫面
 
-使用完整發行包：`modules/init/assets` 必須包含 `hide_oobe.ppkg`、`hide_oobe.xml`、`provenance.json` 與 `payload_baseline.json`。缺少或驗證失敗時，Init 會在詢問帳密、建立帳號前停止；不能只複製腳本或自行用空檔代替。設定包已附來源紀錄及經逐檔審查的 `payload_baseline.json`，CI 會獨立核對內容。
+Init 執行必需的三個資產位於 `modules/init/assets`：`hide_oobe.ppkg`、`hide_oobe.xml` 與 `provenance.json`。這三檔缺少或驗證失敗時，Init 會在詢問帳密、建立帳號前停止；不能只複製腳本或自行用空檔代替。發行包另附經逐檔審查的 `payload_baseline.json`，供 CI 獨立核對內容；它不是一般電腦初始化或續跑的必要檔案。
 
 1. 將完整工具包命名為 `windows_setup`，放在 USB 根目錄。插入 USB，按 `Shift+F10`（部分鍵盤需加 Fn）。在 CMD 輸入以下一行找入口，不需要 diskpart：
 
