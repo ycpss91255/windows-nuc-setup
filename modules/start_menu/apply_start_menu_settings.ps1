@@ -51,7 +51,7 @@ try{
  if($result.Status -eq 'Failed'){throw $result.Error}
  if($result.Success){Write-Host '已由原生匯出確認開始選單釘選清空。' -ForegroundColor Green}
  elseif($result.Status -eq 'LegacyPendingApply'){Write-Warning '開始選單政策待處理：其他設定全部完成後，才可明確同意套用舊版政策。'}
- else{Write-Warning '開始選單政策已準備；目前仍有釘選，請完成其餘工作後手動重新登入，再執行 windows.cmd -AfterRestart。'}
+ else{Write-Warning '開始選單政策已準備，但原生匯出尚未確認釘選清空；請完成其餘工作後手動重新登入，再執行 windows.cmd -AfterRestart。'}
  return [pscustomobject]$result
 }catch{
  @{Success=$false;Error=$_.Exception.Message}|ConvertTo-Json|Set-Content (Join-Path $root $resultFileName) -Encoding UTF8
