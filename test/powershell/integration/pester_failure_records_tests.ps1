@@ -30,6 +30,27 @@ foreach($case in $cases){
  $marker=@(Get-Content -LiteralPath $log|Where-Object {$_ -like '*PowerShell worker failure diagnostic: *'})
  Assert ($marker.Count -eq 1 -and $marker[0].Contains('PesterFailures')) ($case.Name+' parent只轉出通過schema驗證的typed診斷')
 }
+Put 'null.Tests.ps1' @'
+Describe 'real pinned Pester finalize failure' {
+ It 'executes the real test before the coverage plugin cannot write its file' {
+  Write-Host '@@ASSERT@@{"Name":"owned fixture executed","Passed":true}'
+  [void][IO.Directory]::CreateDirectory((Join-Path $PSScriptRoot 'null/worker_0.xml'))
+  1|Should-Be 1
+ }
+}
+'@
+$manifest=Join-Path $fixture 'null.manifest.json';@{SourceRoot=$fixture;Sources=@('source.ps1');Tests=@('null.Tests.ps1')}|ConvertTo-Json|Set-Content -LiteralPath $manifest -Encoding UTF8
+$output=Join-Path $fixture 'null';$log=Join-Path $fixture 'null.private.log'
+$prior=$ErrorActionPreference;try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $manifest -OutputDirectory $output *> $log;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$prior}
+Assert ($code -ne 0 -and -not(Test-Path -LiteralPath (Join-Path $output 'evidence.json'))) '真實pinnedPester finalize回傳null仍保留失敗與noComplete'
+$sidecar=Join-Path $output 'worker_0.private.failure.json'
+Assert (Test-Path -LiteralPath $sidecar) '真實InvokePester null-result必須有明確typed診斷'
+$record=Get-Content -LiteralPath $sidecar -Raw|ConvertFrom-Json
+Assert (@($record.Failures|Where-Object Phase -ceq 'InvokePesterNoResult').Count -gt 0) 'null回傳如實標記，不猜Instrumentation或套用舊ErrorRecord'
+$marker=@(Get-Content -LiteralPath $log|Where-Object {$_ -like '*PowerShell worker failure diagnostic: *'})
+$observed=$marker[0].Substring($marker[0].IndexOf('diagnostic: ')+12)|ConvertFrom-Json
+Assert ($observed.CompletedAssertions -eq 1 -and $observed.FailedAssertionIndices.Count -eq 0) '真Pester test確實執行1個成功斷言後才null，不誤稱測試斷言失敗'
+Assert (-not([IO.File]::ReadAllText($sidecar).Contains($fixture))) 'null-result仍只保存允許相對來源，私有plugin路徑不輸出'
 Put 'passed.Tests.ps1' "Describe 'passed' {It 'passes' {1|Should-Be 1}}"
 Put 'other.Tests.ps1' "Describe 'other' {It 'passes' {1|Should-Be 1}}"
 $manifest=Join-Path $fixture 'passed.manifest.json';@{SourceRoot=$fixture;Sources=@('source.ps1');Tests=@('passed.Tests.ps1','other.Tests.ps1')}|ConvertTo-Json|Set-Content -LiteralPath $manifest -Encoding UTF8
