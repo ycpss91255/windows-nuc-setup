@@ -67,3 +67,31 @@ function New-DeterministicDriverArchive {
  $zip=[IO.Compression.ZipArchive]::new($stream,[IO.Compression.ZipArchiveMode]::Create,$false)
  try{foreach($name in $relative){$entry=$zip.CreateEntry($name,[IO.Compression.CompressionLevel]::NoCompression);$entry.LastWriteTime=[DateTimeOffset]::new(2000,1,1,0,0,0,[TimeSpan]::Zero);$input=[IO.File]::OpenRead((Join-Path $source $name));$destination=$entry.Open();try{$input.CopyTo($destination)}finally{$destination.Dispose();$input.Dispose()}}}finally{$zip.Dispose();$stream.Dispose()}
 }
+function Invoke-StageDriverRelease {
+ param([string]$Version,[ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[string]$PackageRoot,[string]$AssetDirectory,[string]$MetadataPath)
+ $assets=@(Get-ReleaseDriverAssets $MetadataPath $Version)
+ if(-not $assets.Count){throw 'No declared driver assets for this version.'}
+ $commit=& git -C $PackageRoot rev-parse ($Version+'^{commit}')
+ if($LASTEXITCODE -ne 0 -or $commit -cnotmatch '^[a-f0-9]{40}$'){throw 'Release tag does not resolve to one commit.'}
+ & git -C $PackageRoot merge-base --is-ancestor $commit refs/remotes/origin/main
+ if($LASTEXITCODE -ne 0){throw 'Driver release source is not in main history.'}
+ $remote=& gh api ('repos/'+$Repository+'/commits/'+$Version) --jq '.sha'
+ if($LASTEXITCODE -ne 0 -or $remote -cne $commit){throw 'Remote tag commit mismatch.'}
+ foreach($asset in $assets){Assert-LocalDriverReleaseAsset -Directory $AssetDirectory -Asset $asset}
+ $existing=& gh api --paginate ('repos/'+$Repository+'/releases?per_page=100') --jq '.[].tag_name'
+ if($LASTEXITCODE -ne 0 -or $existing -ccontains $Version){throw 'Existing release or unavailable release list; never overwrite.'}
+ $marker=Get-DriverDraftMarker $Version $commit $MetadataPath
+ $notes=Join-Path ([IO.Path]::GetTempPath()) ('driver_stage_'+[guid]::NewGuid().ToString('N')+'.md')
+ [IO.File]::WriteAllText($notes,$marker,[Text.UTF8Encoding]::new($false))
+ try{
+  $arguments=@('release','create',$Version,'--repo',$Repository,'--verify-tag','--target',$commit,'--draft','--title',$Version,'--notes-file',$notes)
+  if($Version -cmatch '-rc[1-9][0-9]*$'){$arguments+=@('--prerelease','--latest=false')}
+  $arguments+=@($assets|ForEach-Object {Join-Path $AssetDirectory $_.Name})
+  & gh @arguments
+  if($LASTEXITCODE -ne 0){throw 'Driver draft staging failed; no publication or automatic overwrite.'}
+ }finally{Remove-Item -LiteralPath $notes -Force -ErrorAction SilentlyContinue}
+ $draft=(& gh api ('repos/'+$Repository+'/releases/tags/'+$Version))|ConvertFrom-Json
+ if($LASTEXITCODE -ne 0){throw 'Cannot verify staged driver draft.'}
+ Assert-ReleaseDriverDraft $draft $Version $commit $MetadataPath $assets
+ Write-Host 'Driver draft verified; tag CI must attach complete quality evidence before publication.'
+}
