@@ -17,7 +17,7 @@ function Invoke-RepoCoveragePipeline {
   Invoke-CINative -File go.exe -Arguments @('build','-mod=vendor','-o',$tool,'./script/test/repo_coverage_tool')
   Invoke-CINative -File go.exe -Arguments @('build','-mod=vendor','-o',$probe,$probeSource)
   Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $source 'test/powershell/coverage/create_baseline_manifest.ps1'),'-SourceRoot',$source,'-OutputPath',$manifest)
-  Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $source 'script/test/powershell_coverage.ps1'),'-ManifestPath',$manifest,'-OutputDirectory',$ps)
+  Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $source 'script/test/powershell_coverage.ps1'),'-ManifestPath',$manifest,'-OutputDirectory',$ps,'-ThrottleLimit','2')
   Invoke-CINative -File $tool -Arguments @('cmd-measure','--source-root',$source,'--probe-executable',$probe,'--output',$cmd)
   $identity=@('--expected-sha',[string]$metadata.Commit)
   if($metadata.RunUrl){$identity+=@('--expected-run-url',[string]$metadata.RunUrl)}
