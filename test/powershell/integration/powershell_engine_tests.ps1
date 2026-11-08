@@ -28,4 +28,8 @@ foreach($case in @('bad_engine','unknown_suite','missing_pwsh')){
  $ErrorActionPreference='Continue'; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $path -OutputDirectory (Join-Path $fixture $case) @extra *> (Join-Path $fixture ($case+'.log'));$code=$LASTEXITCODE;$ErrorActionPreference='Stop'
  Assert ($code -ne 0 -and -not(Test-Path (Join-Path $fixture ($case+'/coverage.xml')))) ('不完整引擎設定拒絕，不退回5.1 '+$case)
 }
+$baseline=Join-Path $fixture 'baseline.json'
+& (Join-Path $root 'test/powershell/coverage/create_baseline_manifest.ps1') -SourceRoot $root -OutputPath $baseline
+$generated=Get-Content $baseline -Raw|ConvertFrom-Json
+Assert ($generated.TestEngines.'test/powershell/integration/managed_catalog_tests.ps1' -eq 'pwsh') '正式基線將.NET8 metadata原檔測試交給pwsh直接量測'
 Write-Host 'ALL PASS: true cross-engine counter tests'
