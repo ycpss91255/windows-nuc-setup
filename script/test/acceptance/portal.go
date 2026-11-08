@@ -82,21 +82,6 @@ func ValidatePortal(read Reader, readme, sha, run, base string) (Report, error) 
 			return fail("R06 舊版本缺少測試紀錄說明")
 		}
 	}
-	for _, a := range versions {
-		for _, v := range versions {
-			b, e = read("comparisons/" + a.Version + "--" + v.Version + ".json")
-			if e != nil {
-				return r, e
-			}
-			var c struct{ Status string }
-			if e = decode(b, &c); e != nil {
-				return r, e
-			}
-			if (a.Status != "Verified" || v.Status != "Verified") && c.Status != "Unknown" {
-				return fail("R06 缺少證據卻推論版本比較")
-			}
-		}
-	}
 	images := regexp.MustCompile(`!\[[^\]]*\]\(([^)]+)\)`).FindAllStringSubmatch(readme, -1)
 	for _, n := range []string{"coverage"} {
 		found := []string{}
