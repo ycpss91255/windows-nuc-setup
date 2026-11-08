@@ -1,4 +1,7 @@
 {
+  "provisioning_library.ps1": "modules/init/provisioning_library.ps1",
+  "provisioning_asset_library.ps1": "modules/init/provisioning_asset_library.ps1",
+  "provisioning_launcher_library.ps1": "modules/init/provisioning_launcher_library.ps1",
   "ssh_firewall.ps1": "modules/ssh/ssh_firewall.ps1",
   "desktop_safety.ps1": "modules/desktop/desktop_safety.ps1",
   "apply_autologon_settings.ps1": "modules/accounts/apply_autologon_settings.ps1",
