@@ -52,7 +52,8 @@ func newPSShardFixture(t *testing.T) psShardFixture {
 		for col := 1; col <= 2; col++ {
 			commands = append(commands, map[string]any{"File": source.File, "Line": 2, "Column": col, "EndLine": 2, "EndColumn": col + 1, "Hit": col == i+1})
 		}
-		worker := map[string]any{"ProcessId": 100 + i, "Engine": test.Engine, "EngineVersion": engineVersion, "EngineSHA256": engineHash, "PesterVersion": "6.0.0", "Sources": []any{map[string]any{"File": source.File, "SHA256": source.SHA256}}, "Commands": commands}
+		context := rc.PowerShellWorkerContext{Commit: f.identity.Commit, RunUrl: f.identity.RunUrl, RunAttempt: f.identity.RunAttempt, ShardIndex: i, ShardCount: 2, GlobalIndex: i, ProcessId: 100 + i, TestFile: test.File, TestSHA256: test.SHA256, WrapperFile: f.catalog.Wrapper.File, WrapperSHA256: f.catalog.Wrapper.SHA256}
+		worker := map[string]any{"ProcessId": 100 + i, "Engine": test.Engine, "EngineVersion": engineVersion, "EngineSHA256": engineHash, "PesterVersion": "6.0.0", "Sources": []any{map[string]any{"File": source.File, "SHA256": source.SHA256}}, "Commands": commands, "Context": context}
 		proof := map[string]any{"SchemaVersion": 1, "PesterVersion": "6.0.0", "PackageSHA512": "AHIAm7QW11As3sjMayo1rPU4JVIEfBL+ZILAyTyDnMPxMwLFQ3VeAA0prFTx+Y4DgZCUnH2N4+Xb0HDQua2EKA==", "Metric": "FullyCoveredCommandStartLines", "Sources": []any{map[string]any{"File": source.File, "SHA256": source.SHA256, "ExpectedLines": []int{2}}}, "Workers": []any{map[string]any{"Index": 0, "ProcessId": 100 + i, "Evidence": "worker_0.json", "Engine": test.Engine, "EngineVersion": engineVersion, "EngineSHA256": engineHash}}, "Covered": 0, "Total": 1}
 		files := map[string][]byte{"worker_0.json": psShardJSON(t, worker), "evidence.json": psShardJSON(t, proof), "coverage.xml": cobertura(`<class filename="core/logic.ps1"><lines><line number="2" hits="0"/></lines></class>`)}
 		manifest := rc.PowerShellShardManifest{SchemaVersion: 1, Commit: f.identity.Commit, RunUrl: f.identity.RunUrl, RunAttempt: f.identity.RunAttempt, ShardCount: 2, ShardIndex: i, Sources: f.catalog.Sources, Tests: f.catalog.Tests, Wrapper: f.catalog.Wrapper,
@@ -135,6 +136,9 @@ func TestPowerShellShardsSnapshotEachRawInputOnce(t *testing.T) {
 func TestPowerShellShardsSingleShardRetainsEverySuite(t *testing.T) {
 	f := newPSShardFixture(t)
 	f.identity.ShardCount = 1
+	for i := range f.inputs {
+		f.worker(t, i, func(w map[string]any) { c := w["Context"].(map[string]any); c["ShardCount"] = 1; c["ShardIndex"] = 0 })
+	}
 	var proof, other map[string]any
 	if err := json.Unmarshal(f.files[0]["evidence.json"], &proof); err != nil {
 		t.Fatal(err)
@@ -295,5 +299,83 @@ func TestPowerShellShardsRejectInvalidTrustedPlan(t *testing.T) {
 				t.Fatal("invalid trusted plan was accepted")
 			}
 		})
+	}
+}
+
+func TestPowerShellShardsRequireNativeExecutionContext(t *testing.T) {
+	cases := map[string]func(map[string]any){
+		"missing":      func(w map[string]any) { delete(w, "Context") },
+		"null":         func(w map[string]any) { w["Context"] = nil },
+		"stale commit": func(w map[string]any) { w["Context"].(map[string]any)["Commit"] = strings.Repeat("f", 40) },
+		"stale run": func(w map[string]any) {
+			w["Context"].(map[string]any)["RunUrl"] = "https://github.com/example/repo/actions/runs/999"
+		},
+		"stale attempt":      func(w map[string]any) { w["Context"].(map[string]any)["RunAttempt"] = 3 },
+		"other global suite": func(w map[string]any) { w["Context"].(map[string]any)["GlobalIndex"] = 3 },
+		"other shard":        func(w map[string]any) { w["Context"].(map[string]any)["ShardIndex"] = 0 },
+		"other shard count":  func(w map[string]any) { c := w["Context"].(map[string]any); c["ShardCount"] = 1; c["ShardIndex"] = 0 },
+		"other test": func(w map[string]any) {
+			w["Context"].(map[string]any)["TestFile"] = "test/powershell/unit/other_tests.ps1"
+		},
+		"other test bytes": func(w map[string]any) { w["Context"].(map[string]any)["TestSHA256"] = strings.Repeat("f", 64) },
+		"other wrapper": func(w map[string]any) {
+			w["Context"].(map[string]any)["WrapperFile"] = "test/powershell/coverage/other.ps1"
+		},
+		"other wrapper bytes":   func(w map[string]any) { w["Context"].(map[string]any)["WrapperSHA256"] = strings.Repeat("f", 64) },
+		"wrong native pid":      func(w map[string]any) { w["Context"].(map[string]any)["ProcessId"] = 999 },
+		"missing native field":  func(w map[string]any) { delete(w["Context"].(map[string]any), "ShardIndex") },
+		"context unknown field": func(w map[string]any) { w["Context"].(map[string]any)["PrivateRoot"] = `C:\Users\secret` },
+		"context hidden case alias": func(w map[string]any) {
+			c := w["Context"].(map[string]any)
+			c["runurl"] = c["RunUrl"]
+			c["RunUrl"] = `C:\Users\secret`
+		},
+		"context case spelling": func(w map[string]any) {
+			c := w["Context"].(map[string]any)
+			c["runurl"] = c["RunUrl"]
+			delete(c, "RunUrl")
+		},
+		"invalid attempt":     func(w map[string]any) { w["Context"].(map[string]any)["RunAttempt"] = 0 },
+		"invalid source path": func(w map[string]any) { w["Context"].(map[string]any)["TestFile"] = "../private.ps1" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newPSShardFixture(t)
+			f.worker(t, 1, mutate)
+			if _, err := rc.MergePowerShellShards(f.identity, f.catalog, f.inputs, f.inventory); err == nil {
+				t.Fatal("untrusted native execution context accepted")
+			}
+		})
+	}
+	t.Run("same case relabeled PID", func(t *testing.T) {
+		f := newPSShardFixture(t)
+		f.worker(t, 1, func(w map[string]any) { w["ProcessId"] = 999 })
+		var proof map[string]any
+		if err := json.Unmarshal(f.files[1]["evidence.json"], &proof); err != nil {
+			t.Fatal(err)
+		}
+		proof["Workers"].([]any)[0].(map[string]any)["ProcessId"] = 999
+		f.files[1]["evidence.json"] = psShardJSON(t, proof)
+		if _, err := rc.MergePowerShellShards(f.identity, f.catalog, f.inputs, f.inventory); err == nil {
+			t.Fatal("outer re-signing bypassed the collector's observed PID")
+		}
+	})
+}
+
+func TestPowerShellShardsKeepContextOptionalOnlyForLegacyNormalizer(t *testing.T) {
+	f := newPSShardFixture(t)
+	f.worker(t, 0, func(w map[string]any) { delete(w, "Context") })
+	if _, _, err := rc.NormalizePowerShell(f.files[0]["evidence.json"], f.inputs[0].Read, f.inventory); err != nil {
+		t.Fatal("legacy raw proof no longer readable", err)
+	}
+	files, err := rc.ExportPowerShellRawEvidence(f.files[0]["evidence.json"], f.inputs[0].Read, f.inventory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(files["worker_0.json"]), `"Context"`) {
+		t.Fatal("legacy export invented a native execution context")
+	}
+	if _, err := rc.MergePowerShellShards(f.identity, f.catalog, f.inputs, f.inventory); err == nil {
+		t.Fatal("legacy raw proof was silently promoted to native shard execution")
 	}
 }
