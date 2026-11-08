@@ -11,7 +11,7 @@ Add-Type -TypeDefinition 'using System;using System.Collections.Generic;namespac
 function Frame {$i=0;[pscustomobject]@{Width=1920;Height=1080;Icons=@(foreach($n in @('控制台','本機','網路','資源回收筒')){[pscustomobject]@{Name=$n;Index=$i;X=($i*100);Y=10};$i++})}}
 $reference=Join-Path $package 'modules/desktop/desktop_layout.json';[IO.File]::WriteAllText($reference,((Frame)|ConvertTo-Json -Depth 5))
 $script:ids=@('{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}','{20D04FE0-3AEA-1069-A2D8-08002B30309D}','{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}','{645FF040-5081-101B-9F08-00AA002F954E}')
-function New-Object {param($TypeName,$ComObject,$ArgumentList) if($ComObject){if($ComObject -ne 'Shell.Application'){throw 'unexpected COM'};$d=[pscustomobject]@{};$d|Add-Member ScriptMethod ParseName {param($path) $index=[array]::IndexOf($script:ids,($path.Substring(2)));if($index -lt 0){throw 'unexpected CLSID'};[pscustomobject]@{Name=@('控制台','本機','網路','資源回收筒')[$index]}};$o=[pscustomobject]@{Desktop=$d};$o|Add-Member ScriptMethod NameSpace {param($id) if($id -ne 0){throw 'unexpected namespace'};$this.Desktop};return $o};Microsoft.PowerShell.Utility\New-Object @PSBoundParameters}
+function New-Object {param($TypeName,$ComObject,$ArgumentList) if($ComObject){if($ComObject -ne 'Shell.Application'){throw 'unexpected COM'};$d=[pscustomobject]@{};$d|Add-Member ScriptMethod ParseName {param($path) if($script:comFailure -eq 'Item'){return $null};$index=[array]::IndexOf($script:ids,($path.Substring(2)));if($index -lt 0){throw 'unexpected CLSID'};[pscustomobject]@{Name=@('控制台','本機','網路','資源回收筒')[$index]}};$o=[pscustomobject]@{Desktop=$d};$o|Add-Member ScriptMethod NameSpace {param($id) if($script:comFailure -eq 'Namespace'){return $null};if($id -ne 0){throw 'unexpected namespace'};$this.Desktop};return $o};Microsoft.PowerShell.Utility\New-Object @PSBoundParameters}
 function Get-SetupGuiIdentity {[pscustomobject]@{CommonDataRoot=$temp;UserSID='S-1-5-21-1-2-3-1001';SessionId=4;Computer='fixture'}}
 function Get-SetupGuiDesktopSession {param($Scope) 4}
 function Assert-SetupGuiAncestors {param($CommonDataRoot) if($CommonDataRoot -ne $temp){throw 'wrong fixture parent'}}
@@ -35,3 +35,30 @@ foreach($mode in @('Load','Verify','Save')){
 $bad=[pscustomobject]@{Width=1920;Height=1080;Icons=@()};$before=[IO.File]::ReadAllText($reference);$failure=''
 try{Write-SetupIconReference -PackageRoot $package -Reference $bad}catch{$failure=$_.Exception.Message}
 Assert ($failure -and [IO.File]::ReadAllText($reference) -ceq $before) 'invalid returned Reference cannot replace existing template'
+$contextPath=Join-Path $paths.CodeRoot 'context.json';$originalContext=[IO.File]::ReadAllText($contextPath)
+foreach($mutation in @('Source','Mode','Verify','SaveReference','MissingReference')){
+ $changed=$originalContext|ConvertFrom-Json
+ switch($mutation){Source{$changed.SourcePackageRoot=''} Mode{$changed.IconMode='ExecuteAnything'} Verify{$changed.VerifyOnly=$true} SaveReference{$changed|Add-Member IconReference (Frame)} MissingReference{$changed.IconMode='Load'}}
+ [IO.File]::WriteAllText($contextPath,($changed|ConvertTo-Json -Depth 8));$failure=''
+ try{Read-SetupGuiContext -CodeRoot $paths.CodeRoot -CommonDataRoot $temp -Role Icons -RunId $r.RunId|Out-Null}catch{$failure=$_.Exception.Message}
+ Assert (-not [string]::IsNullOrWhiteSpace($failure)) ('protected context refuses malformed finite source or mode: '+$mutation)
+ [IO.File]::WriteAllText($contextPath,$originalContext)
+}
+foreach($mutation in @('Null','Width','Height','Name','Coordinate','Duplicate')){
+ $bad=Frame
+ switch($mutation){Null{$bad=$null} Width{$bad.Width=0} Height{$bad.Height='1080'} Name{$bad.Icons[0].Name=''} Coordinate{$bad.Icons[0].X='10'} Duplicate{$bad.Icons[0].Name=$bad.Icons[1].Name}}
+ $failure='';try{Write-SetupIconReference -PackageRoot $package -Reference $bad}catch{$failure=$_.Exception.Message}
+ Assert (-not [string]::IsNullOrWhiteSpace($failure) -and [IO.File]::ReadAllText($reference) -ceq $before) ('invalid template never changes original package: '+$mutation)
+}
+. (Join-Path $root 'modules/desktop/icons_settings_library.ps1')
+foreach($failureMode in @('Namespace','Item')){
+ $script:comFailure=$failureMode;$failure='';try{Get-SetupSystemIconNames|Out-Null}catch{$failure=$_.Exception.Message}
+ Assert ($failure.Contains('無法辨識四個系統圖示名稱')) ('missing native Shell metadata is explicit failure: '+$failureMode)
+}
+$script:comFailure=''
+$absent=Join-Path $temp 'new_package';[void][IO.Directory]::CreateDirectory((Join-Path $absent 'modules/desktop'))
+Write-SetupIconReference -PackageRoot $absent -Reference (Frame)
+Assert (Test-Path -LiteralPath (Join-Path $absent 'modules/desktop/desktop_layout.json')) 'Save creates first fixed template atomically when absent'
+$escape=Join-Path $temp 'escape_package';[void][IO.Directory]::CreateDirectory($escape);$null=New-Item -ItemType Junction -Path (Join-Path $escape 'modules') -Target (Join-Path $package 'modules');$failure=''
+try{Write-SetupIconReference -PackageRoot $escape -Reference (Frame)}catch{$failure=$_.Exception.Message}
+Assert ($failure.Contains('重新解析點') -and [IO.File]::ReadAllText($reference) -ceq $before) 'Save rejects linked package ancestors without following template escape'
