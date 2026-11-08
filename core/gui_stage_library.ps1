@@ -250,6 +250,7 @@ function Read-SetupGuiResult {
  if($result.Schema -ne 1 -or $result.Role -cne $context.Role -or $result.RunId -cne $context.RunId -or $result.UserSID -cne $context.UserSID -or $result.Computer -cne $context.Computer -or $result.SessionId -ne $expectedSession -or $result.VerifyOnly -isnot [bool] -or $result.VerifyOnly -ne $context.VerifyOnly -or $result.Success -isnot [bool]){throw 'GUI worker結果身分或本輪ID不符。'}
  if($context.Role -ceq 'Icons' -and $result.Mode -cne $context.IconMode){throw 'GUI worker結果圖示模式不符。'}
  if($context.Role -ceq 'Start'){Assert-SetupGuiStartResult $result}
+ if($context.Role -cin @('Taskbar','TaskbarFinalize')){Assert-SetupGuiTaskbarResult -Result $result -VerifyOnly:$context.VerifyOnly -Finalize:($context.Role -ceq 'TaskbarFinalize')}
  return $result
 }
 function Get-SetupGuiIdentity {
@@ -306,6 +307,14 @@ function Invoke-SetupGuiScheduledWorker {
 function Assert-SetupGuiStartResult {
  param($Result)
  if($Result.Success -isnot [bool] -or $Result.Status -cnotin @('Confirmed','LegacyPendingApply','PendingSignIn','Failed') -or $Result.Success -ne ($Result.Status -ceq 'Confirmed')){throw 'GUI worker開始選單結果狀態與成功值不符。'}
+}
+function Assert-SetupGuiTaskbarResult {
+ param($Result,[switch]$VerifyOnly,[switch]$Finalize)
+ $allowed=if($Finalize){@('Finalized','Obsolete','Failed')}elseif($VerifyOnly){@('Confirmed','PendingSignIn','Failed')}else{@('Applied','Failed')}
+ $complete=if($Finalize){'Finalized'}elseif($VerifyOnly){'Confirmed'}else{'Applied'}
+ if($Result.Success -isnot [bool] -or $Result.Status -cnotin $allowed -or $Result.Success -ne ($Result.Status -ceq $complete)){throw 'GUI worker工作列結果狀態與模式或成功值不符。'}
+ if($Finalize -and ($Result.TemporaryLayoutPolicyRemoved -isnot [bool] -or $Result.TemporaryLayoutPolicyRemoved -ne $Result.Success)){throw 'GUI worker工作列結果未明確確認暫時政策讀回。'}
+ if($Result.Status -ceq 'PendingSignIn' -and ($Result.RequiresNextSignIn -isnot [bool] -or -not $Result.RequiresNextSignIn -or $Result.Configured -isnot [bool] -or -not $Result.Configured -or $Result.BindingMatches -isnot [bool] -or -not $Result.BindingMatches)){throw 'GUI worker工作列結果待登入狀態不完整。'}
 }
 function Test-SetupGuiPendingResult {
  param([string]$Role,$Result)
@@ -378,6 +387,7 @@ function Invoke-SetupGuiWorker {
   $result=switch -CaseSensitive ($Role){Explorer{Invoke-SetupExplorerSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Display{Invoke-SetupDisplaySettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Theme{Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Desktop{Invoke-SetupDesktopSettings -ModuleRoot $module -SourcePackageRoot $context.SourcePackageRoot -DesktopRoots @(Get-SetupDesktopRoots) -VerifyOnly:$context.VerifyOnly} Icons{Invoke-SetupIconsSettings -ModuleRoot $module -Mode $context.IconMode -Reference $context.IconReference} Start{Invoke-SetupStartMenuSettings -ModuleRoot $module -OutputRoot $paths.DataRoot -VerifyOnly:$context.VerifyOnly -ApplyPolicy:$context.ApplyPolicy -NonInteractive:$context.NonInteractive} Taskbar{$binding=if($context.VerifyOnly){Get-SetupTaskbarLayoutBinding -CommonDataRoot $scope.CommonDataRoot -Context $context}else{[pscustomobject]@{LayoutPath=(Join-Path $paths.DataRoot 'TaskbarLayout.xml');FinalizeCommand=''}};Invoke-SetupTaskbarSettings -OutputRoot $paths.DataRoot -LayoutPath $binding.LayoutPath -ExpectedFinalizeCommand $binding.FinalizeCommand -VerifyOnly:$context.VerifyOnly} TaskbarFinalize{Invoke-SetupTaskbarBoundFinalize -CommonDataRoot $scope.CommonDataRoot -Context $context}}
   if($result.Success -isnot [bool]){throw 'GUI worker葉節點未提供有效成功狀態。'}
   if($Role -ceq 'Start'){Assert-SetupGuiStartResult $result}
+  if($Role -cin @('Taskbar','TaskbarFinalize')){Assert-SetupGuiTaskbarResult -Result $result -VerifyOnly:$context.VerifyOnly -Finalize:($Role -ceq 'TaskbarFinalize')}
   $details=[ordered]@{};foreach($property in $result.PSObject.Properties){$details[$property.Name]=$property.Value}
   Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result $details @publication
   $published=$true
@@ -385,7 +395,7 @@ function Invoke-SetupGuiWorker {
   if($Role -ceq 'TaskbarFinalize'){Complete-SetupTaskbarFinalizeTask -RunId $context.RunId}
   return $result
  }catch{
-  if(-not $published){$failure=@{Success=$false;Error=$_.Exception.Message;FailedAt=(Get-Date).ToString('o')};if($Role -cin @('Start','Taskbar','TaskbarFinalize')){$failure.Status='Failed'};Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result $failure @publication}
+  if(-not $published){$failure=@{Success=$false;Error=$_.Exception.Message;FailedAt=(Get-Date).ToString('o')};if($Role -cin @('Start','Taskbar','TaskbarFinalize')){$failure.Status='Failed'};if($Role -ceq 'TaskbarFinalize'){$failure.TemporaryLayoutPolicyRemoved=$false};Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result $failure @publication}
   throw
  }finally{if($applyLease){$applyLease.Dispose()};if($lease){$lease.Dispose()}}
 }
