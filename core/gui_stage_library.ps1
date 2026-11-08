@@ -267,7 +267,7 @@ function Get-SetupGuiDesktopSession {
  $matching=@(foreach($process in @(Get-CimInstance -ClassName Win32_Process -Filter "Name='explorer.exe'" -ErrorAction Stop)){
   if($process.SessionId -le 0 -or ($Scope.SessionId -gt 0 -and $Scope.SessionId -ne $process.SessionId)){continue}
   $owner=Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop
-  if($owner.ReturnValue -eq 0 -and $owner.Sid -ceq $Scope.UserSID){[int]$process.SessionId}
+  if(($owner.ReturnValue -is [uint32] -or $owner.ReturnValue -is [int]) -and $owner.ReturnValue -eq 0 -and $owner.Sid -ceq $Scope.UserSID){[int]$process.SessionId}
  })
  $sessions=@($matching|Select-Object -Unique)
  if($sessions.Count -ne 1){throw 'GUI worker找不到同一使用者唯一的互動桌面，未啟動工作。'}
