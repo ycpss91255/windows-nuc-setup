@@ -30,6 +30,59 @@ public static class ManagedNativeTests {
   api.WindowSession=delegate(IntPtr handle){return 7;};api.Message=delegate(uint message,ref WindowsSetup.Taskbar.AppBarData data){return 0;};Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"unresponsive taskbar position query stops before interpreting zero state");
   api.Message=delegate(uint message,ref WindowsSetup.Taskbar.AppBarData data){if(message==5)return 1;throw new InvalidOperationException("state query failed");};Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"native state query failure propagates");
  }
+ static void MdnsAllocationOnlyAbiCases(){
+  // Independent WinDNS.h SDK layout: allocation/read/free only, never Register/DeRegister/Cancel.
+  Assert(Marshal.SizeOf(typeof(WindowsSetup.MdnsPublisher.Instance))==(IntPtr.Size==8?72:40),"DNS_SERVICE_INSTANCE SDK size");
+  Assert(Marshal.SizeOf(typeof(WindowsSetup.MdnsPublisher.Request))==(IntPtr.Size==8?48:28),"DNS_SERVICE_REGISTER_REQUEST SDK size");
+  Assert(Marshal.OffsetOf(typeof(WindowsSetup.MdnsPublisher.Request),"Unicast").ToInt32()==(IntPtr.Size==8?40:24),"native BOOL has four bytes at SDK offset");
+  foreach(string family in new[]{"v4","v6","dual","scope"}){
+   var ad=new WindowsSetup.MdnsPublisher.Advertisement{HostName="fixture.local",ServiceName="fixture._ssh._tcp.local",InterfaceIndex=7,Port=22,IPv4=family=="v4"||family=="dual"?"192.0.2.9":null,IPv6=family=="v6"||family=="dual"?"2001:db8::9":family=="scope"?"fe80::9%7":null};
+   IntPtr p=WindowsSetup.MdnsPublisher.NativeConstruct(ad);
+   try{
+    Assert(p!=IntPtr.Zero,"native allocation succeeds without advertising "+family);
+    Assert(Marshal.PtrToStringUni(Marshal.ReadIntPtr(p,0))==ad.ServiceName && Marshal.PtrToStringUni(Marshal.ReadIntPtr(p,IntPtr.Size))==ad.HostName,"raw SDK name/host offsets match native allocation "+family);
+    Assert(Marshal.ReadInt16(p,IntPtr.Size==8?32:16)==22,"native WORD port is host order 22 "+family);
+    Assert(Marshal.ReadInt32(p,IntPtr.Size==8?64:36)==0,"constructor interface is documented zero "+family);
+    var actual=WindowsSetup.MdnsPublisher.ReadInstance(p);
+    Assert(actual.HostName==ad.HostName && actual.ServiceName==ad.ServiceName && actual.Port==22,"original source reads actual native allocation "+family);
+    Assert(actual.IPv4==ad.IPv4 && actual.IPv6==(family=="scope"?"fe80::9":ad.IPv6),"native IPv4/IPv6 bytes and scope-free representation "+family);
+   }finally{WindowsSetup.MdnsPublisher.NativeFree(p);}
+  }
+  WindowsSetup.MdnsPublisher.NativeFree(IntPtr.Zero);
+  Throws(delegate{WindowsSetup.MdnsPublisher.ReadInstance(IntPtr.Zero);},"missing native allocation is rejected");
+ }
+ static void MdnsCases(){
+  var ad=new WindowsSetup.MdnsPublisher.Advertisement{HostName="fixture.local",ServiceName="fixture._ssh._tcp.local",InterfaceIndex=7,IPv4="192.0.2.9",IPv6="2001:db8::9",Port=22};
+  foreach(string mode in new[]{"sync","async","error","timeout","late_cancel","deregister_error","host_mismatch","missing_instance","scope","callback_service","callback_port","callback_address","callback_interface"}){
+   ad.IPv6=mode=="scope"?"fe80::9%7":"2001:db8::9";
+   int registrations=0,deregistrations=0,cancels=0,originalFreed=0,copiesFreed=0;WindowsSetup.MdnsPublisher.Completion saved=null;bool retry=false,freedDuringCancel=false;
+   var api=new WindowsSetup.MdnsPublisher.NativeApi();
+   api.Construct=delegate(WindowsSetup.MdnsPublisher.Advertisement row){Assert(row.HostName==ad.HostName && row.ServiceName==ad.ServiceName && row.InterfaceIndex==7 && row.IPv4==ad.IPv4 && row.IPv6==ad.IPv6 && row.Port==22,"native mDNS publisher receives exact host and address rows");return (IntPtr)11;};
+   api.Read=delegate(IntPtr instance){return new WindowsSetup.MdnsPublisher.Advertisement{HostName=mode=="host_mismatch" && instance==(IntPtr)12?"another.local":ad.HostName,ServiceName=mode=="callback_service" && instance==(IntPtr)12?"other._ssh._tcp.local":ad.ServiceName,InterfaceIndex=mode=="callback_interface" && instance==(IntPtr)12?8u:7u,IPv4=mode=="callback_address" && instance==(IntPtr)12?"192.0.2.99":ad.IPv4,IPv6=mode=="scope"?"fe80::9":ad.IPv6,Port=mode=="callback_port" && instance==(IntPtr)12?23:22};};
+   api.Free=delegate(IntPtr instance){if(instance==(IntPtr)11){originalFreed++;Assert(originalFreed==1,"mDNS original instance is freed at most once");}else copiesFreed++;};
+   api.Request=delegate(uint operation,IntPtr request,IntPtr cancel){
+    var r=(WindowsSetup.MdnsPublisher.Request)Marshal.PtrToStructure(request,typeof(WindowsSetup.MdnsPublisher.Request));
+    Assert(r.Version==1 && r.InterfaceIndex==7 && r.Instance==(IntPtr)11 && r.Context==IntPtr.Zero && r.Credentials==IntPtr.Zero && r.Unicast==0,"real ABI request fixes interface mDNS and has no arbitrary credentials/context");
+    saved=(WindowsSetup.MdnsPublisher.Completion)Marshal.GetDelegateForFunctionPointer(r.Callback,typeof(WindowsSetup.MdnsPublisher.Completion));
+    if(operation==0){registrations++;Assert(cancel!=IntPtr.Zero,"registration owns a cancellable asynchronous handle");if(mode=="error")return 5;if(mode=="timeout" || mode=="late_cancel")return 9506;if(mode=="async"){System.Threading.ThreadPool.QueueUserWorkItem(delegate{saved(0,IntPtr.Zero,(IntPtr)12);});}else saved(0,IntPtr.Zero,mode=="missing_instance"?IntPtr.Zero:(IntPtr)12);}
+    else{deregistrations++;Assert(cancel==IntPtr.Zero,"deregister requires null cancellation handle");saved(mode=="deregister_error" && !retry?5u:0u,IntPtr.Zero,(IntPtr)13);}
+    return 9506;
+   };
+   api.Cancel=delegate(IntPtr cancel){cancels++;if(mode=="timeout"){saved(995,IntPtr.Zero,IntPtr.Zero);freedDuringCancel=originalFreed!=0;}return 0;};
+   WindowsSetup.MdnsPublisher.Registration lease=null;bool failed=false;
+   try{lease=WindowsSetup.MdnsPublisher.Begin(ad,api,100);}catch(InvalidOperationException){failed=true;}catch(TimeoutException){failed=true;}
+   Assert(!freedDuringCancel,"native Cancel call must return before original instance/request/cancel memory is freed");
+   if(mode=="error" || mode=="timeout" || mode=="late_cancel" || mode=="host_mismatch" || mode=="missing_instance" || mode.StartsWith("callback_")){
+    Assert(failed && lease==null,"native error or timeout cannot claim registration from local resolution");
+    if(mode=="late_cancel"){Assert(originalFreed==0 && cancels==1,"timeout retains native memory until cancelled callback completes");saved(995,IntPtr.Zero,IntPtr.Zero);}
+    Assert(originalFreed==1 && deregistrations==((mode=="host_mismatch" || mode=="missing_instance" || mode.StartsWith("callback_"))?1:0),"failed registrations clean up and native success with unexpected identity is explicitly deregistered");
+   }else{
+    Assert(!failed && lease.Registered && originalFreed==0 && registrations==1,"registration remains alive while publisher process holds the lease");
+    if(mode=="deregister_error"){Throws(delegate{lease.Dispose();},"native deregister error stays visible");Assert(originalFreed==0,"failed deregistration does not free a live lease");retry=true;}
+    lease.Dispose();lease.Dispose();Assert(!lease.Registered && originalFreed==1 && deregistrations==(mode=="deregister_error"?2:1),"dispose deregisters the advertised records once and double dispose is harmless");
+   }
+  }
+ }
  static void ExplorerCases(){
   uint settings=4;int reads=0,writes=0,broadcasts=0,freed=0;
   var api=new NucExplorerLiveV2.NativeApi();
@@ -216,8 +269,8 @@ public static class ManagedNativeTests {
    Assert(Marshal.ReadInt32(packet,0)==-3 && Marshal.ReadInt32(packet,4)==32,"display packet type and size are written");
    Assert(Marshal.ReadInt32(packet,8)==19 && Marshal.ReadInt32(packet,12)==23 && Marshal.ReadInt32(packet,16)==29,"display packet carries exact adapter identity");
   }finally{Marshal.FreeHGlobal(packet);Marshal.FreeHGlobal(path);}
-  TaskbarAutoHideCases();ExplorerCases();ThemeCases();HotkeyCases();DisplayCases();WimCases();DesktopCases();
+  MdnsAllocationOnlyAbiCases();MdnsCases();TaskbarAutoHideCases();ExplorerCases();ThemeCases();HotkeyCases();DisplayCases();WimCases();DesktopCases();
   new WindowsSetup.UpdateCallback().Invoke(new object(),new object());Assert(true,"WUA callback accepts Automation arguments without retaining or processing them");
-  Console.WriteLine("ALL PASS: "+assertions+" managed source assertions; no native OS functions invoked");
+  Console.WriteLine("ALL PASS: "+assertions+" managed source assertions; only dnsapi allocation/read/free invoked, no registration or OS settings");
  }
 }
