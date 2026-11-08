@@ -36,6 +36,10 @@ Assert ($r.Success -and $r.RequiresNextSignIn -and $script:tasks.Count -eq 1 -an
 Assert ($expectedCommand.StartsWith(('"'+$ps+'" -NoProfile')) -and $expectedCommand.Contains((Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'schtasks.exe')) -and $expectedCommand.Contains($task) -and $expectedCommand -notmatch '\.ps1|EncodedCommand|NUC8-Setup') 'RunOnce contains only OS-qualified PowerShell and fixed GUID schtasks invocation with no public script'
 $before=$script:writes;$r=Invoke-SetupGuiFreshVerification -PackageRoot $root -Role Taskbar
 Assert (-not $r.Success -and $r.Status -eq 'PendingSignIn' -and $r.Configured -and $r.BindingMatches -and $script:writes -eq $before) 'fresh verification reads exact Edge Replace XML and current policy/RunOnce while honestly pending'
+$pendingValues=$script:values.Clone();$script:values.Remove('NUC8FinalizeTaskbar');$script:values.Remove('StartLayoutFile');$script:values.Remove('LockedStartLayout')
+$pendingCheck=Invoke-SetupGuiFreshVerification -PackageRoot $root -Role Taskbar
+Assert (-not $pendingCheck.Success -and $pendingCheck.RequiresNextSignIn) 'unfinished deferred task cannot be hidden by already-missing RunOnce and policy values'
+$script:values=$pendingValues
 $script:values.Remove('NUC8FinalizeTaskbar');$script:desktopSession=9
 Start-ScheduledTask $task
 $paths=Get-SetupGuiRunPaths -CommonDataRoot $temp -Role TaskbarFinalize -RunId $apply;$context=Read-SetupGuiContext -CodeRoot $paths.CodeRoot -CommonDataRoot $temp -Role TaskbarFinalize -RunId $apply
