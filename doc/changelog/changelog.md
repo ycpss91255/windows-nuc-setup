@@ -3,11 +3,6 @@
 本文件記錄使用者可見的行為、相容性及遷移要求。詳細實作與驗證紀錄見中文 Git 提交；發布版本與來源提交以 GitHub Release 為準。
 
 ## [Unreleased]
-
-### Fixed（修正）
-
-- GitHub hosted Windows 的 Docker 工作先以有界程序探測 Windows daemon；尚未就緒時最多啟動或重啟 Docker 服務一次，再以真實引擎資訊確認。超時、錯誤引擎或服務失敗仍阻擋後續容器測試，沒有降低發布門檻；一般電腦與 self-hosted runner 不會因此操作服務。
-
 ## [v0.2.1] — 2026-11-09
 
 此版整合未發布 v0.2.1-rc1 的功能與後續修正。版本標題代表已準備發布；實際公開版本、對應提交與品質證據，以 GitHub Release、Actions 及 Pages 為準。
@@ -32,6 +27,8 @@
 - 維護與驗收工具以 Go 為主，原生設定保留 PowerShell 5.1；Windows runner 與離線 Windows Docker 執行單元及隔離整合測試，發布與 Pages 仍須通過對應提交的完整品質門檻。
 
 ### Fixed（修正）
+
+- GitHub hosted Windows 的 Docker 工作先以有界程序探測 Windows daemon；尚未就緒時最多啟動或重啟 Docker 服務一次，再以真實引擎資訊確認。超時、錯誤引擎或服務失敗仍阻擋後續容器測試，沒有降低發布門檻；一般電腦與 self-hosted runner 不會因此操作服務。
 
 - Tag 發布前會附加同次 Go 量測與原始 profile，明確區分本機未發布 staging 與既有版本；來源、雜湊及八成門檻保持，分支與標籤兩種工作流事件皆驗證。
 - 發布維護入口在原生 PowerShell `-File` 程序內可自行定位套件與預設 metadata，不受呼叫目錄影響；保留明確覆寫路徑及原有發布門檻。本機發布檢查範例從 `.version` 讀取當前版本。
