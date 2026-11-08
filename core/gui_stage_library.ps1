@@ -235,6 +235,7 @@ function Read-SetupGuiResult {
  $result=Get-Content -LiteralPath $path -Raw -Encoding UTF8|ConvertFrom-Json
  if($result.Schema -ne 1 -or $result.Role -cne $context.Role -or $result.RunId -cne $context.RunId -or $result.UserSID -cne $context.UserSID -or $result.Computer -cne $context.Computer -or $result.SessionId -ne $context.DesktopSession -or $result.VerifyOnly -isnot [bool] -or $result.VerifyOnly -ne $context.VerifyOnly -or $result.Success -isnot [bool]){throw 'GUI worker結果身分或本輪ID不符。'}
  if($context.Role -ceq 'Icons' -and $result.Mode -cne $context.IconMode){throw 'GUI worker結果圖示模式不符。'}
+ if($context.Role -ceq 'Start'){Assert-SetupGuiStartResult $result}
  return $result
 }
 function Get-SetupGuiIdentity {
@@ -282,6 +283,10 @@ function Invoke-SetupGuiScheduledWorker {
  }finally{
   if($registered){$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;if($task -and $task.State -ne 'Running'){Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction Stop}}
  }
+}
+function Assert-SetupGuiStartResult {
+ param($Result)
+ if($Result.Success -isnot [bool] -or $Result.Status -cnotin @('Confirmed','LegacyPendingApply','PendingSignIn','Failed') -or $Result.Success -ne ($Result.Status -ceq 'Confirmed')){throw 'GUI worker開始選單結果狀態與成功值不符。'}
 }
 function Test-SetupGuiPendingResult {
  param([string]$Role,$Result)
@@ -344,13 +349,14 @@ function Invoke-SetupGuiWorker {
   . (Join-Path $module $library)
   $result=switch -CaseSensitive ($Role){Explorer{Invoke-SetupExplorerSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Display{Invoke-SetupDisplaySettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Theme{Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Desktop{Invoke-SetupDesktopSettings -ModuleRoot $module -SourcePackageRoot $context.SourcePackageRoot -DesktopRoots @(Get-SetupDesktopRoots) -VerifyOnly:$context.VerifyOnly} Icons{Invoke-SetupIconsSettings -ModuleRoot $module -Mode $context.IconMode -Reference $context.IconReference} Start{Invoke-SetupStartMenuSettings -ModuleRoot $module -OutputRoot $paths.DataRoot -VerifyOnly:$context.VerifyOnly -ApplyPolicy:$context.ApplyPolicy -NonInteractive:$context.NonInteractive}}
   if($result.Success -isnot [bool]){throw 'GUI worker葉節點未提供有效成功狀態。'}
+  if($Role -ceq 'Start'){Assert-SetupGuiStartResult $result}
   $details=[ordered]@{};foreach($property in $result.PSObject.Properties){$details[$property.Name]=$property.Value}
   Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result $details
   $published=$true
   if(-not $result.Success -and -not(Test-SetupGuiPendingResult -Role $Role -Result $result)){throw $result.Error}
   return $result
  }catch{
-  if(-not $published){Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result @{Success=$false;Error=$_.Exception.Message;FailedAt=(Get-Date).ToString('o')}}
+  if(-not $published){$failure=@{Success=$false;Error=$_.Exception.Message;FailedAt=(Get-Date).ToString('o')};if($Role -ceq 'Start'){$failure.Status='Failed'};Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result $failure}
   throw
  }finally{if($lease){$lease.Dispose()}}
 }
