@@ -24,6 +24,7 @@ function docker.exe {
  if($words -contains 'run' -and $Mode -eq 'run-fail'){$global:LASTEXITCODE=29}
 }
 & $Entry -Action $Action -BuildReceiptPath $Receipt -ReportDirectory $Reports -Isolation process
+exit $LASTEXITCODE
 '@
 [IO.File]::WriteAllText($runner,$program,[Text.UTF8Encoding]::new($true))
 $entry=Join-Path $source 'script/docker/docker.ps1';$receipt=Join-Path $fixture 'built.json';$log=Join-Path $fixture 'calls.jsonl'
