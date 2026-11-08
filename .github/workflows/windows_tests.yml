@@ -310,7 +310,8 @@ jobs:
           . .\script\docker\library.ps1
           . .\script\test\ci_tasks.ps1
           $context = Get-ContainerContext -Root $env:GITHUB_WORKSPACE -ReportDirectory (Join-Path $env:RUNNER_TEMP 'failure-probe-unused') -Isolation process
-          Assert-CIDockerFailure -Image $context.Image
+          $image = Assert-ContainerBuildReceipt -Context $context -Path (Join-Path $env:RUNNER_TEMP 'windows-container-image.json')
+          Assert-CIDockerFailure -Image $image
       - name: 驗證容器真實報告與來源
         timeout-minutes: 5
         if: always()
