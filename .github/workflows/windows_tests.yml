@@ -46,17 +46,20 @@ jobs:
           $case='test/powershell/integration/audit_runtime_tests.ps1'
           $globalIndex=[Array]::IndexOf([string[]]$manifest.Tests,$case)
           if($globalIndex -lt 0 -or $globalIndex%4 -ne 2){throw 'Unexpected canonical case'}
-          $manifest.Tests=@($case)
+          $peer='test/powershell/integration/ci_runner_tests.ps1'
+          $peerIndex=[Array]::IndexOf([string[]]$manifest.Tests,$peer)
+          if($peerIndex -ne 6){throw 'Unexpected original peer'}
+          $manifest.Tests=@($case,$peer)
           $manifest.TestEngines=[pscustomobject]@{}
-          $manifest|Add-Member ShardContext ([pscustomobject]@{Commit=$head;RunUrl='https://github.com/ycpss91255/windows_setup/actions/runs/42512829236';RunAttempt=1;ShardIndex=2;ShardCount=4;GlobalIndices=@($globalIndex)})
+          $manifest|Add-Member ShardContext ([pscustomobject]@{Commit=$head;RunUrl='https://github.com/ycpss91255/windows_setup/actions/runs/42512829236';RunAttempt=1;ShardIndex=2;ShardCount=4;GlobalIndices=@($globalIndex,$peerIndex)})
           [IO.File]::WriteAllText($path,($manifest|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
           $nativeSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
           $kind=if($nativeSid -eq 'S-1-5-18'){'System'}elseif($nativeSid -match '-500$'){'BuiltinAdministrator'}else{'StandardAccount'}
           Write-Host ('NativeIdentityKind='+$kind+';SourceCommit='+$head+';Sources='+$manifest.Sources.Count)
           $proof=Join-Path $folder 'proof'
           $old=$ErrorActionPreference
-          try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\powershell_coverage.ps1 -ManifestPath $path -OutputDirectory $proof -ThrottleLimit 1 *> (Join-Path $folder 'collector.private.log');$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
-          foreach($workerIndex in @(0)){
+          try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\powershell_coverage.ps1 -ManifestPath $path -OutputDirectory $proof -ThrottleLimit 2 *> (Join-Path $folder 'collector.private.log');$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
+          foreach($workerIndex in @(0,1)){
             Write-Host ('DiagnosticWorkerIndex='+$workerIndex)
             $stdout=Join-Path $proof ('worker_'+$workerIndex+'.private.stdout.log')
           $stderr=Join-Path $proof ('worker_'+$workerIndex+'.private.stderr.log')
