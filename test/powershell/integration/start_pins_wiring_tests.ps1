@@ -22,3 +22,13 @@ $r=Invoke-StartPinsConfiguration -AssetRoot $env:TEMP -OutputRoot $env:TEMP
 Assert ($script:writes -ge 3 -and $script:legacy.Count -eq 3) 'supported GPO does not install device provisioning policy'
 $before=$script:writes;$r=Invoke-StartPinsConfiguration -AssetRoot $env:TEMP -OutputRoot $env:TEMP -VerifyOnly
 Assert ($script:writes -eq $before -and $script:exported -eq 5) 'GPO verifier only exports actual pins'
+# Exercise the actual product call, not a mirrored invocation.
+$entry=Get-Content (Join-Path $PSScriptRoot '../../../modules/start_menu/apply_start_menu_settings.ps1') -Raw
+$t=$null;$e=$null;$ast=[Management.Automation.Language.Parser]::ParseInput($entry,[ref]$t,[ref]$e)
+$call=$ast.Find({param($a)$a -is [Management.Automation.Language.CommandAst] -and $a.GetCommandName() -eq 'Invoke-StartPinsConfiguration'},$true)
+Assert ([bool]$call) 'actual module calls shared version-aware configuration'
+& {
+ $assetRoot='C:\fixture assets';$root='C:\fixture output';$VerifyOnly=$true;$ApplyPolicy=$true;$NonInteractive=$true
+ function Invoke-StartPinsConfiguration {param($AssetRoot,$OutputRoot,[switch]$VerifyOnly,[switch]$ApplyPolicy,[switch]$NonInteractive);Assert ($AssetRoot -eq 'C:\fixture assets' -and $OutputRoot -eq 'C:\fixture output' -and $VerifyOnly -and $ApplyPolicy -and $NonInteractive) 'actual module forwards context and all safety switches'}
+ . ([scriptblock]::Create($call.Extent.Text))
+}
