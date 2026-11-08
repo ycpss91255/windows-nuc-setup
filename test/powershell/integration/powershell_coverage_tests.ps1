@@ -49,6 +49,11 @@ Assert (@($branch|Where-Object {[int]$_.number -eq 7 -and [int]$_.hits -gt 0}).C
 $evidence=Get-Content (Join-Path $out 'evidence.json') -Raw|ConvertFrom-Json
 Assert ($evidence.Workers.Count -eq 2 -and @($evidence.Workers.ProcessId|Select-Object -Unique).Count -eq 2) '每套測試由獨立程序收集'
 Assert ($evidence.Sources.Count -eq 2 -and $evidence.PesterVersion -eq '6.0.0') '來源清單及固定工具版本保留'
+foreach($source in $evidence.Sources){
+ $catalog=@($source.ExpectedLines)
+ $actual=@(($classes|Where-Object filename -ceq $source.File).lines.line|ForEach-Object {[int]$_.number})
+ Assert ($catalog.Count -gt 0 -and ($catalog -join ',') -ceq ($actual -join ',')) ('真命令清單獨立提供完整行分母：'+$source.File)
+}
 foreach($case in @('missing','empty','outside','failed_test','empty_coverage')){
  $bad=[ordered]@{SourceRoot=$fixture;Sources=@('branch.ps1','never.ps1');Tests=@('positive.Tests.ps1')}
  switch($case){missing{$bad.Sources+=@('missing.ps1')} empty{$bad.Sources=@()} outside{$bad.Sources=@('../outside.ps1')} failed_test{WriteFixture 'failed.Tests.ps1' "Describe 'bad' { It 'fails' { 1 | Should-Be 2 } }";$bad.Tests=@('failed.Tests.ps1')} empty_coverage{WriteFixture 'empty.ps1' '# No executable code';$bad.Sources=@('empty.ps1')}}
@@ -59,3 +64,14 @@ foreach($case in @('missing','empty','outside','failed_test','empty_coverage')){
  Assert ($LASTEXITCODE -ne 0) ('拒絕不完整證據：'+$case)
  Assert (-not(Test-Path (Join-Path (Join-Path $fixture $case) 'coverage.xml'))) ('失敗不發布總報告：'+$case)
 }
+WriteFixture 'plain.ps1' ". (Join-Path `$PSScriptRoot 'branch.ps1'); if((Select-Value `$true) -ne 'positive'){throw 'bad'}"
+WriteFixture 'wrapper.ps1' @'
+param($SuitePath,$SourceRoot)
+Describe 'standalone suite wrapper' { It 'runs unchanged standalone script' { & $SuitePath } }
+'@
+$wrapped=[ordered]@{SourceRoot=$fixture;Sources=@('branch.ps1','never.ps1');Tests=@('plain.ps1');Wrapper='wrapper.ps1'}
+$wrappedPath=Join-Path $fixture 'wrapped.json';[IO.File]::WriteAllText($wrappedPath,($wrapped|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $wrappedPath -OutputDirectory (Join-Path $fixture 'wrapped') *> (Join-Path $fixture 'wrapped.log')
+Assert ($LASTEXITCODE -eq 0) '既有獨立測試可透過 Pester worker 包裝而不改來源'
+[xml]$wrappedXml=Get-Content (Join-Path $fixture 'wrapped/coverage.xml') -Raw
+Assert (@(($wrappedXml.coverage.packages.package.classes.class|Where-Object filename -eq 'branch.ps1').lines.line|Where-Object {$_.number -eq '3' -and $_.hits -eq '1'}).Count -eq 1) 'wrapper 捕捉原始被呼叫檔案的真命中'
