@@ -182,10 +182,12 @@ jobs:
           cache: false
       - name: 確認真實 Windows Docker 能力
         run: |
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\docker\docker.ps1 -Action doctor -Isolation process
+          . .\script\test\ci_tasks.ps1
+          Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\script\docker\docker.ps1','-Action','doctor','-Isolation','process')
       - name: 建置並在 Windows 容器執行全部隔離測試
         run: |
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\docker\docker.ps1 -Action test -Isolation process -ReportDirectory (Join-Path $env:RUNNER_TEMP 'windows-container-results')
+          . .\script\test\ci_tasks.ps1
+          Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\script\docker\docker.ps1','-Action','test','-Isolation','process','-ReportDirectory',(Join-Path $env:RUNNER_TEMP 'windows-container-results'))
       - name: 證明真實容器失敗會保留非零退出碼
         run: |
           . .\script\docker\library.ps1
