@@ -76,6 +76,19 @@ jobs:
             $full=$location.Groups['path'].Value
             if($full.StartsWith($source+'\',[StringComparison]::OrdinalIgnoreCase)){$relative=$full.Substring($source.Length+1).Replace('\','/');if($relative -in @('test/powershell/coverage/create_baseline_manifest.ps1','test/powershell/integration/coverage_shards_tests.ps1','test/powershell/coverage/safe_suite.ps1','script/test/powershell_coverage.ps1')){Write-Host ('KNOWN_LOCATION '+(@{File=$relative;Line=[int]$location.Groups['line'].Value}|ConvertTo-Json -Compress))}}
           }
+          $nativeTemp=[IO.Path]::GetTempPath()
+          $candidates=@(Get-ChildItem -LiteralPath $nativeTemp -Directory -Filter 'coverage_shards_*'|Where-Object {$_.Name -match '^coverage_shards_[a-f0-9]{32}$'}|Sort-Object CreationTimeUtc -Descending)
+          if($candidates.Count){
+            $leaf=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('hk+QbiAALU6HZQ=='))
+            $probeRoot=Join-Path $candidates[0].FullName $leaf
+            if(Test-Path $probeRoot){
+              $resolved=(Resolve-Path -LiteralPath $probeRoot).Path
+              foreach($entry in @(Get-ChildItem (Join-Path $resolved 'test/powershell/unit'),(Join-Path $resolved 'test/powershell/integration') -File -Filter '*_tests.ps1')){
+                $relative=$entry.FullName.Substring($resolved.Length+1)
+                Write-Host ('PATH_FACT '+(@{InputHasShortAlias=($probeRoot -match '~[0-9]');ResolvedHasShortAlias=($resolved -match '~[0-9]');EntryHasShortAlias=($entry.FullName -match '~[0-9]');EntryPrefixMatches=$entry.FullName.StartsWith($resolved+'\',[StringComparison]::OrdinalIgnoreCase);RelativeExpected=($relative -match '^test[\\/]powershell[\\/]unit[\\/]side_[01]_tests\.ps1$');RelativeJoinExists=(Test-Path -LiteralPath (Join-Path $resolved $relative))}|ConvertTo-Json -Compress))
+              }
+            }
+          }
           Write-Host ('NativeExitCode='+$code+';CompletedEvidence='+(Test-Path (Join-Path $proof 'evidence.json')))
           & git diff --exit-code
           if($LASTEXITCODE -ne 0){throw 'Diagnostic changed tracked source'}
