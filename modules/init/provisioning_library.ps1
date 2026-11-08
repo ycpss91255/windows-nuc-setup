@@ -282,11 +282,11 @@ function Invoke-InitProvisioningEntry {
   Invoke-InitOobeFlow -SourceRoot $runtime -StageRoot $StageRoot
   return $true
  }
- if(-not $ResumeStatePath -and -not(Test-Path -LiteralPath $statePath)){return $false}
  if(-not $context.IsAdministrator){
   if($ResumeStatePath){throw '請從公開 windows_setup_init.cmd 續跑並允許原帳號管理員權限。'}
   return $false
  }
+ if(-not $ResumeStatePath -and -not(Test-Path -LiteralPath $statePath)){return $false}
  Assert-InitProtectedDirectory $StageRoot
  $asset=Assert-InitProvisioningAsset -AssetRoot (Join-Path $StageRoot 'runtime/modules/init/assets')
  $state=Read-InitProvisioningState $statePath $context.MachineGuid $asset.PackageSHA256
