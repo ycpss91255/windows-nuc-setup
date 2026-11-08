@@ -19,7 +19,7 @@ function gh {
  if($words[0] -eq 'api' -and $words -contains '--paginate'){if($script:mode -eq 'existing'){return 'v1.0.0'};return}
  if($words[0] -eq 'api' -and $words[1] -like '*/commits/*'){if($script:mode -eq 'wrong-tag'){return ('b'*40)};return ('a'*40)}
  if($words[0] -eq 'release' -and $words[1] -eq 'create'){$script:created++;Assert ($words -contains '--draft' -and $words -contains '--verify-tag' -and $words -contains '--target' -and $words -contains $zip -and $words -cnotcontains '--clobber') '只建立新草稿且固定tag與資產';return}
- if($words[0] -eq 'api' -and $words[1] -like '*/releases/tags/*'){return (@{draft=$true;tag_name='v1.0.0';target_commitish=('a'*40);name='v1.0.0';body=$script:marker;assets=@(@{name=$asset.Name;size=$asset.Size;digest=('sha256:'+$asset.SHA256)})}|ConvertTo-Json -Depth 8)}
+ if($words[0] -eq 'api' -and $words[1] -like '*/releases/tags/*'){return (@{draft=$true;prerelease=$false;tag_name='v1.0.0';target_commitish=('a'*40);name='v1.0.0';body=$script:marker;assets=@(@{name=$asset.Name;size=$asset.Size;digest=('sha256:'+$asset.SHA256)})}|ConvertTo-Json -Depth 8)}
  throw ('unexpected gh '+($words -join ' '))
 }
 $arguments=@{Version='v1.0.0';Repository='example/repo';PackageRoot=$root;AssetDirectory=$temp;MetadataPath=$metadata}

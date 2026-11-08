@@ -22,7 +22,7 @@ foreach($mode in @('name','size','hash','profile','manifest','extra')){
 }
 Write-Metadata
 $marker=Get-DriverDraftMarker -Version v1.0.0 -Commit ('c'*40) -MetadataPath $metadata
-$draft=@{draft=$true;tag_name='v1.0.0';target_commitish=('c'*40);name='v1.0.0';body=$marker;assets=@(@{name=$entry.Name;size=$entry.Size;digest=('sha256:'+$entry.SHA256)})}
+$draft=@{draft=$true;prerelease=$false;tag_name='v1.0.0';target_commitish=('c'*40);name='v1.0.0';body=$marker;assets=@(@{name=$entry.Name;size=$entry.Size;digest=('sha256:'+$entry.SHA256)})}
 Assert-ReleaseDriverDraft -Draft $draft -Version v1.0.0 -Commit ('c'*40) -MetadataPath $metadata -Assets $assets
 Assert $true '完整匹配草稿可繼續'
 foreach($mode in @('published','tag','commit','body','extra','digest','size','missing')){
