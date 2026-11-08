@@ -438,3 +438,25 @@ func TestPowerShellShardPackCannotRelabelActualNativeContext(t *testing.T) {
 		})
 	}
 }
+
+func TestPowerShellShardPackRejectsUnexportedPrivateXML(t *testing.T) {
+	root, manifest, sha := shardCLIFixture(t)
+	dir := filepath.Join(t.TempDir(), "proof")
+	writeShardCLIProof(t, root, dir, 123, true)
+	bindShardCLIProof(t, root, dir, sha, 0, 2, 1)
+	path := filepath.Join(dir, "coverage.xml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = bytes.Replace(b, []byte("<packages>"), []byte("<!-- C:/Users/private/never-public -->\n<packages>"), 1)
+	if err = os.WriteFile(path, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = powershellShardPack(append(shardCLIArgs(root, manifest, sha), "--shard-index", "0", "--evidence-dir", dir), &bytes.Buffer{}); err == nil {
+		t.Fatal("ignored XML comments must not leak private paths in an allegedly safe shard")
+	}
+	if _, err = os.Stat(filepath.Join(dir, "shard.json")); err == nil {
+		t.Fatal("private XML created a success envelope")
+	}
+}
