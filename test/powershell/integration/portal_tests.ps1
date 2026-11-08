@@ -75,6 +75,7 @@ function gh {
  if($words[0] -eq 'api' -and $words -contains '--paginate'){return}
  if($words[0] -eq 'release' -and $words[1] -eq 'create'){
   $global:portalDraftRequested=$words -contains '--draft'
+  $global:portalReleaseTitle=$words[[Array]::IndexOf($words,'--title')+1]
   $allowed=@('quality.json','quality-manifest.json','index.html','summary.md','junit.xml','unit.svg','integration.svg','system.svg','coverage.svg')
   $global:portalMockAssets=@($words|Where-Object {[IO.Path]::GetFileName([string]$_) -in $allowed}|ForEach-Object {@{name=[IO.Path]::GetFileName($_);digest=('sha256:'+(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant())}})
   return
@@ -96,6 +97,7 @@ foreach($mode in @('success','bad-digest','mutable','string-immutable','missing-
  $global:portalMockMode=$mode;$global:portalPublished=0;$global:portalDraftRequested=$false
  $accepted=$true;try{& $publish -PublicDirectory $b.AssetDirectory -Version $b.Version -Commit $b.Commit -NotesPath $notes -Repository example/repo|Out-Null}catch{$accepted=$false}
  Assert ($accepted -eq ($mode -eq 'success')) ('release accepts only verified immutable publication: '+$mode)
+ Assert ($global:portalReleaseTitle -ceq $b.Version) ('release title contains only the exact version: '+$mode)
  Assert $global:portalDraftRequested ('release uses draft before upload verification: '+$mode)
  Assert ($global:portalPublished -eq $(if($mode -eq 'bad-digest'){0}else{1})) ('bad attachment digest cannot reach publish: '+$mode)
 }
