@@ -32,3 +32,20 @@ function Get-SetupDriverReadback {
  }
  [pscustomobject]@{InstanceId=$Plan.InstanceId;InfPath=$Plan.InfPath;Status=$status;Reason=$reason;PreviousVersion=$Plan.CurrentVersion;CurrentVersion=$version;TargetVersion=$Plan.TargetVersion;Provider=$Plan.TargetProvider}
 }
+function Assert-SetupDriverTargetIntegrity {
+ param([Parameter(Mandatory=$true)]$Target,[Parameter(Mandatory=$true)][string]$Root)
+ $base=[IO.Path]::GetFullPath($Root).TrimEnd('\')+'\'
+ foreach($kind in @('Inf','Catalog')){
+  $relative=[string]$Target.($kind+'Path');$expected=[string]$Target.($kind+'SHA256')
+  if(-not $relative -or [IO.Path]::IsPathRooted($relative) -or $relative -match '(^|[\\/])\.\.([\\/]|$)' -or $expected -notmatch '^[A-Fa-f0-9]{64}$'){throw 'INF/CAT 需要安全相對路徑及有效釘選 hash。'}
+  $file=[IO.Path]::GetFullPath((Join-Path $base $relative))
+  if(-not $file.StartsWith($base,[StringComparison]::OrdinalIgnoreCase)){throw 'INF/CAT 超出驅動目錄。'}
+  $walk=Get-Item -LiteralPath $file -ErrorAction Stop
+  while($walk -and $walk.FullName.Length -ge $base.TrimEnd('\').Length){if($walk.Attributes -band [IO.FileAttributes]::ReparsePoint){throw '驅動內容不可透過重新解析點。'};$walk=if($walk -is [IO.FileInfo]){$walk.Directory}else{$walk.Parent}}
+  if((Get-FileHash -LiteralPath $file -Algorithm SHA256 -ErrorAction Stop).Hash -ne $expected){throw ($kind+' SHA256 不符。')}
+ }
+ $catalog=Join-Path $base $Target.CatalogPath
+ $signature=Get-AuthenticodeSignature -LiteralPath $catalog -ErrorAction Stop
+ if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(^|,\s*)CN=Microsoft Windows Hardware Compatibility Publisher(,|$)'){throw 'CAT 未通過 Microsoft 硬體相容簽章驗證。'}
+ return $true
+}
