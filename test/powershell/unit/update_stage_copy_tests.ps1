@@ -47,5 +47,5 @@ try{
 Assert (Test-Path (Join-Path $stage.Path 'Update-Worker.ps1')) '完成測試保留stage不遞迴刪除資料'
 $verifyText=Get-Content (Join-Path $root 'core/verification_library.ps1') -Raw
 Assert ($verifyText.Contains('Read-SetupUpdateResult')) '正式總驗證使用受保護context讀取更新結果'
-$auditText=Get-Content (Join-Path $root 'core/audit_nuc.ps1') -Raw
+$auditText=Get-Content (Join-Path $root 'core/audit_library.ps1') -Raw
 Assert ($auditText.Contains('Read-SetupUpdateResult')) '稽核使用相同更新結果身分核對'
