@@ -5,6 +5,7 @@ $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 $reader=Join-Path $root 'script/test/managed_catalog.ps1'
 Assert (Test-Path -LiteralPath $reader -PathType Leaf) 'portable PDB catalog has an independent reader'
+$rejectionReader=Join-Path $root 'test/powershell/fixtures/read_managed_catalog_rejection.ps1'
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('pdb_catalog_'+[guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Path $temp|Out-Null
 $dotnet=(Get-Command dotnet -ErrorAction Stop).Source
 $sdks=@(& $dotnet --list-sdks|ForEach-Object {if($_ -match '^([0-9.]+)\s+\[(.+)\]$'){Join-Path (Join-Path $Matches[2] $Matches[1]) 'Roslyn/bincore/csc.dll'}})
@@ -51,10 +52,13 @@ function Assert-CatalogRejected {
  }else{
   $log=Join-Path $temp ('rejected_'+[guid]::NewGuid().ToString('N')+'.log');$target=Join-Path $temp ('rejected_'+[guid]::NewGuid().ToString('N')+'.json')
   $savedPreference=$ErrorActionPreference
-  try{$ErrorActionPreference='Continue';& pwsh.exe -NoProfile -File $reader -SourceRoot $SourceDirectory -AssemblyPath $PE -PDBPath $Symbols -OutputPath $target *> $log;$exitCode=$LASTEXITCODE}finally{$ErrorActionPreference=$savedPreference}
-  if($exitCode -eq 0){throw 'Expected rejection but catalog command succeeded'}
-  $message=[IO.File]::ReadAllText($log)
+  try{$ErrorActionPreference='Continue';& pwsh.exe -NoProfile -File $rejectionReader -ReaderPath $reader -TestSourceRoot $SourceDirectory -TestAssemblyPath $PE -TestPdbPath $Symbols -ErrorPath $target *> $log;$exitCode=$LASTEXITCODE}finally{$ErrorActionPreference=$savedPreference}
+  if($exitCode -eq 0 -or -not(Test-Path -LiteralPath $target)){throw ('Expected semantic rejection evidence; exit='+$exitCode+'; actual='+[IO.File]::ReadAllText($log))}
+  $errorEvidence=[IO.File]::ReadAllText($target)|ConvertFrom-Json
+  $message=[string]$errorEvidence.Message
+  if($errorEvidence.SchemaVersion -ne 1 -or $errorEvidence.ExceptionType -cne 'System.Management.Automation.RuntimeException'){throw ('Unexpected rejection type: '+($errorEvidence|ConvertTo-Json -Compress))}
  }
+ if($message -notmatch [regex]::Escape($Expected)){Write-Host ('Actual raw exception: '+$message)}
  Assert ($message -match [regex]::Escape($Expected)) $Name
 }
 Assert-CatalogRejected $temp $dll $pdb 'Compiler PDB source checksum differs' 'modified source cannot be accepted using old compiler checksum'
