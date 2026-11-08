@@ -42,6 +42,13 @@ $complete=New-Case 'already_complete';$report=Get-Content -LiteralPath $complete
 $repo=[pscustomobject]@{SchemaVersion=1;Metric='complete-executable-lines-v1';Commit=$report.Commit;RunUrl=$report.RunUrl;MeasuredAt='2026-11-09T00:00:01Z';SourceState='Clean';InventorySHA256=('b'*64);NormalizedSHA256=('c'*64);Result=[pscustomobject]@{SchemaVersion=1;Metric='complete-executable-lines-v1';Complete=$true;Covered=8;Executable=10;Percent=80;Missing=@();Blockers=@();Languages=[pscustomobject]@{powershell=[pscustomobject]@{Covered=8;Executable=10}}}}
 $report|Add-Member -NotePropertyName RepoCoverage -NotePropertyValue $repo;$report.Coverage='Measured'
 [IO.File]::WriteAllText($complete.Summary,($report|ConvertTo-Json -Depth 20));Reject-Unchanged $complete 'already-complete Release snapshot cannot be backfilled'
+foreach($name in @('go_coverage.out','go_coverage.json')){
+ $existing=New-Case ('existing_'+$name.Replace('.','_'));$artifact=Join-Path $existing.Public $name
+ [IO.File]::WriteAllText($artifact,'existing fixture bytes must not be overwritten')
+ $summaryHash=(Get-FileHash -LiteralPath $existing.Summary).Hash;$artifactHash=(Get-FileHash -LiteralPath $artifact).Hash
+ Assert ((Run-Attach $existing -PreparingRelease) -ne 0) ('existing Release staging artifact is rejected: '+$name)
+ Assert ((Get-FileHash -LiteralPath $existing.Summary).Hash -ceq $summaryHash -and (Get-FileHash -LiteralPath $artifact).Hash -ceq $artifactHash) ('existing Release report and artifact bytes are preserved: '+$name)
+}
 foreach($mutation in @('commit','run','profile','missing_profile','missing_metadata','below_threshold','rounded_below_threshold','dirty')){
  $case=New-Case $mutation;$path=Join-Path $case.Producer 'go_coverage.json';$c=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json
  switch($mutation){
