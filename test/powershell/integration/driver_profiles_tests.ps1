@@ -6,11 +6,12 @@ function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Na
 function Reject([scriptblock]$Action,[string]$Name){$failed=$false;try{& $Action|Out-Null}catch{$failed=$true};Assert $failed $Name}
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('driver_profiles_'+[guid]::NewGuid().ToString('N'))
 $registry=Join-Path $temp 'drivers';$dir=Join-Path $registry 'synthetic_board';[void][IO.Directory]::CreateDirectory($dir)
-$profile=[ordered]@{SchemaVersion=1;ProfileId='synthetic_board';PackageDirectory='synthetic';Architecture='x64';SupportedBoards=@('SYNTHETIC-BOARD')}
-function SaveProfile {$profile|ConvertTo-Json|Set-Content (Join-Path $dir 'profile.json') -Encoding UTF8}
+$profile=[ordered]@{SchemaVersion=1;ProfileId='synthetic_board';PackageDirectory='synthetic';Architecture='x64';SupportedBoards=@('SYNTHETIC-BOARD','SYNTHETIC-SECOND');Description='測試主機板'}
+function SaveProfile {[IO.File]::WriteAllText((Join-Path $dir 'profile.json'),($profile|ConvertTo-Json),(New-Object Text.UTF8Encoding($false)))}
 SaveProfile
 $p=Get-SetupDriverProfile -BoardProduct SYNTHETIC-BOARD -ProfilesRoot $registry
 Assert ($p.ProfileId -eq 'synthetic_board' -and $p.PackageDirectory -eq 'synthetic') '第二種暫存設定檔由共用registry精準選出'
+Assert ($p.Description -ceq '測試主機板') 'Windows PowerShell 5.1正確讀取無BOM中文UTF8設定檔'
 Assert ($null -eq (Get-SetupDriverProfile -BoardProduct 'SYNTHETIC-BOARD-extra' -ProfilesRoot $registry)) '板號不得部分命中'
 $h=Get-SetupHardwareProfile -BoardProduct SYNTHETIC-BOARD -ProfilesRoot $registry -DriverPackagePath $temp
 Assert ($h.DriverProfileId -eq 'synthetic_board' -and -not $h.IsNuc8) '通用profile與NUC專屬判斷分開'
@@ -39,7 +40,9 @@ $wrong=Get-SetupHardwareProfile -BoardProduct NUC8i7HVB
 Reject {Test-SetupDriverPayload $wrong $export} '其他合法profile的包不能跨板安裝'
 $identity.SupportedBoards=@('NUC8i7HVB');$identity|ConvertTo-Json|Set-Content (Join-Path $export 'package.json') -Encoding UTF8
 Reject {Test-SetupDriverPayload $wrong $export} '只竄改包自宣板號不能放行'
-$identity.SupportedBoards=@('SYNTHETIC-BOARD');$identity|ConvertTo-Json|Set-Content (Join-Path $export 'package.json') -Encoding UTF8
+$identity.SupportedBoards=@('SYNTHETIC-BOARD','SYNTHETIC-BOARD');$identity|ConvertTo-Json|Set-Content (Join-Path $export 'package.json') -Encoding UTF8
+Reject {Test-SetupDriverPayload $h $export} '自宣板號重複不能冒充完整白名單'
+$identity.SupportedBoards=@('SYNTHETIC-BOARD','SYNTHETIC-SECOND');$identity|ConvertTo-Json|Set-Content (Join-Path $export 'package.json') -Encoding UTF8
 Add-Content (Join-Path $export 'drivers/synthetic_board/profile.json') ' '
 Reject {Test-SetupDriverPayload $h $export} '包內profile原始bytes改動拒絕'
 Write-Host 'ALL PASS: profile registry identity and export; TEMP only.'
