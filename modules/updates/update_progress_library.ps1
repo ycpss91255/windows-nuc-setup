@@ -9,7 +9,7 @@ function Write-SetupUpdateProgress {
  $row=[ordered]@{Stage=$Stage;Detail=$Detail;UpdatedAt=(Get-Date).ToString('o');PercentComplete=$PercentComplete;CurrentUpdate=$CurrentUpdate;TotalUpdates=$TotalUpdates;CurrentTitle=$CurrentTitle;CurrentPercent=$CurrentPercent}
  $temporary=$Path+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
  [IO.File]::WriteAllText($temporary,($row|ConvertTo-Json),(New-Object Text.UTF8Encoding($true)))
- try{if(Test-Path -LiteralPath $Path){[IO.File]::Replace($temporary,$Path,$null)}else{[IO.File]::Move($temporary,$Path)}}finally{if(Test-Path -LiteralPath $temporary){Remove-Item -LiteralPath $temporary -Force}}
+ try{if(Test-Path -LiteralPath $Path){[IO.File]::Replace($temporary,$Path,[Management.Automation.Language.NullString]::Value)}else{[IO.File]::Move($temporary,$Path)}}finally{if(Test-Path -LiteralPath $temporary){Remove-Item -LiteralPath $temporary -Force}}
  Write-Host ($Stage+'：'+$Detail)
 }
 function Invoke-SetupUpdateOperation {
