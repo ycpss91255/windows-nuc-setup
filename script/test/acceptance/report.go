@@ -8,6 +8,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	c "windows_setup/script/test/repo_coverage"
 )
 
 func ValidateXMLNamespace(data []byte, namespace string) error {
@@ -59,6 +60,7 @@ type Check struct {
 }
 type Totals struct{ SuitesExecuted, AssertionsExecuted, AssertionsPassed, AssertionsFailed, UnexecutedSuites int }
 type Report struct {
+	RepoCoverage                                                                                              *c.Evidence
 	SchemaVersion                                                                                             int
 	RequestedLayer, Commit, RunUrl, SourceState, Coverage, RefType, RefName, Environment, Version, MeasuredAt string
 	Success                                                                                                   bool
@@ -71,6 +73,9 @@ func decode(data []byte, v any) error {
 }
 func BadgeStatus(r Report, name string) string {
 	if name == "coverage" {
+		if r.RepoCoverage != nil && r.RepoCoverage.Result.Complete {
+			return fmt.Sprintf("%.1f%%", *r.RepoCoverage.Result.Percent)
+		}
 		return "not measured"
 	}
 	if name == "system" {
@@ -126,6 +131,9 @@ func ValidateSVG(data []byte, r Report, name string) error {
 		}
 	}
 	color := "#9f9f9f"
+	if name == "coverage" && r.RepoCoverage != nil && r.RepoCoverage.Result.Complete {
+		color = "#007ec6"
+	}
 	if status == "passed" {
 		color = "#4c1"
 	} else if status == "failed" {
@@ -149,6 +157,7 @@ func ValidateReport(read Reader, sha, run string, main bool) (Report, error) {
 	if e != nil {
 		return r, e
 	}
+	summaryData := data
 	if e = validateSchema(data); e != nil {
 		return r, e
 	}
@@ -165,7 +174,7 @@ func ValidateReport(read Reader, sha, run string, main bool) (Report, error) {
 	if main && (r.RefType != "Branch" || r.RefName != "main") {
 		return fail("R03 部署報表不是 main 分支")
 	}
-	if r.Coverage != "NotMeasured" || len(r.Checks) == 0 {
+	if (r.Coverage != "NotMeasured" && r.Coverage != "Measured") || len(r.Checks) == 0 {
 		return fail("R02 空測試或冒稱覆蓋率")
 	}
 	layers := map[string]bool{}
@@ -274,6 +283,18 @@ func ValidateReport(read Reader, sha, run string, main bool) (Report, error) {
 	if !strings.Contains(string(data), sha) || r.MeasuredAt == "" || !strings.Contains(string(data), r.MeasuredAt) {
 		return fail("R03 摘要來源或時間不一致")
 	}
+	repoEvidence, err := ValidateRepoCoverageReport(read, summaryData, sha, run, false)
+	if err != nil {
+		return r, err
+	}
+	expectedCoverage := "NotMeasured"
+	if repoEvidence != nil && repoEvidence.Result.Complete {
+		expectedCoverage = "Measured"
+	}
+	if r.Coverage != expectedCoverage || (repoEvidence != nil && r.SchemaVersion != 2) {
+		return fail("整體覆蓋率狀態或報告版本不符")
+	}
+	r.RepoCoverage = repoEvidence
 	requiredBadges := []string{"unit", "integration", "coverage"}
 	if r.SchemaVersion == 1 {
 		requiredBadges = append(requiredBadges, "system")
