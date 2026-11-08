@@ -49,7 +49,7 @@ function Invoke-StartPinsConfiguration {
    $layout=Join-Path $OutputRoot 'EmptyStartLayout.json'
    Set-Content -LiteralPath $layout -Value '{"pinnedList":[],"applyOnce":true}' -Encoding UTF8 -ErrorAction Stop
    $key='HKCU:\Software\Policies\Microsoft\Windows\Explorer'
-   New-Item -Path $key -Force|Out-Null
+   if(-not(Test-Path -LiteralPath $key -ErrorAction Stop)){New-Item -Path $key -ErrorAction Stop|Out-Null}
    New-ItemProperty -Path $key -Name ConfigureStartPins -PropertyType DWord -Value 1 -Force|Out-Null
    New-ItemProperty -Path $key -Name ConfigureStartPinsJSON -PropertyType String -Value $layout -Force|Out-Null
   }
