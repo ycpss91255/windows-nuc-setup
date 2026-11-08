@@ -31,7 +31,7 @@ $manifest=Join-Path $fixture 'manifest.json'
 $input=[ordered]@{SourceRoot=$fixture;Sources=@('branch.ps1','never.ps1');Tests=@('positive.Tests.ps1','negative.Tests.ps1')}
 [IO.File]::WriteAllText($manifest,($input|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
 $out=Join-Path $fixture 'coverage'
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $manifest -OutputDirectory $out *> (Join-Path $fixture 'collector.log')
+& $collector -ManifestPath $manifest -OutputDirectory $out *> (Join-Path $fixture 'collector.log')
 Assert ($LASTEXITCODE -eq 0) ('PS5.1 子程序真收集成功，診斷 '+$fixture)
 [xml]$merged=Get-Content (Join-Path $out 'coverage.xml') -Raw
 Assert ($merged.coverage.GetAttribute('coverage-metric') -ceq 'complete-executable-lines-v1' -and $merged.coverage.GetAttribute('coverage-schema') -ceq '1') '輸出明確宣告完整執行行共同語義'
