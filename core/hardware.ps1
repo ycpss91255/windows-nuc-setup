@@ -9,7 +9,7 @@ function Get-SetupDriverProfile {
  $profiles=@(Get-ChildItem -LiteralPath $ProfilesRoot -Directory|ForEach-Object {
   $file=Join-Path $_.FullName 'profile.json'
   if(Test-Path -LiteralPath $file -PathType Leaf){
-   $p=Get-Content -LiteralPath $file -Raw -ErrorAction Stop|ConvertFrom-Json
+   $p=Get-Content -LiteralPath $file -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json
    if($p.SchemaVersion -ne 1 -or $p.ProfileId -cnotmatch '^[a-z0-9][a-z0-9_]{0,63}$' -or $p.ProfileId -cne $_.Name -or $p.PackageDirectory -cnotmatch '^[a-z0-9][a-z0-9_]{0,63}$' -or $p.Architecture -cne 'x64' -or @($p.SupportedBoards).Count -lt 1 -or @($p.SupportedBoards|Select-Object -Unique).Count -ne @($p.SupportedBoards).Count){throw '驅動設定檔識別、目錄、架構或板號無效。'}
    foreach($board in $p.SupportedBoards){if(-not $board -or $board -ne $board.Trim() -or $board -match '[\\/\r\n]'){throw '驅動設定檔板號無效。'}}
    $p|Add-Member NoteProperty ProfileSHA256 ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash) -Force
@@ -117,15 +117,15 @@ function Test-SetupDriverPayload {
  if(-not $DriverPackagePath){return [pscustomobject]@{Status='Skipped';Count=0;Reason='未選擇獨立驅動包'}}
  $driverRoot=$DriverPackagePath
  if(-not $AllowLegacyManifest){
-  $identity=Get-Content -LiteralPath (Join-Path $driverRoot 'package.json') -Raw -ErrorAction Stop|ConvertFrom-Json
+  $identity=Get-Content -LiteralPath (Join-Path $driverRoot 'package.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json
   if($identity.SchemaVersion -eq 2){
    $profile=$Hardware.DriverProfileData
-   if(-not $profile -or $identity.ProfileId -cne $Hardware.DriverProfileId -or $identity.Architecture -cne $profile.Architecture -or $identity.ProfileSHA256 -notmatch '^[A-Fa-f0-9]{64}$' -or $identity.ProfileSHA256 -ne $profile.ProfileSHA256 -or @($identity.SupportedBoards).Count -ne @($profile.SupportedBoards).Count -or @($identity.SupportedBoards|Where-Object {$_ -notin $profile.SupportedBoards}).Count -or $Hardware.DriverBoard -notin $profile.SupportedBoards){throw '驅動包設定檔與目前硬體識別不符。'}
+   if(-not $profile -or $identity.ProfileId -cne $Hardware.DriverProfileId -or $identity.Architecture -cne $profile.Architecture -or $identity.ProfileSHA256 -notmatch '^[A-Fa-f0-9]{64}$' -or $identity.ProfileSHA256 -ne $profile.ProfileSHA256 -or @($identity.SupportedBoards).Count -ne @($profile.SupportedBoards).Count -or @($identity.SupportedBoards|Select-Object -Unique).Count -ne @($profile.SupportedBoards).Count -or @($identity.SupportedBoards|Where-Object {$_ -notin $profile.SupportedBoards}).Count -or $Hardware.DriverBoard -notin $profile.SupportedBoards){throw '驅動包設定檔與目前硬體識別不符。'}
    $included=Join-Path $driverRoot ('drivers/'+$profile.ProfileId+'/profile.json')
    if((Get-FileHash -LiteralPath $included -Algorithm SHA256 -ErrorAction Stop).Hash -ne $profile.ProfileSHA256){throw '驅動包內設定檔原始雜湊不符。'}
   }elseif($identity.SchemaVersion -ne 1 -or -not $Hardware.IsNuc8 -or $identity.HardwareProfile -ne 'NUC8' -or $identity.Architecture -ne 'x64' -or @($identity.SupportedBoards).Count -ne 2 -or 'NUC8i7HVB' -notin $identity.SupportedBoards -or 'NUC8i7HNB' -notin $identity.SupportedBoards -or $Hardware.DriverBoard -notin $identity.SupportedBoards){throw '驅動包機型或架構識別不符合目前硬體。'}
  }
- $manifest=Get-Content -LiteralPath (Join-Path $driverRoot 'manifest.json') -Raw -ErrorAction Stop|ConvertFrom-Json
+ $manifest=Get-Content -LiteralPath (Join-Path $driverRoot 'manifest.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json
   $manifest=@(Get-SetupDriverManifestEntries -Manifest $manifest)
  foreach($entry in $manifest){
   if($entry.File -notmatch '^[^\\/:]+\.zip$' -or $entry.File -match '^\.\.' -or $entry.SHA256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'NUC 驅動清單格式不合法。'}
