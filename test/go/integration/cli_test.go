@@ -58,6 +58,9 @@ func TestCLICommands(t *testing.T) {
 		q := decode(t, m)
 		q.RunUrl = ""
 		save(m, q)
+		if q.RepoCoverage != nil && q.RepoCoverage.RunUrl != q.RunUrl {
+			t.Fatal("local fixture aggregate evidence still belongs to the CI run")
+		}
 		dir := t.TempDir()
 		for n, b := range m {
 			if e := os.WriteFile(filepath.Join(dir, n), b, 0600); e != nil {
@@ -134,6 +137,9 @@ func TestCLICommands(t *testing.T) {
 		q.Commit = sha
 		q.RunUrl = "https://github.com/example/fixture/actions/runs/1"
 		save(m, q)
+		if q.RepoCoverage != nil {
+			t.Fatal("new sample source inherited unrelated repository coverage")
+		}
 		m["summary.md"] = []byte(strings.ReplaceAll(string(m["summary.md"]), old, sha))
 		reportDir := t.TempDir()
 		for n, b := range m {
