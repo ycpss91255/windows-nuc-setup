@@ -1,9 +1,10 @@
 ﻿#Requires -Version 5.1
 function Get-TestReportArtifactNames {
- param([ValidateSet(1,2)][int]$SchemaVersion)
+ param([ValidateSet(1,2)][int]$SchemaVersion,[switch]$IncludeGoProfile)
  $files=@('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')
- if($SchemaVersion -eq 1){return @($files+'system.svg')}
- return @($files+@('repo_coverage.json','coverage_inventory.json','coverage.xml'))
+ if($SchemaVersion -eq 1){$files+=@('system.svg')}else{$files+=@('repo_coverage.json','coverage_inventory.json','coverage.xml')}
+ if($IncludeGoProfile){$files+=@('go_coverage.out')}
+ return $files
 }
 function Get-TestIdentityMap {
  param($Snapshot)
@@ -36,8 +37,8 @@ function Compare-TestSnapshots {
  [pscustomobject]@{Status='Compared';BaselineVersion=$Baseline.Version;CandidateVersion=$Candidate.Version;BaselineCommit=$Baseline.Commit;CandidateCommit=$Candidate.Commit;BaselineMeasuredAt=$Baseline.MeasuredAt;CandidateMeasuredAt=$Candidate.MeasuredAt;CoverageDelta='Unknown / NotMeasured';Added=@($b.Keys|Where-Object {-not $a.ContainsKey($_)}|Sort-Object);Removed=@($a.Keys|Where-Object {-not $b.ContainsKey($_)}|Sort-Object);NewFailures=@($b.Keys|Where-Object {$b[$_] -eq 'Failed' -and (-not $a.ContainsKey($_) -or $a[$_] -ne 'Failed')}|Sort-Object);Fixed=@($b.Keys|Where-Object {$b[$_] -eq 'Passed' -and $a.ContainsKey($_) -and $a[$_] -eq 'Failed'}|Sort-Object);NotRun=@($b.Keys|Where-Object {$b[$_] -eq 'NotRun'}|Sort-Object)}
 }
 function Write-SnapshotView {
- param($Snapshot,[string]$OutputDirectory)
- Write-TestReports -SchemaVersion $Snapshot.SchemaVersion -Checks @($Snapshot.Checks) -OutputDirectory $OutputDirectory -Layer $Snapshot.RequestedLayer -Commit $Snapshot.Commit -RunUrl $Snapshot.RunUrl -SourceState $Snapshot.SourceState -Version $Snapshot.Version -Environment $Snapshot.Environment -RefType $Snapshot.RefType -RefName $Snapshot.RefName -MeasuredAt $Snapshot.MeasuredAt -Changes $Snapshot.Changes -RepoCoverage $(if($Snapshot.PSObject.Properties['RepoCoverage']){$Snapshot.RepoCoverage}else{$null}) -GoCoverage $(if($Snapshot.PSObject.Properties['GoCoverage']){$Snapshot.GoCoverage}else{$null})|Out-Null
+ param($Snapshot,[string]$OutputDirectory,[switch]$OmitGoProfileLink)
+ Write-TestReports -OmitGoProfileLink:$OmitGoProfileLink -SchemaVersion $Snapshot.SchemaVersion -Checks @($Snapshot.Checks) -OutputDirectory $OutputDirectory -Layer $Snapshot.RequestedLayer -Commit $Snapshot.Commit -RunUrl $Snapshot.RunUrl -SourceState $Snapshot.SourceState -Version $Snapshot.Version -Environment $Snapshot.Environment -RefType $Snapshot.RefType -RefName $Snapshot.RefName -MeasuredAt $Snapshot.MeasuredAt -Changes $Snapshot.Changes -RepoCoverage $(if($Snapshot.PSObject.Properties['RepoCoverage']){$Snapshot.RepoCoverage}else{$null}) -GoCoverage $(if($Snapshot.PSObject.Properties['GoCoverage']){$Snapshot.GoCoverage}else{$null})|Out-Null
 }
 function Test-PortalReleaseEvidence {
  param($Entry,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL)
@@ -54,7 +55,10 @@ function Test-PortalReleaseEvidence {
  if($manifest.SchemaVersion -notin @(1,2) -or $manifest.SchemaVersion -ne $snapshot.SchemaVersion){throw '品質 manifest 與報告 schema 不相符。'}
  Assert-TestReportSnapshot -Report $snapshot -Release
  if($snapshot.Version -cne $Entry.Version -or $snapshot.Commit -cne $Entry.Commit -or $manifest.Version -cne $Entry.Version -or $manifest.Commit -cne $Entry.Commit -or $manifest.SnapshotSHA256 -cne $actual){throw '版本、來源提交或品質 digest 不一致。'}
- $required=@(Get-TestReportArtifactNames $snapshot.SchemaVersion)
+ $profileDeclared=@($manifest.Files|Where-Object Name -ceq 'go_coverage.out').Count -gt 0
+ if(-not $profileDeclared -and @($Entry.AssetDigests|Where-Object Name -ceq 'go_coverage.out').Count){throw 'GitHub Go profile 附件沒有列入不可變 manifest。'}
+ if($profileDeclared -and -not $snapshot.PSObject.Properties['GoCoverage']){throw '原始 Go profile 缺少來源量測資料。'}
+ $required=@(Get-TestReportArtifactNames $snapshot.SchemaVersion -IncludeGoProfile:$profileDeclared)
  if(@($manifest.Files).Count -ne $required.Count){throw '品質 manifest 不完整。'}
  foreach($name in $required){
   $items=@($manifest.Files|Where-Object {$_.Name -ceq $name});if($items.Count -ne 1 -or $items[0].SHA256 -cnotmatch '^[a-f0-9]{64}$'){throw '品質 manifest 缺少或重複必要檔案。'}
@@ -69,6 +73,7 @@ function Test-PortalReleaseEvidence {
    if($content -match '(?is)<script\b|\bon[a-z]+\s*=|javascript\s*:|<iframe\b|<object\b|<embed\b'){throw '版本附件含可執行內容，拒絕發布。'}
   }
  }
+ if($profileDeclared){Assert-GoCoverageProfile -Coverage $snapshot.GoCoverage -Directory $Entry.AssetDirectory}
  if($snapshot.SchemaVersion -eq 2){Assert-RepoCoverageArtifacts -Report $snapshot -Directory $Entry.AssetDirectory -CoverageToolPath $CoverageToolPath -RequireComplete}
- [pscustomobject]@{Snapshot=$snapshot;Manifest=$manifest}
+ [pscustomobject]@{Snapshot=$snapshot;Manifest=$manifest;HasGoProfile=$profileDeclared}
 }

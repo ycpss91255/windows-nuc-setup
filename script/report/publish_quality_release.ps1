@@ -9,7 +9,10 @@ Assert-TestReportSnapshot -Report $snapshot -Release
 if($snapshot.SchemaVersion -ne 2){throw '本輪發布只接受schema2完整整體覆蓋率，legacy僅供歷史讀取。'}
 Assert-RepoCoverageArtifacts -Report $snapshot -Directory $PublicDirectory -CoverageToolPath $CoverageToolPath -RequireComplete
 if($snapshot.Commit -cne $Commit -or $snapshot.Version -cne $Version -or $snapshot.RefName -cne $Version){throw '發布版本與測試來源不一致。'}
-$files=@(Get-TestReportArtifactNames $snapshot.SchemaVersion)
+if(-not $snapshot.PSObject.Properties['GoCoverage']){throw '本輪發布需要全部自有 Go 工具的真實量測與原始 profile。'}
+Assert-GoCoverageProfile -Coverage $snapshot.GoCoverage -Directory $PublicDirectory
+if($snapshot.GoCoverage.Covered*100 -lt $snapshot.GoCoverage.TotalStatements*80){throw '本輪發布的 Go 覆蓋率不得低於精確八成。'}
+$files=@(Get-TestReportArtifactNames $snapshot.SchemaVersion -IncludeGoProfile)
 $hashes=@(foreach($name in $files){[ordered]@{Name=$name;SHA256=(Get-FileHash -LiteralPath (Join-Path $PublicDirectory $name)).Hash.ToLowerInvariant()}})
 $quality=Join-Path $PublicDirectory 'quality.json';Copy-Item -LiteralPath (Join-Path $PublicDirectory 'summary.json') -Destination $quality
 $manifest=[ordered]@{SchemaVersion=$snapshot.SchemaVersion;Version=$Version;Commit=$Commit;MeasuredAt=$snapshot.MeasuredAt;RunUrl=$snapshot.RunUrl;SnapshotSHA256=(Get-FileHash $quality).Hash.ToLowerInvariant();Files=$hashes}
