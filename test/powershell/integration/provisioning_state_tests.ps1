@@ -18,6 +18,11 @@ Save-InitProvisioningState $state $path
 $saved=[IO.File]::ReadAllText($path)|ConvertFrom-Json
 Assert ($saved.MachineGuid -eq 'fixture' -and $saved.Phase -eq 'Prepared') 'protected state serialized without credentials'
 $original=[IO.File]::ReadAllText($path)
+$script:fileSafe=$false
+function Assert-InitProtectedFile {param($Path) if(-not $script:fileSafe){throw 'synthetic unsafe file ACL'}}
+$rejected=$false;try{Save-InitProvisioningState $state $path}catch{$rejected=$true}
+Assert ($rejected -and [IO.File]::ReadAllText($path) -ceq $original) 'existing unsafe file ACL prevents replacement even inside protected folder'
+$script:fileSafe=$true
 $state|Add-Member NoteProperty Password 'never-write-this'
 $rejected=$false;try{Save-InitProvisioningState $state $path}catch{$rejected=$true}
 Assert ($rejected -and [IO.File]::ReadAllText($path) -ceq $original) 'invalid state preserves prior file exactly'
