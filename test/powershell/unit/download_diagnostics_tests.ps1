@@ -42,7 +42,7 @@ foreach($case in @('504','Timeout','404')){
  $controlled=$events.Count -eq $expected
  for($i=0;$i -lt $events.Count;$i++){$controlled=$controlled -and (Test-ControlledFailureEvent $events[$i] $reason ($i -lt $expected-1))}
  Assert $controlled ('每一次失敗訊息都有完整受控原因、實際retry與非負有界耗時 '+$case)
- Assert ($events.Count -eq $expected -and $events[-1] -ceq ('Official download failure: '+$reason+'; retry=false.')) ('只輸出受控原因與實際最終retry決策 '+$case)
+ Assert ($events.Count -eq $expected -and (Test-ControlledFailureEvent $events[-1] $reason $false)) ('只輸出受控原因與實際最終retry決策 '+$case)
  Assert (-not(($script:messages -join '|').Contains('SECRET')) -and -not(($script:messages -join '|').Contains($temp))) ('不輸出URI例外訊息或私人路徑 '+$case)
 }
 Write-Host 'ALL PASS: bounded download diagnostics; TEMP and typed HTTP doubles only'
