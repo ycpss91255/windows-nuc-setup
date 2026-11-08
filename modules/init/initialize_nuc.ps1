@@ -1,8 +1,12 @@
 ﻿#Requires -Version 5.1
-param([string]$SshScriptPath,[string]$ExpectedUserSID)
+param([string]$SshScriptPath,[string]$ExpectedUserSID,[string]$ResumeStatePath)
 $ErrorActionPreference='Stop'
 if($SshScriptPath){$SshScriptPath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($SshScriptPath)}
 . (Join-Path $PSScriptRoot 'oobe_library.ps1')
+. (Join-Path $PSScriptRoot 'provisioning_library.ps1')
+$sourceRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$stageRoot=Join-Path $env:ProgramData 'windows_setup_init'
+if(Invoke-InitProvisioningEntry -SourceRoot $sourceRoot -StageRoot $stageRoot -ResumeStatePath $ResumeStatePath -ExpectedUserSID $ExpectedUserSID){return}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $sid=$identity.User.Value
 if($ExpectedUserSID -and $ExpectedUserSID -ne $sid){throw '提權後帳號已改變，請使用原帳號的管理員權限。'}
@@ -17,13 +21,6 @@ if($sid -ne 'S-1-5-18'){
 }
 $route=Get-InitRoute -Sid $sid -ImageState $imageState -IsAdministrator $admin -DesktopOwned $desktopOwned
 Write-Host ('=== Init：Windows '+[Environment]::OSVersion.Version+'；階段 '+$route+' ===') -ForegroundColor Cyan
-if($route -eq 'GuideAudit'){
- Write-Host '目前是 Windows 初始設定的 SYSTEM 命令視窗，不能在此直接執行 Sysprep。'
- Write-Host '請關閉此命令視窗，在設定畫面按 Ctrl + Shift + F3。此快捷鍵會重新開機並進入稽核模式。' -ForegroundColor Yellow
- Write-Host '進入 Administrator 桌面後，先按「取消」關閉自動出現的 Sysprep 對話框，再從 USB 執行同一個 init.cmd。'
- Write-Host '屆時才會詢問新帳號及密碼。本次未建立帳號、寫入密碼或更改設定。'
- return
-}
 if($route -eq 'ElevationRequired'){
  Write-Host '請允許目前帳號的管理員權限；不可輸入另一個管理員帳號。'
  $command="& '"+$PSCommandPath.Replace("'","''")+"' -ExpectedUserSID '"+$sid+"'"
@@ -56,7 +53,7 @@ if($route -eq 'DesktopSSH'){
 }
 # Audit is inferred conservatively. ImageState alone is not proof of audit mode.
 if(-not $desktopOwned){throw '請在稽核模式 Administrator 桌面執行，不接受遠端或非桌面工作階段。'}
-if((Read-Host '是否剛從初始設定畫面按 Ctrl+Shift+F3 進入稽核模式？確認請輸入 AUDIT') -cne 'AUDIT'){throw '未確認稽核模式，本次未更改設定。'}
+if((Read-Host '僅供已由其他管理流程進入稽核模式的維護者：確認目前確為稽核模式請輸入 AUDIT') -cne 'AUDIT'){throw '未確認稽核模式，本次未更改設定。'}
 if(Get-Process sysprep -ErrorAction SilentlyContinue){throw 'Sysprep 對話框或程序仍開啟。請先按「取消」關閉，勿同時執行兩份，再重跑 init.cmd。'}
 $sMode=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -ErrorAction SilentlyContinue).SkuPolicyRequired
 if($sMode -eq 1){throw 'S mode 不支援本工具使用的首次登入清理指令，本次未建立設定。'}
