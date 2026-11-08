@@ -8,6 +8,7 @@ $script:assetOK=$false;$script:accounts=0;$script:prompts=0;$script:staged=$fals
 function Get-InitProvisioningContext { @{Sid='S-1-5-18';Build=22631;ProductType=1;Is64Bit=$true;IsWinPE=$false;OobeInProgress=1;SetupInProgress=1;OobeProcessInSession=$true;OobeApiSucceeded=$true;OobeComplete=$false;MachineGuid='fixture';ComputerName='TEST'} }
 function Assert-InitProvisioningAsset {param($AssetRoot) if(-not $script:assetOK){throw 'synthetic missing package'};[pscustomobject]@{PackageSHA256=('e'*64)}}
 function New-InitProvisioningStage {param($SourceRoot,$StageRoot) $script:staged=$true}
+function New-InitPublicLauncher {param($StageRoot) return ($StageRoot+'.cmd')}
 function Save-InitProvisioningState {param($State,$StatePath) if(-not $script:staged){throw 'not staged'}}
 function Read-Host {param($Prompt,[switch]$AsSecureString) $script:prompts++;if(-not $script:staged){throw 'prompt before ACL stage'};if($AsSecureString){return (ConvertTo-SecureString 'test-pass' -AsPlainText -Force)};return 'fixture-user'}
 function Get-LocalUser { @() }
