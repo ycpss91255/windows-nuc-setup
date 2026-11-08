@@ -53,7 +53,7 @@ jobs:
 
   isolated-tests:
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 45
     defaults:
       run:
         shell: powershell
@@ -84,6 +84,23 @@ jobs:
         if: github.ref_type != 'tag'
         run: |
           & .\script\test\attach_go_coverage.ps1 -PublicDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public') -CoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage')
+      - name: 量測 managed 原生程式的完整計數點
+        run: |
+          & .\script\test\managed_coverage.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'managed-coverage')
+      - name: 收集四語言整體覆蓋率並強制完整八成
+        run: |
+          & .\script\test\run_repo_coverage.ps1 -SourceRoot $PWD.Path -PublicDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public') -GoCoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage') -ManagedEvidencePath (Join-Path $env:RUNNER_TEMP 'managed-coverage/evidence.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'repo-coverage')
+      - name: 短期保留去識別整體證據七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: repo-coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/repo-coverage/coverage/repo_coverage.json
+            ${{ runner.temp }}/repo-coverage/coverage/coverage_inventory.json
+            ${{ runner.temp }}/repo-coverage/coverage/coverage.xml
+          retention-days: 7
+          if-no-files-found: error
       - name: 保留獨立 Go 覆蓋率證據七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -144,6 +161,7 @@ jobs:
         run: |
           go test -count=1 ./...
           go run ./script/test/requirements_gate --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
+          go run ./script/test/repo_coverage_tool verify --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --require-complete --minimum-percent 80
 
   docker-tests:
     name: docker-tests
@@ -221,6 +239,8 @@ jobs:
     needs: [ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 10
+    env:
+      WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
     permissions:
       contents: write
     steps:
@@ -240,6 +260,15 @@ jobs:
           $release = .\script\release\build_source_release.ps1 -Version $env:RELEASE_TAG -Revision $env:SOURCE_COMMIT -OutputDirectory "$env:RUNNER_TEMP\release-notes"
           "prerelease=$($release.Prerelease.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
         id: release
+      - name: 準備固定的證據驗證工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 建立真正整體覆蓋率驗證器
+        shell: powershell
+        run: |
+          go build -o $env:WINDOWS_SETUP_COVERAGE_TOOL ./script/test/repo_coverage_tool
       - name: 下載同一次執行的去識別品質證據
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -263,6 +292,8 @@ jobs:
     needs: [isolated-tests, requirements-gate, docker-tests, release, ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 15
+    env:
+      WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
     permissions:
       contents: read
       actions: read
@@ -276,6 +307,15 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+      - name: 準備固定的證據驗證工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 建立真正整體覆蓋率驗證器
+        shell: powershell
+        run: |
+          go build -o $env:WINDOWS_SETUP_COVERAGE_TOOL ./script/test/repo_coverage_tool
       - name: 核對版本品質附件並本地產生索引
         shell: powershell
         env:
