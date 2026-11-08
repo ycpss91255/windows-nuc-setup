@@ -86,6 +86,8 @@ func ValidateGoCoverageReport(read Reader, files []string, sha, run string, requ
 		XMLName xml.Name
 		Height  string `xml:"height,attr"`
 		Width   string `xml:"width,attr"`
+        Aria string `xml:"aria-label,attr"`
+        Title string `xml:"title"`
 		Rects   []struct {
 			Width string `xml:"width,attr"`
 			Fill  string `xml:"fill,attr"`
@@ -99,8 +101,15 @@ func ValidateGoCoverageReport(read Reader, files []string, sha, run string, requ
 		return e
 	}
 	label := "go coverage " + strings.ToLower(summary.RefType)
+ color := "#4c1" // Historical flat-square evidence keeps its original palette.
+ if len(s.Group.Texts)==2 && s.Group.Texts[0]=="go coverage" {
+  label="go coverage"
+  color=coverageColor(float64(c.Covered)*100/float64(c.TotalStatements))
+  scope:=label+" "+strings.ToLower(summary.RefType)+": "+fmt.Sprintf("%.1f%%",c.Percent)
+  if s.Aria!=scope || s.Title!=scope {return fmt.Errorf("Go coverage badge lacks matching source scope")}
+ }
 	value := fmt.Sprintf("%.1f%%", c.Percent)
-	if s.XMLName.Local != "svg" || s.Height != "20" || s.Width != fmt.Sprint((len(label)+len(value))*7+24) || s.Group.Font != "11" || len(s.Group.Texts) != 2 || s.Group.Texts[0] != label || s.Group.Texts[1] != value || len(s.Rects) != 2 || s.Rects[0].Fill != "#555" || s.Rects[1].Fill != "#4c1" || s.Rects[0].Width != fmt.Sprint(len(label)*7+12) || s.Rects[1].Width != fmt.Sprint(len(value)*7+12) {
+	if s.XMLName.Local != "svg" || s.Height != "20" || s.Width != fmt.Sprint((len(label)+len(value))*7+24) || s.Group.Font != "11" || len(s.Group.Texts) != 2 || s.Group.Texts[0] != label || s.Group.Texts[1] != value || len(s.Rects) != 2 || s.Rects[0].Fill != "#555" || s.Rects[1].Fill != color || s.Rects[0].Width != fmt.Sprint(len(label)*7+12) || s.Rects[1].Width != fmt.Sprint(len(value)*7+12) {
 		return fmt.Errorf("Go coverage badge differs from recomputed statement coverage")
 	}
 	html, e := read("index.html")
@@ -130,4 +139,8 @@ func ValidateGoCoverageReport(read Reader, files []string, sha, run string, requ
 		}
 	}
 	return nil
+}
+
+func coverageColor(p float64) string {
+ switch {case p>=90:return "#4c1";case p>=80:return "#97ca00";case p>=70:return "#a4a61d";case p>=60:return "#dfb317";case p>=50:return "#fe7d37";default:return "#e05d44"}
 }

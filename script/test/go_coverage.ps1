@@ -24,9 +24,9 @@ function Write-GoCoverageView {
  param($Coverage,[string]$RefType,[string]$OutputDirectory)
  $encoding=[Text.UTF8Encoding]::new($false)
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'go_coverage.json'),($Coverage|ConvertTo-Json -Depth 8),$encoding)
- $label='go coverage '+$RefType.ToLowerInvariant();$value=Get-GoCoveragePercentText $Coverage
- $color=if(([decimal]$Coverage.Covered*100) -ge ([decimal]$Coverage.TotalStatements*$Coverage.Threshold)){'#4c1'}else{'#e05d44'}
- $left=$label.Length*7+12;$right=$value.Length*7+12;$title=$label+': '+$value
+ $label='go coverage';$value=Get-GoCoveragePercentText $Coverage
+ $color=Get-GoCoverageColor (100.0*$Coverage.Covered/$Coverage.TotalStatements)
+ $left=$label.Length*7+12;$right=$value.Length*7+12;$title=$label+' '+$RefType.ToLowerInvariant()+': '+$value
  $svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+($left+$right)+'" height="20" role="img" aria-label="'+$title+'"><title>'+$title+'</title><rect width="'+$left+'" height="20" fill="#555"/><rect x="'+$left+'" width="'+$right+'" height="20" fill="'+$color+'"/><g fill="#fff" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11" text-anchor="middle"><text x="'+[Math]::Floor($left/2)+'" y="14">'+$label+'</text><text x="'+($left+[Math]::Floor($right/2))+'" y="14">'+$value+'</text></g></svg>'
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'go_coverage.svg'),$svg,$encoding)
 }
@@ -35,4 +35,13 @@ function Assert-GoCoverageProfile {
  param($Coverage,[string]$Directory)
  $profile=Join-Path $Directory 'go_coverage.out'
  if(-not(Test-Path -LiteralPath $profile -PathType Leaf) -or (Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash.ToLowerInvariant() -cne $Coverage.ProfileSHA256){throw 'Go 原始覆蓋率 profile 缺少或 SHA256 不符。'}
+}
+function Get-GoCoverageColor {
+ param([double]$Percent)
+ if($Percent -ge 90){return '#4c1'}
+ if($Percent -ge 80){return '#97ca00'}
+ if($Percent -ge 70){return '#a4a61d'}
+ if($Percent -ge 60){return '#dfb317'}
+ if($Percent -ge 50){return '#fe7d37'}
+ return '#e05d44'
 }

@@ -90,7 +90,9 @@ function Write-TestReports {
   $label=$badge+' '+$RefType.ToLowerInvariant();$color='#9f9f9f';$status='not measured'
   if($badge -in @('unit','integration')){$rows=@($safe|Where-Object {$_.Layer -eq $badge -and $_.Executed});$status=if(-not $rows.Count){'not run'}elseif(@($rows|Where-Object {-not $_.Passed}).Count){'failed'}else{'passed'};$color=if($status -eq 'passed'){'#4c1'}elseif($status -eq 'failed'){'#e05d44'}else{'#9f9f9f'}}
   if($badge -eq 'system'){$status='not run'}
-  $title=[Security.SecurityElement]::Escape($label+': '+$status)
+  if($badge -eq 'coverage'){$label='ps coverage'}
+  $scopeLabel=if($badge -eq 'coverage'){$label+' '+$RefType.ToLowerInvariant()}else{$label}
+  $title=[Security.SecurityElement]::Escape($scopeLabel+': '+$status)
   # Match base/script/release/coverage_badge.sh flat-square geometry without external fonts/services.
   $labelWidth=$label.Length*7+12;$valueWidth=$status.Length*7+12;$width=$labelWidth+$valueWidth
   $labelX=[Math]::Floor($labelWidth/2);$valueX=$labelWidth+[Math]::Floor($valueWidth/2)
