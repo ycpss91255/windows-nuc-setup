@@ -16,7 +16,7 @@ foreach($entry in $catalog){
  $dir=Join-Path $output ('versions/'+$entry.Version)
  $state='Unknown';$reason='此舊版本未提供可驗證品質快照；不以目前 CI 回填。';$evidence=$null
  if($entry.SnapshotPath -and $entry.ManifestPath){
-  try{$evidence=Test-PortalReleaseEvidence $entry}catch{$reason='品質證據未通過驗證：'+(Protect-ReportText $_.Exception.Message);$state='Invalid'}
+  try{$evidence=Test-PortalReleaseEvidence -Entry $entry -CoverageToolPath $CoverageToolPath}catch{$reason='品質證據未通過驗證：'+(Protect-ReportText $_.Exception.Message);$state='Invalid'}
  }
  if($evidence){
   Write-SnapshotView $evidence.Snapshot $dir
