@@ -61,3 +61,10 @@ function Invoke-SetupPrivacy {
  Write-Host ('隱私政策讀回完成；Windows診斷級別：'+$plan.DiagnosticLevel+'。必要服務及其他應用程式仍可能傳送資料。') -ForegroundColor Green
  return [pscustomobject]$result
 }
+
+function Invoke-CurrentUserPrivacy {
+ param([string]$ReportPath=(Join-Path $env:ProgramData 'NUC8-Setup/Privacy-Result.json'),[string]$VerificationRunId,[switch]$VerifyOnly)
+ $edition=(Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop).EditionID
+ $productType=(Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop).ProductType
+ Invoke-SetupPrivacy -EditionId $edition -ProductType $productType -ReportPath $ReportPath -UserSid ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -Computer $env:COMPUTERNAME -VerificationRunId $VerificationRunId -VerifyOnly:$VerifyOnly
+}

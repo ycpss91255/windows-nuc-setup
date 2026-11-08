@@ -8,7 +8,7 @@ $modules=@('apply_autologon_settings.ps1')+@([regex]::Matches($config,"File='([^
 if($modules.Count -ne 19 -or @($modules|Select-Object -Unique).Count -ne 19){throw '模組清單不是 19 個不重複項目。'}
 $required=$modules+@('paths.ps1','verification.ps1','paths.json','start_windows.ps1','initialize_nuc.ps1','oobe_library.ps1','cleanup_oobe.ps1','run_module.ps1','Autologon64.exe','finalize_taskbar.ps1','desktop_layout.json','desktop_safety.ps1','terminal_hotkey_listener.ps1','remove_one_drive.ps1','initialize_ssh_client.ps1','ssh_firewall.ps1','apply_lan_ping_settings.ps1','apply_hosts_sync.ps1','CustomHostsSync\network_sites.ps1','CustomHostsSync\sync_custom_hosts.ps1','CustomHostsSync\watch_custom_hosts.ps1','CustomHostsSync\sites.json','CustomHostsSync\hosts_readme.md','CustomHostsSync\ssh_readme.md','debloat_apps.txt','debloat_profile.json','win11debloat\Win11Debloat.ps1','verify_only.ps1','audit_nuc.ps1')
 $required+=@('provisioning_library.ps1','provisioning_asset_library.ps1','provisioning_launcher_library.ps1')
-$required+=@('managed_source_library.ps1','desktop_icons.cs','display.cs','explorer.cs','theme.cs','terminal_hotkey.cs','residue_library.ps1','hosts_sync_library.ps1')
+$required+=@('managed_source_library.ps1','desktop_icons.cs','display.cs','explorer.cs','theme.cs','terminal_hotkey.cs','residue_library.ps1','hosts_sync_library.ps1','privacy_library.ps1','apply_privacy_settings.ps1','apply_privacy_settings.cmd')
 foreach($file in $required){if(-not(Test-Path -LiteralPath (Resolve-NucPath $file) -PathType Leaf)){throw ('缺少工具包檔案：'+$file)}}
 # Source validation is safe on Server and never calls the client provisioning API.
 . (Resolve-NucPath 'provisioning_asset_library.ps1')

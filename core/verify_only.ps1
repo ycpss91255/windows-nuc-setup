@@ -30,6 +30,10 @@ Add-Check 'SSH' ($ssh.State -eq 'Running' -and $ssh.StartMode -eq 'Auto') ($ssh.
 try{ & (Resolve-NucPath 'initialize_ssh_client.ps1') -VerifyOnly|Out-Null;Add-Check 'SSH 客戶端目錄' $true '目前使用者 .ssh/config、active-sites.conf、config.d 已存在' }catch{Add-Check 'SSH 客戶端目錄' $false $_.Exception.Message}
 try{ & (Resolve-NucPath 'apply_lan_ping_settings.ps1') -VerifyOnly|Out-Null;Add-Check '同網段 IPv4/IPv6 Ping' $true 'LocalSubnet 入站回應規則啟用' }catch{Add-Check '同網段 IPv4/IPv6 Ping' $false $_.Exception.Message}
 try{ & (Resolve-NucPath 'apply_hosts_sync.ps1') -VerifyOnly|Out-Null;Add-Check '依網路自動匯入框架' $true '各啟用輸出、目前帳號、背景程序及來源收斂均通過' }catch{Add-Check '依網路自動匯入框架' $false $_.Exception.Message}
+try{
+ $privacy=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'apply_privacy_settings.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup/Privacy-Result.json') -Arguments @{VerifyOnly=$true}
+ Add-Check '非必要資料分享政策' $privacy.Success ('九項政策讀回；Windows診斷級別：'+$privacy.DiagnosticLevel+'；不代表其他應用程式不傳送資料。')
+}catch{Add-Check '非必要資料分享政策' $false $_.Exception.Message}
 $sshFirewall=Get-SetupSSHFirewallStatus
 Add-Check 'SSH 防火牆規則' $sshFirewall.Passed $sshFirewall.Detail
 foreach($setting in @('STANDBYIDLE','HIBERNATEIDLE')){

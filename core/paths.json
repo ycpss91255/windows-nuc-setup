@@ -1,4 +1,9 @@
 {
+  "privacy_library.ps1": "modules/privacy/privacy_library.ps1",
+  "apply_privacy_settings.ps1": "modules/privacy/apply_privacy_settings.ps1",
+  "apply_privacy_settings.cmd": "modules/privacy/apply_privacy_settings.cmd",
+  "Apply-PrivacySettings.ps1": "modules/privacy/apply_privacy_settings.ps1",
+  "Apply-PrivacySettings.cmd": "modules/privacy/apply_privacy_settings.cmd",
   "desktop_icons.cs": "modules/desktop/native/desktop_icons.cs",
   "display.cs": "modules/display/native/display.cs",
   "explorer.cs": "modules/explorer/native/explorer.cs",
