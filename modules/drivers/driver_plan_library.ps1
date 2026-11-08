@@ -49,3 +49,36 @@ function Assert-SetupDriverTargetIntegrity {
  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(^|,\s*)CN=Microsoft Windows Hardware Compatibility Publisher(,|$)'){throw 'CAT 未通過 Microsoft 硬體相容簽章驗證。'}
  return $true
 }
+function Get-SetupDriverDeviceInventory {
+ $signed=@(Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop)
+ foreach($device in @(Get-PnpDevice -PresentOnly -ErrorAction Stop)){
+  $driver=@($signed|Where-Object DeviceID -eq $device.InstanceId|Select-Object -First 1)
+  $ids=@((Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_HardwareIds -ErrorAction Stop).Data)
+  [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;HardwareIds=$ids;Status=$device.Status;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion}
+ }
+}
+function Invoke-SetupDriverInfInstall {
+ param([Parameter(Mandatory=$true)][string]$InfPath,[Parameter(Mandatory=$true)][string]$LogPath)
+ $output=& "$env:SystemRoot\System32\pnputil.exe" /add-driver $InfPath /install 2>&1
+ $code=$LASTEXITCODE
+ $output|Out-File -LiteralPath $LogPath -Append -Encoding utf8
+ [pscustomobject]@{ExitCode=$code}
+}
+function Invoke-SetupDriverTarget {
+ param([Parameter(Mandatory=$true)]$Target,[Parameter(Mandatory=$true)][string]$Root,[int]$Build,[string]$Architecture,[string]$LogPath)
+ $null=Assert-SetupDriverTargetIntegrity -Target $Target -Root $Root
+ $plans=@(Get-SetupDriverTargetPlan -Target $Target -Devices @(Get-SetupDriverDeviceInventory) -Build $Build -Architecture $Architecture)
+ $failures=@();$reboot=$false;$results=@()
+ if(@($plans|Where-Object Status -eq 'UpdateRequired').Count){
+  $native=Invoke-SetupDriverInfInstall -InfPath (Join-Path $Root $Target.InfPath) -LogPath $LogPath
+  if($native.ExitCode -eq 3010){$reboot=$true}
+  elseif($native.ExitCode -notin @(0,259)){$failures+=($Target.InfPath+': '+$native.ExitCode)}
+  $after=@(Get-SetupDriverDeviceInventory)
+  foreach($plan in $plans){
+   if($plan.Status -eq 'UpdateRequired'){$result=Get-SetupDriverReadback -Plan $plan -Devices $after;$results+=$result;if($result.Status -eq 'Unverified'){$failures+=($Target.InfPath+': 安裝後版本尚未核實')}}
+   else{$results+=$plan}
+  }
+ }else{$results=$plans}
+ foreach($result in $results){if($result.Status -eq 'Unverified' -and -not $failures){$failures+=($Target.InfPath+': '+$result.Reason)}}
+ [pscustomobject]@{Results=@($results);RebootRequired=$reboot;Failures=@($failures)}
+}
