@@ -60,8 +60,13 @@ func TestManagedEvidenceRequiresNativeBinaryRosterAndHashes(t *testing.T) {
 	files := map[string][]byte{"assembly.dll": []byte("assembly"), "assembly.pdb": []byte("pdb"), "worker.coverage": []byte("raw"), "worker.xml": []byte(raw), "merged.coverage": []byte("native merged"), "merged.xml": []byte(strings.ReplaceAll(raw, `covered="partial"`, `covered="yes"`))}
 	digest := func(name string) string { return fmt.Sprintf("%x", sha256.Sum256(files[name])) }
 	proof := map[string]any{"SchemaVersion": 1, "Metric": rc.Metric, "Tool": map[string]any{"Id": "Microsoft.dotnet-coverage", "Version": "17.14.1", "PackageSHA512": "hgzaG+c7LtKup6HZixvXtn3l4Pa8VK23bM9vLHveD3Iq2XlzLu7vqMZwtVjQdsof83wx5OzY0tpDh3+YRdOVjA=="}, "SourceRoot": "", "Sources": []any{map[string]any{"Path": "native/x.cs", "SHA256": hash}}, "AssemblyPath": "assembly.dll", "AssemblySHA256": digest("assembly.dll"), "PDBPath": "assembly.pdb", "PDBSHA256": digest("assembly.pdb"), "Shards": []any{map[string]any{"BinaryPath": "worker.coverage", "SHA256": digest("worker.coverage"), "XmlPath": "worker.xml", "XmlSHA256": digest("worker.xml")}}, "MergedBinaryPath": "merged.coverage", "MergedBinarySHA256": digest("merged.coverage"), "MergedXmlPath": "merged.xml", "MergedXmlSHA256": digest("merged.xml"), "MergeNative": true}
-	catalog:=map[string]any{"SchemaVersion":1,"AssemblySHA256":digest("assembly.dll"),"PDBSHA256":digest("assembly.pdb"),"AssemblyMVID":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","Documents":[]any{map[string]string{"Path":"native/x.cs","SHA256":hash}},"Methods":[]any{map[string]any{"Token":"0x06000001","HasBody":true,"HiddenPoints":0,"Points":[]any{map[string]any{"Path":"native/x.cs","StartLine":1,"StartColumn":31,"EndLine":1,"EndColumn":40,"Offset":0}}}}}
-	files["catalog.json"],_=json.Marshal(catalog);proof["CatalogPath"]="catalog.json";proof["CatalogSHA256"]=digest("catalog.json")
+	catalog := map[string]any{"SchemaVersion": 1, "AssemblySHA256": digest("assembly.dll"), "PDBSHA256": digest("assembly.pdb"), "AssemblyMVID": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "Documents": []any{map[string]string{"Path": "native/x.cs", "SHA256": hash}}, "Methods": []any{map[string]any{"Token": "0x06000001", "HasBody": true, "HiddenPoints": 0, "Points": []any{map[string]any{"Path": "native/x.cs", "StartLine": 1, "StartColumn": 31, "EndLine": 1, "EndColumn": 40, "Offset": 0}}}}}
+	files["catalog.json"], _ = json.Marshal(catalog)
+	catalog["PDBContentID"] = strings.Repeat("a", 40)
+	catalog["PEPDBContentID"] = strings.Repeat("a", 40)
+	files["catalog.json"], _ = json.Marshal(catalog)
+	proof["CatalogPath"] = "catalog.json"
+	proof["CatalogSHA256"] = digest("catalog.json")
 	read := func(name string) ([]byte, error) {
 		data, ok := files[name]
 		if !ok {
@@ -75,7 +80,27 @@ func TestManagedEvidenceRequiresNativeBinaryRosterAndHashes(t *testing.T) {
 	if err != nil || !r.Files["native/x.cs"][1] {
 		t.Fatalf("native merged rejected: %+v %v", r, err)
 	}
-	for _, field := range []string{"CatalogPath","CatalogSHA256","MergeNative", "Metric", "MergedXmlSHA256", "AssemblySHA256", "PDBSHA256"} {
+	// One independent PDB point may be split into several native ranges.
+	oldMerged, oldWorker := files["merged.xml"], files["worker.xml"]
+	split := strings.ReplaceAll(raw, `start_column="31" end_column="40" covered="partial"/>`, `start_column="31" end_column="35" covered="partial"/><range source_id="1" start_line="1" end_line="1" start_column="35" end_column="40" covered="partial"/>`)
+	files["worker.xml"] = []byte(split)
+	files["merged.xml"] = []byte(strings.ReplaceAll(split, `covered="partial"`, `covered="yes"`))
+	proof["MergedXmlSHA256"] = digest("merged.xml")
+	proof["Shards"] = []any{map[string]any{"BinaryPath": "worker.coverage", "SHA256": digest("worker.coverage"), "XmlPath": "worker.xml", "XmlSHA256": digest("worker.xml")}}
+	splitData, _ := json.Marshal(proof)
+	if _, _, err := rc.NormalizeManaged(splitData, read, originals); err != nil {
+		t.Fatal("split native ranges rejected", err)
+	}
+	files["merged.xml"] = []byte(strings.ReplaceAll(string(files["merged.xml"]), `start_column="35"`, `start_column="36"`))
+	proof["MergedXmlSHA256"] = digest("merged.xml")
+	gapData, _ := json.Marshal(proof)
+	if _, _, err := rc.NormalizeManaged(gapData, read, originals); err == nil {
+		t.Fatal("native ranges with denominator gap accepted")
+	}
+	files["merged.xml"], files["worker.xml"] = oldMerged, oldWorker
+	proof["MergedXmlSHA256"] = digest("merged.xml")
+	proof["Shards"] = []any{map[string]any{"BinaryPath": "worker.coverage", "SHA256": digest("worker.coverage"), "XmlPath": "worker.xml", "XmlSHA256": digest("worker.xml")}}
+	for _, field := range []string{"CatalogPath", "CatalogSHA256", "MergeNative", "Metric", "MergedXmlSHA256", "AssemblySHA256", "PDBSHA256"} {
 		var p map[string]any
 		json.Unmarshal(data, &p)
 		if field == "MergeNative" {
@@ -88,10 +113,24 @@ func TestManagedEvidenceRequiresNativeBinaryRosterAndHashes(t *testing.T) {
 			t.Fatalf("invalid %s accepted", field)
 		}
 	}
-	var missing map[string]any;json.Unmarshal(data,&missing);delete(missing,"CatalogPath");delete(missing,"CatalogSHA256");missingData,_:=json.Marshal(missing);if _,_,err:=rc.NormalizeManaged(missingData,read,originals);err==nil{t.Fatal("missing independent PDB catalog accepted")}
-	catalog["Methods"]=append(catalog["Methods"].([]any),map[string]any{"Token":"0x06000002","HasBody":true,"HiddenPoints":0,"Points":[]any{map[string]any{"Path":"native/x.cs","StartLine":1,"StartColumn":31,"EndLine":1,"EndColumn":40,"Offset":0}}})
-	files["catalog.json"],_=json.Marshal(catalog);proof["CatalogSHA256"]=digest("catalog.json");omittedData,_:=json.Marshal(proof);if _,_,err:=rc.NormalizeManaged(omittedData,read,originals);err==nil{t.Fatal("all XML shards omitted a PDB method")}
-	catalog["Methods"]=catalog["Methods"].([]any)[:1];files["catalog.json"],_=json.Marshal(catalog);proof["CatalogSHA256"]=digest("catalog.json")
+	var missing map[string]any
+	json.Unmarshal(data, &missing)
+	delete(missing, "CatalogPath")
+	delete(missing, "CatalogSHA256")
+	missingData, _ := json.Marshal(missing)
+	if _, _, err := rc.NormalizeManaged(missingData, read, originals); err == nil {
+		t.Fatal("missing independent PDB catalog accepted")
+	}
+	catalog["Methods"] = append(catalog["Methods"].([]any), map[string]any{"Token": "0x06000002", "HasBody": true, "HiddenPoints": 0, "Points": []any{map[string]any{"Path": "native/x.cs", "StartLine": 1, "StartColumn": 31, "EndLine": 1, "EndColumn": 40, "Offset": 0}}})
+	files["catalog.json"], _ = json.Marshal(catalog)
+	proof["CatalogSHA256"] = digest("catalog.json")
+	omittedData, _ := json.Marshal(proof)
+	if _, _, err := rc.NormalizeManaged(omittedData, read, originals); err == nil {
+		t.Fatal("all XML shards omitted a PDB method")
+	}
+	catalog["Methods"] = catalog["Methods"].([]any)[:1]
+	files["catalog.json"], _ = json.Marshal(catalog)
+	proof["CatalogSHA256"] = digest("catalog.json")
 	files["worker.xml"] = []byte(strings.ReplaceAll(raw, `start_column="31"`, `start_column="32"`))
 	proof["Shards"] = []any{map[string]any{"BinaryPath": "worker.coverage", "SHA256": digest("worker.coverage"), "XmlPath": "worker.xml", "XmlSHA256": digest("worker.xml")}}
 	data, _ = json.Marshal(proof)

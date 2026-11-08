@@ -9,6 +9,7 @@ import (
 const managedPackageHash = "hgzaG+c7LtKup6HZixvXtn3l4Pa8VK23bM9vLHveD3Iq2XlzLu7vqMZwtVjQdsof83wx5OzY0tpDh3+YRdOVjA=="
 
 type managedEvidence struct {
+	CatalogPath, CatalogSHA256                                           string
 	SchemaVersion                                                        int
 	Metric, SourceRoot                                                   string
 	Tool                                                                 struct{ Id, Version, PackageSHA512 string }
@@ -68,6 +69,13 @@ func NormalizeManaged(data []byte, read func(string) ([]byte, error), originals 
 	}
 	result, catalogs, roster, err := parseManaged(merged, proof.SourceRoot, originals)
 	if err != nil {
+		return empty, nil, err
+	}
+	catalogData, err := checked(proof.CatalogPath, proof.CatalogSHA256)
+	if err != nil {
+		return empty, nil, err
+	}
+	if err := validateManagedCatalog(catalogData, proof, merged, originals); err != nil {
 		return empty, nil, err
 	}
 	keys := func(counters map[string]string) []string {
