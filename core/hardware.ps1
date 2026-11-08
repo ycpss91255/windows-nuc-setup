@@ -39,10 +39,16 @@ function Get-SetupDriverManifestEntries {
   foreach($entry in $entries){
    $uri=$null
    if(-not [Uri]::TryCreate([string]$entry.SourceUrl,[UriKind]::Absolute,[ref]$uri) -or $uri.Scheme -ne 'https' -or $uri.UserInfo -or $uri.Host -notin @('www.intel.com','downloadmirror.intel.com','www.asus.com','dlcdnets.asus.com','www.amd.com')){throw '驅動來源必須是已允許的官方 HTTPS 主機。'}
-   if($entry.Id -notmatch '^[a-z0-9][a-z0-9_]{0,63}$' -or $entry.PackageVersion -notmatch '^\d+(\.\d+){1,3}$' -or $entry.DriverVersion -notmatch '^\d+(\.\d+){3}$' -or -not $entry.Provider -or $entry.Architecture -ne 'amd64' -or $entry.MinimumBuild -lt 10240 -or $entry.MinimumBuild -gt 99999){throw '驅動版本、架構或最低作業系統規格不合法。'}
-   if(@($entry.HardwareIds).Count -lt 1 -or @($entry.InfPaths).Count -lt 1){throw '驅動需要明確硬體 ID 與 INF 清單。'}
-   foreach($id in $entry.HardwareIds){if($id -notmatch '^(PCI|ACPI|HDAUDIO|USB)\\[A-Z0-9_&]+$'){throw '驅動硬體 ID 不合法。'}}
-   foreach($inf in $entry.InfPaths){if($inf -notmatch '^[a-zA-Z0-9_ .()/-]+\.inf$' -or $inf -match '(^|/)\.\.(/|$)' -or [IO.Path]::IsPathRooted($inf)){throw '驅動 INF 路徑必須是安全相對路徑。'}}
+   if($entry.Id -notmatch '^[a-z0-9][a-z0-9_]{0,63}$' -or $entry.PackageVersion -notmatch '^\d+(\.\d+){1,3}$'){throw '驅動套件識別或版本不合法。'}
+   $drivers=@($entry.Drivers)
+   if($drivers.Count -lt 1 -or @($drivers.InfPath|Select-Object -Unique).Count -ne $drivers.Count){throw '驅動需要不重複的 INF 清單。'}
+   foreach($driver in $drivers){
+    if($driver.DriverVersion -notmatch '^\d+(\.\d+){3}$' -or -not $driver.Provider -or $driver.Architecture -ne 'amd64' -or $driver.MinimumBuild -lt 10240 -or $driver.MinimumBuild -gt 99999){throw '驅動版本、架構或最低作業系統規格不合法。'}
+    if(@($driver.HardwareIds).Count -lt 1){throw '驅動需要明確硬體 ID。'}
+    foreach($id in $driver.HardwareIds){if($id -notmatch '^(PCI|ACPI|HDAUDIO|USB)\\[A-Z0-9_&]+$'){throw '驅動硬體 ID 不合法。'}}
+    $inf=[string]$driver.InfPath
+    if($inf -notmatch '^[a-zA-Z0-9_ .()/-]+\.inf$' -or $inf -match '(^|/)\.\.(/|$)' -or [IO.Path]::IsPathRooted($inf)){throw '驅動 INF 路徑必須是安全相對路徑。'}
+   }
   }
  }else{
   if($Manifest.PSObject.Properties['SchemaVersion']){throw '不支援的驅動清單版本。'}
