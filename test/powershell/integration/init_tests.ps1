@@ -12,7 +12,7 @@ $n=New-Object Xml.XmlNamespaceManager($xml.NameTable);$n.AddNamespace('u','urn:s
 $value=$xml.SelectSingleNode('//u:LocalAccount/u:Password/u:Value',$n).InnerText
 $main=[IO.File]::ReadAllText((Join-Path $moduleRoot 'initialize_nuc.ps1'))
 Assert ($main.Contains('/oobe /quit /unattend:') -and $main -notmatch '(?im)^\s*(Restart-Computer|shutdown)\b' -and $main -notmatch "ArgumentList.*(/reboot|/generalize)") 'sysprep preparation does not request restart or generalize'
-Assert ($main.IndexOf("if(`$route -eq 'GuideAudit')") -lt $main.IndexOf("`$password=Read-Host")) 'SYSTEM returns before password collection'
+Assert ($main.IndexOf("Invoke-InitProvisioningEntry") -lt $main.IndexOf("`$password=Read-Host")) 'guarded provisioning entry runs before legacy audit password collection'
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('NUC-Init-Test-'+[guid]::NewGuid().ToString('N'))
 $fakeWindows=Join-Path $fixture 'Windows';$stage=Join-Path $fixture 'Stage'
 New-Item -ItemType Directory -Path $stage -Force|Out-Null

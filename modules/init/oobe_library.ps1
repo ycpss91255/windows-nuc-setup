@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 function Get-InitRoute {
  param([string]$Sid,[string]$ImageState,[bool]$IsAdministrator,[bool]$DesktopOwned)
- if($Sid -eq 'S-1-5-18'){return 'GuideAudit'}
+ if($Sid -eq 'S-1-5-18'){return 'OobeProvisioning'}
  if(-not $IsAdministrator){return 'ElevationRequired'}
  if($Sid -match '-500$'){
   if($ImageState -in @('IMAGE_STATE_UNDEPLOYABLE','IMAGE_STATE_GENERALIZE_RESEAL_TO_AUDIT','IMAGE_STATE_SPECIALIZE_RESEAL_TO_AUDIT')){return 'ConfirmAudit'}
