@@ -21,3 +21,8 @@ Assert (-not $r.Success -and $r.Differences.Count -eq 4) 'Icons Verify rejects t
 [NUC8Icons.Desktop]::Frames.Enqueue((Frame));$bad=Frame;$bad.Width=1280;$errorText=''
 try{Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Load -Reference $bad|Out-Null}catch{$errorText=$_.Exception.Message}
 Assert ($errorText.Contains('桌面範圍與範本不同') -and [NUC8Icons.Desktop]::Moves -eq 4) 'Icons refuses mismatched desktop dimensions before Position'
+foreach($names in @(@('控制台','本機','網路'),@('控制台','本機','網路','網路'),@('控制台','本機','網路','資源回收筒','extra'))){
+ [NUC8Icons.Desktop]::Frames.Enqueue((Frame));[NUC8Icons.Desktop]::Frames.Enqueue((Frame -names $names))
+ $r=Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Load -Reference $reference
+ Assert (-not $r.Success -and $r.Error) ('after Capture refuses missing duplicate or extra icons: '+($names -join ','))
+}
