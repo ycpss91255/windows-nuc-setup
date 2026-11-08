@@ -55,7 +55,7 @@ func TestMissingBooleanEvidenceRejected(t *testing.T) {
 			}
 			for _, item := range q["Checks"].([]any) {
 				c := item.(map[string]any)
-				if c["Layer"] == "System" {
+				if c["Layer"] == "Unit" {
 					delete(c, field)
 				}
 			}
