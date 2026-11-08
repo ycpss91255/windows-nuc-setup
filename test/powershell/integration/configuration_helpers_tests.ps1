@@ -18,6 +18,14 @@ if($name -eq 'apply_start_menu_settings.ps1'){[pscustomobject]@{Success=$true;St
 '@,[Text.UTF8Encoding]::new($true))}
 Copy-Item -LiteralPath (Join-Path $root 'modules/start_menu/start_pins_policy_library.ps1') -Destination $fixture
 Copy-Item -LiteralPath (Join-Path $root 'modules/start_menu/start_pins_asset_library.ps1') -Destination $fixture
+[IO.File]::WriteAllText((Join-Path $fixture 'verification_library.ps1'),@'
+function Invoke-SetupDriverFreshVerification {
+ param($DriverPackagePath,$VerificationRunId)
+ $global:configurationFixture.Calls.Add('driver_final_snapshot')
+ [pscustomobject]@{Success=$true;VerificationRunId=$VerificationRunId}
+}
+'@,[Text.UTF8Encoding]::new($true))
+function Test-SetupDriverPayload {param($Hardware,$DriverPackagePath)}
 function Resolve-NucPath {param($Name) Join-Path $fixture $Name}
 function Get-SetupModuleDecision {param($Module,$Hardware) [pscustomobject]@{Applicable=($Module -ne $global:configurationFixture.Skip);Reason='fixture skipped'}}
 function Get-ItemProperty {param($Path) [pscustomobject]@{DefaultUserName='fixture';AutoAdminLogon='1'}}
@@ -38,6 +46,7 @@ try{
   if($mode -in @('module_failure','device_failure','audit_failure')){Assert ($caught -like '部分步驟或裝置檢查未完成*') ('失敗保留真例外 '+$mode)}else{Assert (-not $caught) ('成功不誤拋 '+$mode)}
   if($mode -eq 'skip'){Assert ($r.SkippedModules.Count -eq 1 -and -not $global:configurationFixture.Calls.Contains('install_drivers.ps1')) '不適用模組不執行'}else{Assert ($global:configurationFixture.Driver.Path -eq 'fixture drivers' -and $global:configurationFixture.Driver.Board -eq 'NUC8i7HVB' -and $global:configurationFixture.Driver.NonInteractive) '驅動參數完整傳遞'}
   if($mode -eq 'success'){$calls=@($global:configurationFixture.Calls);Assert ($calls.IndexOf('install_windows_updates.ps1') -lt $calls.IndexOf('install_drivers.ps1') -and $calls.IndexOf('install_drivers.ps1') -lt $calls.IndexOf('apply_amd_privacy_settings.ps1') -and $calls.IndexOf('install_drivers.ps1') -lt $calls.IndexOf('apply_display_settings.ps1') -and $calls.IndexOf('install_drivers.ps1') -lt $calls.IndexOf('apply_theme_settings.ps1') -and $calls[4] -eq 'apply_ssh_settings.ps1') '真主流程 SSH第四階段且更新先於驅動與畫面設定'}
+  if($mode -eq 'success'){$calls=@($global:configurationFixture.Calls);Assert ($calls.IndexOf('driver_final_snapshot') -gt $calls.IndexOf('apply_theme_settings.ps1')) '初次完整流程最後重新讀回已選驅動，不沿用安裝階段結果'}
   $progress=Get-Content -LiteralPath (Join-Path $fixture 'Setup-Progress.json') -Raw|ConvertFrom-Json
   Assert ($progress.Step -eq 19 -and $progress.Total -eq 19) '19 階段進度保存'
  }
