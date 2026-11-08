@@ -2,6 +2,7 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
+Assert ([bool](Get-Command Invoke-SetupWindowsUpdateEntry -ErrorAction SilentlyContinue)) '安全fixture必須直接載入正式具名更新入口而非複製薄入口文字'
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('update_stage_safety_'+[guid]::NewGuid().ToString('N'));$fakeData=Join-Path $fixture 'programdata';$outside=Join-Path $fixture 'outside'
 [void][IO.Directory]::CreateDirectory($outside);[void][IO.Directory]::CreateDirectory((Join-Path $fakeData 'NUC8-Setup'))
 $null=New-Item -ItemType Junction -Path (Join-Path $fakeData 'NUC8-Setup/WindowsUpdate') -Target $outside
