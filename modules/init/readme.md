@@ -2,6 +2,18 @@
 
 一般使用步驟以根目錄 [readme.md](../../readme.md) 的快速開始 A／B 為準。初始設定從 USB 按 Shift+F10 呼叫 init.cmd；不要求切換稽核模式。已有正式帳號時，沿用目前帳號安裝 SSH，不重設密碼。
 
+## 已用 Ctrl+Shift+F3，Init 跑完接著做什麼？
+
+1. `Ctrl+Shift+F3` 會重新啟動到稽核模式的 Administrator 桌面；先取消自動出現的 Sysprep 視窗。
+2. 從 USB 執行 `windows_setup\init.cmd`，依提示輸入 `AUDIT`，再輸入新正式本機帳號、密碼及確認密碼。
+3. 看到 **「帳號設定已準備完成」**，表示這一階段成功，接著才手動重新啟動。可由開始選單操作，或在 CMD 輸入 `shutdown /r /t 0`。腳本不會自行替你重新啟動。
+4. 重開後完成剩餘 OOBE，登入新正式本機帳號；不要在稽核模式 Administrator 身分直接套用 Windows 設定。
+5. 在新帳號桌面接上網路，從 USB 再執行 `init.cmd` 安裝 SSH。看到「Init 完成」及中文連線資訊後，再執行 `windows.cmd`。
+
+如果出現錯誤、非零退出碼，或沒有「帳號設定已準備完成」，這一階段尚未成功；先保留錯誤畫面並修正問題，不以命令視窗關閉代表完成。若帳號準備成功但尚未重開，下一步就是手動重新啟動，而不是重複建立帳號。
+
+這條可選路線不取代初始設定畫面 `Shift+F10` 直接執行 Init 的路線。兩條路線最後都必須在新正式帳號桌面安裝 SSH，再執行 Windows 設定。
+
 ## 發行完整性
 
 OOBE 入口需要 assets/hide_oobe.ppkg、hide_oobe.xml、provenance.json，發行包另包含 CI 內容檢驗使用的 payload_baseline.json。這是本專案自身產生的小型設定資產，只含 OOBE/Desktop/HideOobe=True，不包含帳密或 Microsoft 編譯工具。原始 XML、固定官方 ICD 身分與輸出 SHA256 都由 provenance 追溯；產物不是位元完全可重現，不能只以重新編譯 hash 相同作驗收。
@@ -27,7 +39,7 @@ OOBE 入口需要 assets/hide_oobe.ppkg、hide_oobe.xml、provenance.json，發�
 - 帳號已建立但所有權狀態寫入失敗：保留帳號，停止而不刪除／接管同名帳號。這種情況不宣稱可以自動恢復，需先查看錯誤及受保護紀錄。
 - 狀態檔 ACL／owner、machine ID、SID 或設定包改變：拒絕續跑，不清除紀錄硬闖。
 
-既有非 SYSTEM 稽核維護程式保留相容用途，不作一般使用者安裝流程。若曾使用舊版 answer file，cleanup_oobe.ps1 仍依唯一標記清理自己的暫存；不刪除其他 OEM answer file。
+非 SYSTEM 稽核路線保留為可選操作方式，適用於已使用 Ctrl+Shift+F3 進入 Administrator 的情況。若曾使用舊版 answer file，cleanup_oobe.ps1 仍依唯一標記清理自己的暫存；不刪除其他 OEM answer file。
 
 ## 維護與內容驗證
 
