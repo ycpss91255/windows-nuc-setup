@@ -5,13 +5,16 @@ function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{N
 $fixture=Join-Path $env:TEMP ('docker_entry_'+[guid]::NewGuid().ToString('N'));$source=Join-Path $fixture 'source'
 [void][IO.Directory]::CreateDirectory((Join-Path $source '.git'))
 $sourceItem=Get-Item -LiteralPath $source -ErrorAction Stop
+$source=$sourceItem.FullName
 Assert ($sourceItem -is [IO.DirectoryInfo] -and $source -ceq $sourceItem.FullName) 'owned fixture uses the real existing directory name before passing source to a child process'
+$otherSource=Join-Path $fixture 'sibling/source';[void][IO.Directory]::CreateDirectory($otherSource);$otherSource=(Get-Item -LiteralPath $otherSource -ErrorAction Stop).FullName
+Assert ((Split-Path -Leaf $otherSource) -ceq (Split-Path -Leaf $source) -and $otherSource -cne $source) 'source rejection fixture is another existing directory with the same leaf name'
 foreach($file in @('dockerfile/windows_tests.dockerfile','script/docker/download_library.ps1','script/docker/install_min_git.ps1','script/docker/install_go.ps1','script/docker/install_managed_tools.ps1','script/docker/container_test.ps1','script/docker/docker.ps1','script/docker/library.ps1','script/test/ci_tasks.ps1','.dockerignore','compose.yaml')){
  $target=Join-Path $source $file;[void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target));Copy-Item -LiteralPath (Join-Path $root $file) -Destination $target
 }
 $runner=Join-Path $fixture 'runner.ps1'
 $program=@'
-param($Entry,$Action,$Receipt,$Reports,$Log,$Mode)
+param($Entry,$Action,$Receipt,$Reports,$Log,$Mode,$OtherSource)
 $ErrorActionPreference='Stop'
 function git.exe {$global:LASTEXITCODE=0;return ('a'*40)}
 function docker.exe {
@@ -30,6 +33,7 @@ function docker.exe {
    switch($Mode){
     config-build{$runtime.services.tools|Add-Member build @{context='unexpected'}}
     config-source{$runtime.services.tools.volumes[0].read_only=$false}
+    config-source-path{$runtime.services.tools.volumes[0].source=$OtherSource}
     config-command{$runtime.services.tools.command[0]='cmd.exe'}
     config-isolation{$runtime.services.tools.isolation='hyperv'}
     config-image{$runtime.services.tools.image='sha256:'+('f'*64)}
@@ -49,7 +53,7 @@ $entry=Join-Path $source 'script/docker/docker.ps1';$receipt=Join-Path $fixture 
 function Run([string]$Action,[string]$Mode,[string]$ReceiptPath=$receipt){
  $reports=Join-Path $fixture ([guid]::NewGuid().ToString('N'))
  $old=$ErrorActionPreference
- try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $runner -Entry $entry -Action $Action -Receipt $ReceiptPath -Reports $reports -Log $log -Mode $Mode *> (Join-Path $fixture 'last.log');$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
+ try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $runner -Entry $entry -Action $Action -Receipt $ReceiptPath -Reports $reports -Log $log -Mode $Mode -OtherSource $otherSource *> (Join-Path $fixture 'last.log');$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
  return $code
 }
 Assert ((Run build valid) -eq 0 -and (Test-Path -LiteralPath $receipt)) 'actual build entry writes its receipt only after successful native Docker build'
@@ -59,7 +63,7 @@ $calls=@(Get-Content $log|ForEach-Object {$_|ConvertFrom-Json});$runs=@($calls|W
 Assert ($runs.Count -eq 1 -and @($calls|Where-Object {$_.Args -ccontains 'build'}).Count -eq 0 -and $runs[0].Image -ceq ('sha256:'+('b'*64)) -and $runs[0].Args -cnotcontains '--no-build' -and $runs[0].Args -ccontains '--pull' -and $runs[0].Args -ccontains 'never' -and $runs[0].Runtime -and $runs[0].Runtime.services.tools.PSObject.Properties.Name -cnotcontains 'build') 'test phase uses supported CLI flags and a build-free manifest pinned to the inspected immutable ID'
 Assert ($runs[0].Runtime.services.tools.volumes[0].read_only -eq $true -and $runs[0].Runtime.services.tools.volumes[0].source -ceq $source -and $runs[0].Runtime.services.tools.isolation -ceq 'process' -and $runs[0].Runtime.services.tools.network_mode -ceq 'none' -and $runs[0].Runtime.services.tools.command[0] -ceq 'powershell.exe') 'build-free runtime manifest preserves original read-only source, isolation, network and full-test command'
 Assert (-not(Test-Path -LiteralPath $runs[0].Args[[Array]::IndexOf($runs[0].Args,'--file')+1])) 'private runtime manifest is removed after actual process completion'
-foreach($mode in @('missing','inspect-fail','run-fail','config-build','config-source','config-command','config-isolation','config-image')){
+foreach($mode in @('missing','inspect-fail','run-fail','config-build','config-source','config-source-path','config-command','config-isolation','config-image')){
  [IO.File]::WriteAllText($log,'');$path=if($mode -eq 'missing'){Join-Path $fixture 'absent.json'}else{$receipt}
  $code=Run test-built $mode $path;$calls=@(Get-Content $log|ForEach-Object {$_|ConvertFrom-Json});$runs=@($calls|Where-Object {$_.Args -ccontains 'run'})
  if($mode -eq 'run-fail'){Assert ($code -eq 29 -and $runs.Count -eq 1) 'actual native test failure retains its exact nonzero process exit'}
