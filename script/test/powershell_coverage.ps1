@@ -42,6 +42,8 @@ function Resolve-InputFile([string]$Relative){
 $sources=@($manifest.Sources|ForEach-Object {Resolve-InputFile $_})
 $tests=@($manifest.Tests|ForEach-Object {Resolve-InputFile $_})
 $wrapper=if($manifest.Wrapper){Resolve-InputFile $manifest.Wrapper}else{$null}
+$diagnosticFiles=@($manifest.Sources)+@($manifest.Tests)+@($manifest.Wrapper)
+if(Test-Path -LiteralPath (Join-Path $source '.git')){$diagnosticFiles+=@(& git -C $source ls-files '*.ps1' 2>$null)}
 if(-not $sources.Count -or -not $tests.Count -or @($sources|Select-Object -Unique).Count -ne $sources.Count -or @($tests|Select-Object -Unique).Count -ne $tests.Count){throw '來源或測試清單不可空白或重複。'}
 if(@($sources|Where-Object {$_ -in $tests -or [IO.Path]::GetExtension($_) -ine '.ps1'}).Count){throw '正式來源必須為 PS1，且不可與測試重疊。'}
 $engines=@{}
@@ -92,8 +94,12 @@ if($WorkerIndex -ge 0){
  $config.CodeCoverage.Enabled=$true;$config.CodeCoverage.Path=$sources;$config.CodeCoverage.ExcludeTests=$false
  $config.CodeCoverage.OutputFormat='Cobertura';$config.CodeCoverage.OutputPath=Join-Path $output ('worker_'+$WorkerIndex+'.xml')
  $config.CodeCoverage.CoveragePercentTarget=0
- $result=Invoke-Pester -Configuration $config
- if($result.FailedCount -gt 0 -or $result.PassedCount -lt 1 -or $result.Result -ne 'Passed'){throw 'Pester 測試未全部成功。'}
+ $failurePath=Join-Path $output ('worker_'+$WorkerIndex+'.private.failure.json')
+ try{$result=Invoke-Pester -Configuration $config}catch{try{Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -InvocationErrors @($_)}catch{};throw}
+ if($result.FailedCount -gt 0 -or $result.PassedCount -lt 1 -or $result.Result -ne 'Passed'){
+  try{Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -Result $result}catch{}
+  throw 'Pester 測試未全部成功。'
+ }
  if($null -ne $testContext -and ((Get-FileHash -LiteralPath $suiteFile).Hash.ToLowerInvariant() -cne $testContext.TestSHA256 -or ($wrapper -and (Get-FileHash -LiteralPath $wrapper).Hash.ToLowerInvariant() -cne $testContext.WrapperSHA256))){throw '測試或wrapper在原生量測期間變更。'}
  $commands=@($result.CodeCoverage.CommandsExecuted)+@($result.CodeCoverage.CommandsMissed)
  if(-not $commands.Count){throw '沒有真實命令覆蓋率證據。'}
@@ -140,7 +146,7 @@ for($offset=0;$offset -lt $tests.Count;$offset+=$ThrottleLimit){
    $nativeExit=$running.Process.ExitCode
    if($null -eq $nativeExit -or $nativeExit -ne 0){
     try{
-     $diagnostic=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $source -TestFile ([string]$manifest.Tests[$i]) -WorkerIndex $i -Engine $requestedEngine -NativeExitCode $(if($null -eq $nativeExit){-1}else{$nativeExit}) -StandardOutputPath (Join-Path $output ('worker_'+$i+'.private.stdout.log')) -StandardErrorPath (Join-Path $output ('worker_'+$i+'.private.stderr.log')) -AllowedFiles (@($manifest.Sources)+@($manifest.Tests)+@($manifest.Wrapper))
+     $diagnostic=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $source -TestFile ([string]$manifest.Tests[$i]) -WorkerIndex $i -Engine $requestedEngine -NativeExitCode $(if($null -eq $nativeExit){-1}else{$nativeExit}) -StandardOutputPath (Join-Path $output ('worker_'+$i+'.private.stdout.log')) -StandardErrorPath (Join-Path $output ('worker_'+$i+'.private.stderr.log')) -AllowedFiles $diagnosticFiles -FailureRecordPath (Join-Path $output ('worker_'+$i+'.private.failure.json'))
      Write-Host ('PowerShell worker failure diagnostic: '+($diagnostic|ConvertTo-Json -Depth 5 -Compress))
     }catch{Write-Host 'PowerShell worker failure diagnostic unavailable; original native failure is retained.'}
     throw ('PowerShell coverage worker failed: index='+$i+' exit='+$nativeExit)
