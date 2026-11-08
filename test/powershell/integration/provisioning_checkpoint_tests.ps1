@@ -31,4 +31,14 @@ foreach($field in @('MachineGuid','Sid','RegisteredProfile','DesktopOwned','IsAd
 $script:installed=$false;$before=$script:saves.Count
 $rejected=$false;try{Confirm-InitAccountCheckpoint $state $path $context $hash}catch{$rejected=$true}
 Assert ($rejected -and $script:saves.Count -eq $before) 'missing installed package cannot become account confirmed'
+Assert ([bool](Get-Command Invoke-InitWindowsCheckpoint -ErrorAction SilentlyContinue)) 'Windows entry has an account-only Init checkpoint'
+$script:hasStage=$false;$script:installed=$true
+function Test-Path {param($LiteralPath,$Path) $script:hasStage}
+function Get-InitProvisioningContext {return $context}
+function Assert-InitProtectedDirectory {param($Path)}
+function Assert-InitProvisioningAsset {param($AssetRoot) [pscustomobject]@{PackageSHA256=$hash}}
+function Read-InitProvisioningState {param($StatePath,$MachineGuid,$PackageHash) return $state}
+Assert (-not(Invoke-InitWindowsCheckpoint -StageRoot (Join-Path $env:TEMP 'fixture_checkpoint'))) 'Windows checkpoint is a no-op when no Init stage exists'
+$script:hasStage=$true
+Assert (Invoke-InitWindowsCheckpoint -StageRoot (Join-Path $env:TEMP 'fixture_checkpoint')) 'Windows entry validates existing Init account state without SSH'
 Write-Host ('ALL PASS: '+$script:count+' account checkpoint assertions; all OS operations mocked')
