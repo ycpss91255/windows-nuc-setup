@@ -54,7 +54,7 @@ try {
         @{Step=$stageIndex;Total=19;Stage=$stage.Name;UpdatedAt=(Get-Date).ToString('o')}|ConvertTo-Json|Set-Content (Resolve-NucPath 'Setup-Progress.json') -Encoding UTF8
         $decision=Get-SetupModuleDecision -Module $stage.File -Hardware $hardware
         if(-not $decision.Applicable){$skippedModules+=$decision;Write-Host ('[略過] '+$stage.Name+'：'+$decision.Reason) -ForegroundColor Yellow;continue}
-        try { if($stage.File -eq 'install_drivers.ps1'){& (Resolve-NucPath $stage.File) -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}else{& (Resolve-NucPath $stage.File)} }
+        try { if($stage.File -eq 'install_drivers.ps1'){& (Resolve-NucPath $stage.File) -NonInteractive -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}else{& (Resolve-NucPath $stage.File)} }
         catch { $failedModules+=$stage.File;$stageErrors+=($stage.Name+'：'+$_.Exception.Message);Write-Warning $stageErrors[-1] }
     }
     $problems=@(Get-PnpDevice -PresentOnly|Where-Object Status -ne 'OK')

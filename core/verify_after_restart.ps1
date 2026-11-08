@@ -29,13 +29,13 @@ if(Test-Path $resultPath){
    $decision=Get-SetupModuleDecision -Module $file -Hardware $hardware
    if(-not $decision.Applicable){Write-Host ('[略過] '+$decision.Reason);continue}
    Write-Host ('重試未完成模組：'+$file) -ForegroundColor Cyan
-   try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -DriverPackagePath $DriverPackagePath @confirmation}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
+   try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -NonInteractive -DriverPackagePath $DriverPackagePath @confirmation}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
   }
  }
 }
 Write-Host '重新掃描更新；完成後再次清理預載程式並驗證。' -ForegroundColor Cyan
 foreach($file in @('install_windows_updates.ps1','apply_debloat.ps1','apply_copilot_settings.ps1','remove_setup_residue.ps1')){
- try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -DriverPackagePath $DriverPackagePath @confirmation}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
+ try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -NonInteractive -DriverPackagePath $DriverPackagePath @confirmation}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
 }
 if($previous -and $previous.Computer -eq $env:COMPUTERNAME -and $previous.UserSID -eq $sid){
  $previous|Add-Member -NotePropertyName HardwareProfile -NotePropertyValue $hardware -Force

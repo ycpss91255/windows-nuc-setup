@@ -104,3 +104,49 @@ function Get-SetupSavedHardwareConfirmation {
  if($saved.HardwareProfile.ConfirmationComputer -ine $Computer){throw '保存的手動硬體確認不屬於目前電腦。'}
  return @{ConfirmedBoard=[string]$saved.HardwareProfile.ConfirmedBoard;ConfirmationComputer=[string]$saved.HardwareProfile.ConfirmationComputer}
 }
+function Test-SetupInteractiveHost {
+ try{return [Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost' -and -not [Console]::IsInputRedirected}catch{return $false}
+}
+function Select-SetupDriverRequest {
+ param([Parameter(Mandatory=$true)][string]$PackageRoot,[string]$DriverPackagePath,[switch]$PathSpecified,
+  [string]$ConfirmedBoard,[string]$ConfirmationComputer,[bool]$Interactive=$false)
+ $hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer
+ Write-Host ('偵測主機板：'+$hardware.BoardProduct+'；狀態：'+$hardware.DetectionStatus)
+ if($hardware.DetectionError){Write-Warning $hardware.DetectionError}
+ while($hardware.DetectionStatus -eq 'Unknown' -and -not $ConfirmedBoard -and $Interactive){
+  $choice=Read-Host '無法辨識型號：R 重新偵測；G 或 Enter 通用略過；1 NUC8i7HVK（板號 HVB）；2 NUC8i7HNK（板號 HNB）'
+  if($choice -eq 'r'){$hardware=Get-SetupHardwareProfile;Write-Host ('重新偵測：'+$hardware.BoardProduct+'；'+$hardware.DetectionStatus);continue}
+  if($choice -in @('1','2')){
+   $selected=if($choice -eq '1'){'NUC8i7HVB'}else{'NUC8i7HNB'}
+   $confirm=Read-Host ('請核對實際機型；輸入完整板號 '+$selected+' 確認，其他輸入取消')
+   if($confirm -ieq $selected){$ConfirmedBoard=$selected;$ConfirmationComputer=$env:COMPUTERNAME;$hardware=Get-SetupHardwareProfile -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer;break}
+   continue
+  }
+  if(-not $choice -or $choice -eq 'g'){break}
+ }
+ if(-not $hardware.IsNuc8){Write-Host '通用設定：略過 NUC 驅動。';return [pscustomobject]@{Hardware=$hardware;DriverPackagePath='';ConfirmedBoard='';ConfirmationComputer=''}}
+ if(-not $PathSpecified){
+  $DriverPackagePath=''
+  if($Interactive){
+   $candidate=Join-Path (Split-Path -Parent $PackageRoot) 'windows_driver_packages/nuc8'
+   if(Test-Path -LiteralPath $candidate -PathType Container){
+    $choice=Read-Host ('找到獨立包 '+$candidate+'；輸入 Y 選用、P 指定其他位置，Enter 略過')
+    if($choice -eq 'y'){$DriverPackagePath=$candidate}elseif($choice -eq 'p'){$DriverPackagePath=Read-Host '獨立驅動包完整路徑，Enter 略過'}
+   }else{$DriverPackagePath=Read-Host '找不到相鄰獨立包，輸入包完整路徑或 Enter 略過'}
+  }
+ }
+ while($DriverPackagePath){
+  try{
+   $DriverPackagePath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DriverPackagePath.Trim().Trim('"'))
+   $null=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $DriverPackagePath
+   break
+  }catch{
+   if(-not $Interactive){throw}
+   Write-Warning ('驅動包未通過檢查：'+$_.Exception.Message)
+   $DriverPackagePath=Read-Host '重新輸入獨立包完整路徑，或 Enter 略過'
+  }
+ }
+ # A skipped choice must not enable a manual hardware profile without a driver package.
+ if(-not $DriverPackagePath){$ConfirmedBoard='';$ConfirmationComputer='';$hardware=Get-SetupHardwareProfile}
+ [pscustomobject]@{Hardware=$hardware;DriverPackagePath=$DriverPackagePath;ConfirmedBoard=$ConfirmedBoard;ConfirmationComputer=$ConfirmationComputer}
+}

@@ -5,7 +5,7 @@ $fixture=Join-Path $env:TEMP ('windows_setup_driver_prompt_'+[guid]::NewGuid().T
 $core=Join-Path $fixture 'windows_setup/core'
 New-Item -ItemType Directory -Path $core -Force|Out-Null
 Copy-Item (Join-Path $root 'core/start_windows.ps1'),(Join-Path $root 'core/hardware.ps1') -Destination $core
-[IO.File]::WriteAllText((Join-Path $core 'configure_nuc.ps1'),'param($DriverPackagePath);$fixtureState.SelectedDriver=$DriverPackagePath',[Text.UTF8Encoding]::new($true))
+[IO.File]::WriteAllText((Join-Path $core 'configure_nuc.ps1'),'param($DriverPackagePath,$ConfirmedBoard,$ConfirmationComputer);$fixtureState.SelectedDriver=$DriverPackagePath',[Text.UTF8Encoding]::new($true))
 $fixtureState=@{Board='';PromptCount=0;Answers=$null;SelectedDriver=''};$count=0
 function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++}
 function Get-CimInstance {param($ClassName,$ErrorAction);[pscustomobject]@{Product=$fixtureState.Board}}
@@ -13,9 +13,9 @@ function Read-Host {param($Prompt);$fixtureState.PromptCount++;if(-not $fixtureS
 $fixtureState.Board='Other Board';$fixtureState.PromptCount=0;$fixtureState.Answers=New-Object 'Collections.Generic.Queue[string]'
 & (Join-Path $core 'start_windows.ps1')
 Assert ($fixtureState.PromptCount -eq 0 -and -not $fixtureState.SelectedDriver) '一般電腦自動使用通用設定，不詢問 NUC 包'
-$fixtureState.Board='NUC8i7HVB';$fixtureState.Answers.Enqueue('')
-& (Join-Path $core 'start_windows.ps1')
-Assert ($fixtureState.PromptCount -eq 1 -and -not $fixtureState.SelectedDriver) '支援 NUC 可直接 Enter 略過驅動'
+$fixtureState.Board='NUC8i7HVB'
+& (Join-Path $core 'start_windows.ps1') -NonInteractive
+Assert ($fixtureState.PromptCount -eq 0 -and -not $fixtureState.SelectedDriver) '支援 NUC 非互動未選包直接略過'
 Write-Host ('ALL PASS: '+$count+' driver prompt assertions; no host changes.')
 . (Join-Path $root 'core/hardware.ps1')
 $payload=Join-Path $fixture 'windows_driver_packages/nuc8';New-Item -ItemType Directory -Path $payload -Force|Out-Null
@@ -32,13 +32,25 @@ $before=$fixtureState.PromptCount
 $request=Select-SetupDriverRequest -PackageRoot (Split-Path $core -Parent) -Interactive $false
 Assert ($fixtureState.PromptCount -eq $before -and -not $request.DriverPackagePath) '非互動未知電腦不等待輸入也不擅自確認'
 $fixtureState.Board='NUC8i7HVB';$fixtureState.Answers.Enqueue((Join-Path $fixture 'missing'));$fixtureState.Answers.Enqueue($payload)
-$request=Select-SetupDriverRequest -PackageRoot (Join-Path $fixture 'elsewhere') -Interactive $true
+$request=Select-SetupDriverRequest -PackageRoot (Join-Path $fixture 'elsewhere/deep') -Interactive $true
 Assert ($request.DriverPackagePath -eq $payload) '不存在的包可重新輸入有效路徑且真驗四檔雜湊'
 $fixtureState.Answers.Enqueue('')
-$request=Select-SetupDriverRequest -PackageRoot (Join-Path $fixture 'elsewhere') -Interactive $true
+$request=Select-SetupDriverRequest -PackageRoot (Join-Path $fixture 'elsewhere/deep') -Interactive $true
 Assert (-not $request.DriverPackagePath) '找不到包可直接略過'
 $fixtureState.Board='Other Board';$before=$fixtureState.PromptCount
 $request=Select-SetupDriverRequest -PackageRoot (Split-Path $core -Parent) -Interactive $true
 Assert ($fixtureState.PromptCount -eq $before -and -not $request.DriverPackagePath) '已知其他機型不提供手動強制選型'
 $fixtureState.Board='';$request=Select-SetupDriverRequest -PackageRoot (Split-Path $core -Parent) -Interactive $false -DriverPackagePath $payload -PathSpecified -ConfirmedBoard NUC8i7HVB -ConfirmationComputer $env:COMPUTERNAME
 Assert ($request.DriverPackagePath -eq $payload) '非互動可傳明確受控確認與有效包，不需讀輸入'
+# The real entry must carry a noninteractive confirmation into configure.
+$fixtureState.Board=''
+[IO.File]::WriteAllText((Join-Path $core 'configure_nuc.ps1'),'param($DriverPackagePath,$ConfirmedBoard,$ConfirmationComputer);$fixtureState.Forwarded=@{Path=$DriverPackagePath;Board=$ConfirmedBoard;Computer=$ConfirmationComputer}',[Text.UTF8Encoding]::new($true))
+& (Join-Path $core 'start_windows.ps1') -NonInteractive -DriverPackagePath $payload -ConfirmedBoard NUC8i7HVB -ConfirmationComputer $env:COMPUTERNAME
+Assert ($fixtureState.Forwarded.Path -eq $payload -and $fixtureState.Forwarded.Board -eq 'NUC8i7HVB' -and $fixtureState.Forwarded.Computer -eq $env:COMPUTERNAME) '真windows入口把非互動確認送到configure'
+# Retry refreshes the hardware rather than retaining the original unknown result.
+$fixtureState.Board='';$fixtureState.Answers.Enqueue('r');$fixtureState.Answers.Enqueue('')
+$fixtureState.RefreshOnRead=$true
+function Read-Host {param($Prompt);$fixtureState.PromptCount++;if(-not $fixtureState.Answers.Count){throw 'Unexpected prompt'};$answer=$fixtureState.Answers.Dequeue();if($fixtureState.RefreshOnRead -and $answer -eq 'r'){$fixtureState.Board='NUC8i7HNB'};return $answer}
+$request=Select-SetupDriverRequest -PackageRoot (Split-Path $core -Parent) -Interactive $true
+Assert ($request.Hardware.BoardProduct -eq 'NUC8i7HNB' -and -not $request.DriverPackagePath) '重新偵測讀取最新板號，仍可略過包'
+Write-Host ('ALL PASS: '+$count+' driver prompt assertions; no host changes.')

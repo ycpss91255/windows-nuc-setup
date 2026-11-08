@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-param([string]$DriverPackagePath,[switch]$PackageOnly,[string]$ConfirmedBoard,[string]$ConfirmationComputer)
+param([string]$DriverPackagePath,[switch]$PackageOnly,[string]$ConfirmedBoard,[string]$ConfirmationComputer,[switch]$NonInteractive)
 $ErrorActionPreference='Stop'
 if($DriverPackagePath){$DriverPackagePath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DriverPackagePath)}
 . (Join-Path $PSScriptRoot '..\..\core\hardware.ps1')
@@ -47,6 +47,10 @@ function Expand-CachedDriverArchive {
  }
  return $dest
 }
+if(-not $PackageOnly){
+ $request=Select-SetupDriverRequest -PackageRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))) -DriverPackagePath $DriverPackagePath -PathSpecified:$PSBoundParameters.ContainsKey('DriverPackagePath') -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer -Interactive:((Test-SetupInteractiveHost) -and -not $NonInteractive)
+ $DriverPackagePath=$request.DriverPackagePath;$ConfirmedBoard=$request.ConfirmedBoard;$ConfirmationComputer=$request.ConfirmationComputer
+}
 $hardware=if($PackageOnly){Get-SetupHardwareProfile -BoardProduct 'NUC8i7HVB' -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}else{Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}
 $decision=Get-SetupModuleDecision -Module 'install_drivers.ps1' -Hardware $hardware
 if(-not $decision.Applicable){Write-Host ('[略過] '+$decision.Reason);$decision;return}
@@ -54,7 +58,7 @@ $payload=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $DriverP
 if($PackageOnly){$payload;return}
 $principal=[Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
- $command="& '"+$PSCommandPath.Replace("'","''")+"' -DriverPackagePath '"+$DriverPackagePath.Replace("'","''")+"'"
+ $command="& '"+$PSCommandPath.Replace("'","''")+"' -NonInteractive -DriverPackagePath '"+$DriverPackagePath.Replace("'","''")+"'"
  if($ConfirmedBoard){$command+=" -ConfirmedBoard '"+$ConfirmedBoard.Replace("'","''")+"' -ConfirmationComputer '"+$ConfirmationComputer.Replace("'","''")+"'"}
  Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -NoExit -ExecutionPolicy Bypass -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)))
  return
