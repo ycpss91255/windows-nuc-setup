@@ -51,6 +51,26 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: 唯讀抽取開始功能表設定包並保留待審查內容
+        id: start_payload
+        if: always()
+        shell: powershell
+        run: |
+          $evidence = Join-Path ([IO.Path]::GetTempPath()) ('windows-setup-start-pins-' + [guid]::NewGuid().ToString('N'))
+          "evidence=$evidence" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          .\script\test\verify_start_pins_payload.ps1 -PackagePath .\modules\start_menu\assets\empty_start.ppkg -EvidenceDirectory $evidence -BaselinePath .\modules\start_menu\assets\payload_baseline.json
+      - name: 保留開始功能表七個 XML 與未通過診斷七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: start-pins-payload-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.start_payload.outputs.evidence }}/evidence.json
+            ${{ steps.start_payload.outputs.evidence }}/payload/**/*.xml
+            ${{ steps.start_payload.outputs.evidence }}/payload/**/*.provxml
+          retention-days: 7
+          if-no-files-found: warn
+
   isolated-tests:
     runs-on: windows-2022
     timeout-minutes: 45
