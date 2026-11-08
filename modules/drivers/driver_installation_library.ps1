@@ -25,7 +25,18 @@ function Invoke-SetupDriverVerification {
   }
   foreach($plan in $plans){Write-Host ($plan.Status+'；目前 '+$plan.CurrentVersion+'；目標 '+$plan.TargetVersion)}
   $results+=$plans
- }}
+  }
+  foreach($extension in @($entry.Extensions|Where-Object {$_})){
+   Write-Host ('核對延伸INF實際關聯：'+$extension.InfPath)
+   try{
+    $matches=@($devices|Where-Object {$ids=@($_.HardwareIds);@($extension.HardwareIds|Where-Object {$_ -in $ids}).Count -gt 0})
+    $xml=if($matches.Count){Get-SetupDriverExtensionInventory}else{[xml]'<pnputil />'}
+    $extensionResults=@(Get-SetupDriverExtensionReadback -Target $extension -Devices $devices -Inventory $xml -Build $build)
+    foreach($extensionResult in $extensionResults){Write-Host ($extensionResult.Status+' / '+$extensionResult.Association+'；目前 '+$extensionResult.CurrentVersion+'；目標 '+$extensionResult.TargetVersion)}
+    $results+=$extensionResults
+   }catch{$results+=[pscustomobject]@{InfPath=$extension.InfPath;Status='Unverified';Association='Unknown';Reason=$_.Exception.Message}}
+  }
+ }
  $failures=@($results|Where-Object Status -notin @('Current','NewerInstalled','Absent','NotApplicable'))
  $matched=@($results|Where-Object InstanceId).Count
  [pscustomobject]@{Success=($failures.Count -eq 0 -and $matched -gt 0);VerificationRunId=$VerificationRunId;Computer=[Environment]::MachineName;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;CheckedAt=(Get-Date).ToString('o');OfficialCheckedAt=$raw.CheckedAt;Targets=@($results);MatchedDeviceCount=$matched;FailureCount=$failures.Count}
