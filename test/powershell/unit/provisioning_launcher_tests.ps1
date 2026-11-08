@@ -5,6 +5,7 @@ $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 Assert (Test-Path -LiteralPath $library) 'public launcher implementation can be loaded without executing UAC'
 . $library
+$realProtect=${function:Protect-InitPublicLauncher};$realAclCheck=${function:Assert-InitPublicLauncherAcl}
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('init_launcher_'+[guid]::NewGuid().ToString('N'))
 $stage=Join-Path $temp '中文 空白 stage';New-Item -ItemType Directory -Path $stage -Force|Out-Null
 function Assert-InitPlainPath {param($Path)}
@@ -32,4 +33,12 @@ Assert ((New-InitPublicLauncher -StageRoot $stage) -eq $path) 'trusted exact lau
 $before=[IO.File]::ReadAllText($path);$rejected=$false
 try{New-InitPublicLauncher -StageRoot $stage}catch{$rejected=$true}
 Assert ($rejected -and [IO.File]::ReadAllText($path) -ceq $before) 'existing altered launcher is rejected without overwrite'
+function Set-Acl {param($LiteralPath,$AclObject,$ErrorAction) $script:memoryAcl=$AclObject}
+function Get-Acl {param($LiteralPath,$ErrorAction) return $script:memoryAcl}
+& $realProtect 'memory-only'
+& $realAclCheck 'memory-only'
+Assert $true 'actual ACL constructor and validator accept the exact read-only Users descriptor in memory'
+$script:memoryAcl.SetAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier('S-1-5-32-545')),'FullControl','Allow')))
+$rejected=$false;try{& $realAclCheck 'memory-only'}catch{$rejected=$true}
+Assert $rejected 'actual ACL validator rejects Users write access'
 Write-Host ('ALL PASS: '+$script:count+' launcher assertions; TEMP and UAC/ACL mocks only')
