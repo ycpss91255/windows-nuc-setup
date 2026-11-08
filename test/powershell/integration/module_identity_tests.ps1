@@ -14,12 +14,14 @@ $entry=Join-Path $fixture "module ' 中文.ps1"
 function Start-Process {param($FilePath,$Verb,$ArgumentList);$script:captured=$ArgumentList}
 $PSCommandPath=$entry;$sid='S-1-5-21-111-222-333-1001';$currentSID=$sid
 $Module='Apply-HostsSync';$VerifyOnly=$true;$SyncOnly=$false;$Mode='SSH';$DriverPackagePath=''
-& ([scriptblock]::Create($elevation.Clauses[0].Item2.Extent.Text.TrimStart('{').TrimEnd('}').Replace('$PSCommandPath','$entry')))
+$testBound=@{DriverPackagePath=$DriverPackagePath}
+& ([scriptblock]::Create($elevation.Clauses[0].Item2.Extent.Text.TrimStart('{').TrimEnd('}').Replace('$PSCommandPath','$entry').Replace('$PSBoundParameters','$testBound')))
 $decoded=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($script:captured -split '-EncodedCommand ')[1]))
 $result=& ([scriptblock]::Create($decoded))
 Assert ($result.SID -eq $sid -and $result.Module -eq $Module -and $result.Verify -and $result.Mode -eq 'SSH') 'standalone elevation carries original user SID and requested verification flags'
 $Module='Install-Drivers';$VerifyOnly=$false;$DriverPackagePath=Join-Path $fixture "drivers ' 中文"
-& ([scriptblock]::Create($elevation.Clauses[0].Item2.Extent.Text.TrimStart('{').TrimEnd('}').Replace('$PSCommandPath','$entry')))
+$testBound=@{DriverPackagePath=$DriverPackagePath}
+& ([scriptblock]::Create($elevation.Clauses[0].Item2.Extent.Text.TrimStart('{').TrimEnd('}').Replace('$PSCommandPath','$entry').Replace('$PSBoundParameters','$testBound')))
 $decoded=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($script:captured -split '-EncodedCommand ')[1]))
 $result=& ([scriptblock]::Create($decoded))
 Assert ($result.SID -eq $sid -and $result.Driver -eq $DriverPackagePath) 'standalone elevation preserves quoted dynamic driver path with original identity'

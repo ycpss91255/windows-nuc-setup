@@ -13,11 +13,13 @@ if(-not $isAdmin){
  $command+=" -ExpectedUserSID '"+$sid.Replace("'","''")+"'"
  if($VerifyOnly){$command+=' -VerifyOnly'}
  if($Module -eq 'Apply-HostsSync'){$command+=' -Mode '+$Mode;if($SyncOnly){$command+=' -SyncOnly'}}
- if($DriverPackagePath){$command+=" -DriverPackagePath '"+$DriverPackagePath.Replace("'","''")+"'"}
+ if($PSBoundParameters.ContainsKey('DriverPackagePath')){$command+=" -DriverPackagePath '"+$DriverPackagePath.Replace("'","''")+"'"}
  if($NonInteractive){$command+=' -NonInteractive'}
  if($ConfirmedBoard){$command+=" -ConfirmedBoard '"+$ConfirmedBoard.Replace("'","''")+"' -ConfirmationComputer '"+$ConfirmationComputer.Replace("'","''")+"'"}
  Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -NoExit -ExecutionPolicy Bypass -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)));return
 }
+$driverArguments=@{ConfirmedBoard=$ConfirmedBoard;ConfirmationComputer=$ConfirmationComputer;NonInteractive=$NonInteractive}
+if($PSBoundParameters.ContainsKey('DriverPackagePath')){$driverArguments.DriverPackagePath=$DriverPackagePath}
 $path=Resolve-NucPath ($Module+'.ps1')
 if($Module -eq 'Apply-HostsSync'){
  $options=@{Mode=$Mode}
@@ -26,4 +28,4 @@ if($Module -eq 'Apply-HostsSync'){
 }elseif($VerifyOnly){
  if($Module -eq 'Desktop-IconLayout'){& $path -Mode Verify}
  else{if(-not (Get-Command $path).Parameters.ContainsKey('VerifyOnly')){throw 'This module does not support VerifyOnly. Use windows.cmd -VerifyOnly.'};& $path -VerifyOnly}
-}else{if($Module -eq 'Install-Drivers'){& $path -NonInteractive:$NonInteractive -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}else{& $path}}
+}else{if($Module -eq 'Install-Drivers'){& $path @driverArguments}else{& $path}}
