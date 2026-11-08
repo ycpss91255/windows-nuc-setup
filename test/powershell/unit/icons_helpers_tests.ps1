@@ -36,3 +36,6 @@ Assert ($r.Success -and @($r.Reference.Icons).Count -eq 4 -and $r.Reference.Widt
 $wrong=Frame -names @('a','b','c','d');[NUC8Icons.Desktop]::Frames.Enqueue($wrong);[NUC8Icons.Desktop]::Frames.Enqueue($wrong);$failure=''
 try{Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Load -Reference $wrong|Out-Null}catch{$failure=$_.Exception.Message}
 Assert (-not [string]::IsNullOrWhiteSpace($failure)) 'Load refuses a template with four arbitrary non-system names before native Position'
+[NUC8Icons.Desktop]::Frames.Clear();[NUC8Icons.Desktop]::Frames.Enqueue((Frame -names @('控制台','本機','網路','資源回收筒','extra')));[NUC8Icons.Desktop]::Frames.Enqueue((Frame));$failure='';$beforeMoves=[NUC8Icons.Desktop]::Moves
+try{Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Load -Reference $reference|Out-Null}catch{$failure=$_.Exception.Message}
+Assert (-not [string]::IsNullOrWhiteSpace($failure) -and [NUC8Icons.Desktop]::Moves -eq $beforeMoves) 'initial Capture with extra icon is refused before native Position even if after frame has four'
