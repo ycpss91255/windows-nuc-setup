@@ -41,7 +41,14 @@ $command="& '"+$entryPath.Replace("'","''")+"' -PackageOnly -DriverPackagePath '
 $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
 $cli=@(& powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded 2>&1)
 Assert ($LASTEXITCODE -eq 0 -and ($cli -join '') -match '"Status":"Passed"' -and ($cli -join '') -match '"Count":1') '真交付CLI離線驗包支援第二個機型，不固定NUC板號'
-$offlineResult=@(. $entryPath -PackageOnly -DriverPackagePath $export)
+function Get-ChildItem {
+ param($LiteralPath,[switch]$Directory,[switch]$Force,$ErrorAction)
+ if($Directory -and [IO.Path]::GetFullPath($LiteralPath) -eq [IO.Path]::GetFullPath((Join-Path $root 'drivers'))){
+  return @((Microsoft.PowerShell.Management\Get-ChildItem -LiteralPath (Join-Path $root 'drivers') -Directory)) + @((Microsoft.PowerShell.Management\Get-ChildItem -LiteralPath $registry -Directory))
+ }
+ Microsoft.PowerShell.Management\Get-ChildItem @PSBoundParameters
+}
+try{$offlineResult=@(. (Join-Path $root 'modules/drivers/install_drivers.ps1') -PackageOnly -DriverPackagePath $export)}finally{Remove-Item -LiteralPath Function:\Get-ChildItem}
 Assert ($offlineResult.Count -eq 1 -and $offlineResult[0].Status -eq 'Passed') '同程序正式入口同樣離線驗證第二機型，保留來源量測'
 . (Join-Path $root 'core/hardware.ps1')
 $wrong=Get-SetupHardwareProfile -BoardProduct NUC8i7HVB
