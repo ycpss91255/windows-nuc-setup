@@ -54,7 +54,7 @@ $runOnce=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOn
 $pendingPins=[bool]$runOnce.NUC8FinalizeTaskbar
 Add-Check '釘選登入後套用' (-not $pendingPins) $(if($pendingPins){'仍待下次登入套用及解除暫時原則'}else{'沒有待執行的釘選收尾工作；請目視確認工作列'})
 try{
- $fresh=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'apply_display_settings.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup\Display-Verification.json') -Arguments @{VerifyOnly=$true}
+ $fresh=Invoke-SetupGuiFreshVerification -PackageRoot $script:NucPackageRoot -Role Display
  Add-Check '實際解析度與縮放' ([bool]$fresh.Success) ('本輪即時結果：'+($fresh|ConvertTo-Json -Compress -Depth 5))
 }catch{Add-Check '實際解析度與縮放' $false $_.Exception.Message}
 $desktopKey='HKCU:\Software\Microsoft\Windows\CurrentVersion\explorer\HideDesktopIcons\NewStartPanel'
@@ -66,7 +66,7 @@ Add-Check '四個桌面系統圖示' $iconsOK '控制台、本機、網路、資
 $desktopFiles=@(foreach($dir in @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))){Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue|Where-Object {-not ($_.Attributes -band [IO.FileAttributes]::Hidden) -and -not ($_.Attributes -band [IO.FileAttributes]::System)}|Select-Object -ExpandProperty Name})
 Add-Check '桌面無其他一般檔案/捷徑' ($desktopFiles.Count -eq 0) ('剩餘項目：'+($desktopFiles -join ', '))
 try{
- $fresh=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'apply_theme_settings.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup\Theme-Verification.json') -Arguments @{VerifyOnly=$true}
+ $fresh=Invoke-SetupGuiFreshVerification -PackageRoot $script:NucPackageRoot -Role Theme
  Add-Check '深色模式與純黑背景' ([bool]$fresh.Success) ('本輪即時結果：'+($fresh|ConvertTo-Json -Compress -Depth 5))
 }catch{Add-Check '深色模式與純黑背景' $false $_.Exception.Message}
 $layoutDecision=Get-SetupModuleDecision -Module 'desktop_icon_layout.ps1' -Hardware $hardware
