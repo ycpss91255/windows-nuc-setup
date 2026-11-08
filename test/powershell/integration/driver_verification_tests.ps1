@@ -7,7 +7,7 @@ Assert ([bool](Get-Command Invoke-SetupDriverVerification -ErrorAction SilentlyC
 $fixture=Join-Path $env:TEMP ('driver_verify_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
 [IO.File]::WriteAllText((Join-Path $fixture 'wifi.zip'),'inert')
 $target=@{Id='wifi';InfPath='wifi.inf';Provider='Intel';DriverVersion='20.70.32.1';MinimumBuild=22000;Architecture='amd64';HardwareIds=@('PCI\VEN_8086&DEV_24FD')}
-$manifest=@{SchemaVersion=2;CheckedAt='2026-11-08';Packages=@(@{Id='wifi';PackageVersion='22.200.2';SourceUrl='https://www.intel.com/driver';File='wifi.zip';SHA256=(Get-FileHash (Join-Path $fixture 'wifi.zip')).Hash;Drivers=@($target)})}
+$manifest=@{SchemaVersion=2;AuditedAt=(Get-Content -LiteralPath (Join-Path $root 'drivers/nuc8i7hvk_hnk/manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json).AuditedAt;Packages=@(@{Id='wifi';PackageVersion='22.200.2';SourceUrl='https://www.intel.com/driver';File='wifi.zip';SHA256=(Get-FileHash (Join-Path $fixture 'wifi.zip')).Hash;Drivers=@($target)})}
 $manifest|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $fixture 'manifest.json') -Encoding UTF8
 $script:device=[pscustomobject]@{InstanceId='PCI\fixture';HardwareIds=$target.HardwareIds;DriverVersion='20.70.32.1';DriverProvider='Intel';Status='OK'};$script:reads=0
 function Get-SetupDriverDeviceInventory {param($Targets) $script:reads++;$script:device}
@@ -19,6 +19,7 @@ function Invoke-SetupDriverPnpRescan {throw 'VerifyOnly forbids native state cha
 $run=[guid]::NewGuid().ToString()
 $r=Invoke-SetupDriverVerification -DriverRoot $fixture -VerificationRunId $run
 Assert ($r.Success -and $r.Targets[0].Status -eq 'Current' -and $r.VerificationRunId -ceq $run -and $r.Computer -ceq [Environment]::MachineName -and $r.UserSID -ceq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) '真正fresh唯讀結果綁本輪同機同帳號'
+Assert ($r.OfficialCheckedAt -ceq $manifest.AuditedAt -and $r.OfficialCheckedAt -match '^\d{4}-\d{2}-\d{2}$') '正式manifest的AuditedAt查核日期如實回傳，不因錯欄位成空值'
 @{Success=$true}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $fixture 'Driver-Result.json') -Encoding UTF8
 $script:device.DriverVersion='20.70.17.1';$r=Invoke-SetupDriverVerification -DriverRoot $fixture -VerificationRunId $run
 Assert (-not $r.Success -and $r.Targets[0].Status -eq 'UpdateRequired' -and $script:reads -eq 2) 'WindowsUpdate若改回舊版不信先前Success而重新讀回'
