@@ -54,3 +54,9 @@ function Read-Host {param($Prompt);$fixtureState.PromptCount++;if(-not $fixtureS
 $request=Select-SetupDriverRequest -PackageRoot (Split-Path $core -Parent) -Interactive $true
 Assert ($request.Hardware.BoardProduct -eq 'NUC8i7HNB' -and -not $request.DriverPackagePath) '重新偵測讀取最新板號，仍可略過包'
 Write-Host ('ALL PASS: '+$count+' driver prompt assertions; no host changes.')
+foreach($target in @('verify_only.ps1','verify_after_restart.ps1')){[IO.File]::WriteAllText((Join-Path $core $target),'# capture-only verification stub',[Text.UTF8Encoding]::new($true))}
+foreach($route in @('VerifyOnly','AfterRestart')){
+ $rejected=$false;$flags=@{};$flags[$route]=$true
+ try{& (Join-Path $core 'start_windows.ps1') @flags -ConfirmedBoard NUC8i7HVB -ConfirmationComputer $env:COMPUTERNAME}catch{$rejected=$_.Exception.Message -match '重新選擇'}
+ Assert $rejected ('驗證入口拒絕新的手動選型，不靜默忽略：'+$route)
+}
