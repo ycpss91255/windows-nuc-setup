@@ -84,6 +84,7 @@ foreach($name in $workers){
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('NUC-Routing-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture|Out-Null
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'core\start_windows.ps1') -Destination (Join-Path $fixture 'start_windows.ps1')
+Assert (Test-Path -LiteralPath (Join-Path $fixture 'hardware.ps1')) 'routing fixture includes actual hardware selection dependency'
 foreach($entry in @('configure_nuc.ps1','verify_after_restart.ps1','verify_only.ps1')){[IO.File]::WriteAllText((Join-Path $fixture $entry),"Write-Output '$entry'")}
 Assert ((& (Join-Path $fixture 'start_windows.ps1')) -eq 'configure_nuc.ps1') 'Windows default dispatches setup'
 Assert ((& (Join-Path $fixture 'start_windows.ps1') -AfterRestart) -eq 'verify_after_restart.ps1') 'Windows AfterRestart dispatches continuation'
