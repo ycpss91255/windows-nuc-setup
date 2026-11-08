@@ -48,7 +48,9 @@ foreach($case in @('missing','empty','outside','failed_test')){
  $bad=[ordered]@{SourceRoot=$fixture;Sources=@('branch.ps1','never.ps1');Tests=@('positive.Tests.ps1')}
  switch($case){missing{$bad.Sources+=@('missing.ps1')} empty{$bad.Sources=@()} outside{$bad.Sources=@('../outside.ps1')} failed_test{WriteFixture 'failed.Tests.ps1' "Describe 'bad' { It 'fails' { 1 | Should-Be 2 } }";$bad.Tests=@('failed.Tests.ps1')}}
  $badPath=Join-Path $fixture ($case+'.json');[IO.File]::WriteAllText($badPath,($bad|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+ $ErrorActionPreference='Continue'
  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $badPath -OutputDirectory (Join-Path $fixture $case) *> (Join-Path $fixture ($case+'.log'))
+ $ErrorActionPreference='Stop'
  Assert ($LASTEXITCODE -ne 0) ('拒絕不完整證據：'+$case)
  Assert (-not(Test-Path (Join-Path (Join-Path $fixture $case) 'coverage.xml'))) ('失敗不發布總報告：'+$case)
 }
