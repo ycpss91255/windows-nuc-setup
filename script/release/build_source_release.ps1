@@ -3,10 +3,11 @@
 param(
  [Parameter(Mandatory=$true)][string]$Version,
  [Parameter(Mandatory=$true)][string]$OutputDirectory,
- [string]$PackageRoot=([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))),
+ [string]$PackageRoot,
  [ValidatePattern('^(HEAD|[a-fA-F0-9]{40})$')][string]$Revision='HEAD'
 )
 $ErrorActionPreference='Stop'
+if(-not $PackageRoot){$PackageRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))}
 . (Join-Path $PSScriptRoot 'release.ps1')
 $null=Get-ReleaseVersion $Version
 $PackageRoot=(Resolve-Path -LiteralPath $PackageRoot).Path

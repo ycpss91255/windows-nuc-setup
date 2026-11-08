@@ -775,7 +775,8 @@ New-DeterministicDriverArchive -PackageDirectory '已驗證的獨立包資料夾
 對已提交、版本檔及 changelog 已一致的來源執行：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\build_source_release.ps1 -Version v0.2.0 -OutputDirectory "$env:TEMP\windows_setup_release_check"
+$version = (Get-Content -LiteralPath .\.version -Raw).Trim()
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\build_source_release.ps1 -Version $version -OutputDirectory "$env:TEMP\windows_setup_release_check"
 ```
 
 此命令驗證來源並產生 Release 說明，不再重複打包來源 ZIP；不建立標籤、不推送、不發布，也不代表雲端 CI 已通過。
