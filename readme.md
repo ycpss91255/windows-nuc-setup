@@ -102,7 +102,7 @@ USB 根目錄\
 │  ├─ core\
 │  └─ modules\              保留整份工具包，其餘檔案也一併複製
 └─ windows_driver_packages\  可選；不需要 NUC 驅動可不帶
-   └─ nuc8\                 保留 install.cmd、manifest、輔助腳本及四個 ZIP
+   └─ nuc8\                 保留 install.cmd、manifest、輔助腳本及十二個 ZIP
 ```
 
 不是只複製兩個 `.cmd`。USB 必須可寫入，執行時保持連接，不可放到會被清理的桌面；`.git` 不是執行必要檔案。可以直接在 USB 使用，也可以自行完整複製到其他可寫入位置，無需固定任何使用者的 Downloads。
@@ -234,11 +234,11 @@ windows_setup\
 ├─ windows.cmd                 正式帳號桌面設定
 ├─ readme.md                   本文件
 ├─ core\                      主流程、驗證與路徑表
+├─ drivers\                   機型 profile／manifest 與官方版本說明（不含 ZIP）
 ├─ modules\                   每個功能自己的腳本、資產與獨立入口
 │  ├─ init\                   OOBE 帳號初始化與正式登入續跑
 │  ├─ ssh\                    SSH 及 hosts 同步
-│  ├─ drivers\
-│  │  └─ manifests\           驅動清單範本（不含封存檔）
+│  ├─ drivers\                共用驅動安裝引擎與驗證
 │  ├─ updates\                Windows Update
 │  ├─ debloat\                清理與 Win11Debloat
 │  └─ …                        帳號、記憶體、電源、桌面、輸入法等
@@ -274,7 +274,7 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 
 型號對照依 [ASUS 官方 NUC 規格索引](https://zentalk.asus.com/t5/faq/nuc-technical-product-specifications-for-nuc-products/ta-p/451363)；HVK／HVB 亦見 [Intel 技術規格](https://www.intel.com/content/dam/support/us/en/documents/mini-pcs/nuc-kits/NUC8i7HVK_TechProdSpec.pdf)。官方表列的是 BIOS 識別，腳本實際讀取 SMBIOS 主機板 Product，去除首尾空白後比對白名單；不依外殼貼紙猜型號，也不表示所有 NUC8 都支援。可先執行 `(Get-CimInstance Win32_BaseBoard).Product` 查看。已知非白名單值會安全略過；只有空白／明確未知或讀取失敗才提供受控手動確認，確認不會覆寫報告中的原始偵測值。
 
-這是型號對照與安裝條件，不代表每個整機變體已實測。四個封存檔不是完整的所有裝置驅動集；仍須依裝置管理員與 Windows Update 檢查其他驅動。AMD 封存檔 GFX-Radeon-Win10-23.10.01.46.zip 在官方列為 Windows 10 64-bit，不能宣稱 Windows 11 官方認證；本工具在 Windows 11 的結果須逐機驗證。 驅動來源見 [ASUS NUC8i7HVK 下載頁](https://www.asus.com/uk/supportonly/nuc8i7hvk/helpdesk_download/)。
+這是型號對照與安裝條件，不代表每個整機變體已實測。目前清單為十二包、33 個 INF 目標及一個 Extension，精確版本與依賴見 [機型設定檔](drivers/nuc8i7hvk_hnk/readme.md)；仍依裝置枚舉結果與 Windows Update 處理其他驅動。AMD 封存檔 GFX-Radeon-Win10-23.10.01.46.zip 在官方列為 Windows 10 64-bit，不能宣稱 Windows 11 官方認證；本工具在 Windows 11 的結果須逐機驗證。 驅動來源見 [ASUS NUC8i7HVK 下載頁](https://www.asus.com/uk/supportonly/nuc8i7hvk/helpdesk_download/)。
 
 ## 3. 執行第一次設定
 
