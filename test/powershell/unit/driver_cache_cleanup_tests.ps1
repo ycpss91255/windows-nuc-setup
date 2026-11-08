@@ -23,7 +23,9 @@ function Invoke-CacheNativeDouble {
 $native=Invoke-SetupDriverInfInstall -InfPath (Join-Path $two 'payload.sys') -LogPath (Join-Path $fixture 'native.log')
 Assert ($script:busyDuringNative -and -not $script:cleanupDuringNative -and -not $script:SetupDriverExtractionLeases[$two].NativeActive -and $native.ExitCode -eq 0) '真同步原生邊界完成後才釋放Busy，期間不能清理'
 $script:abortNative=$true;$threw=$false;try{Invoke-SetupDriverInfInstall -InfPath (Join-Path $two 'payload.sys') -LogPath (Join-Path $fixture 'native.log')}catch{$threw=$true}
-Assert ($threw -and $script:SetupDriverExtractionLeases[$two].NativeActive -and -not(Remove-SetupDriverExtractionRoot -Path $two)) '原生完成狀態未知時不在finally冒充已完成並刪檔'
+$busyAfter=$script:SetupDriverExtractionLeases[$two].NativeActive
+$cleanupAfter=$null;if($threw -and $busyAfter){$cleanupAfter=Remove-SetupDriverExtractionRoot -Path $two}
+Assert ($threw -and $busyAfter -and -not $cleanupAfter) ('原生完成狀態未知時不在finally冒充已完成並刪檔; threw='+$threw+' busy='+$busyAfter+' cleanup='+$cleanupAfter)
 $script:SetupDriverExtractionLeases[$two].NativeActive=$false
 $outside=Join-Path $fixture ([guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($outside)
 Assert (-not(Remove-SetupDriverExtractionRoot -Path $outside) -and (Test-Path $outside)) '外部及未租用路徑不刪除'
