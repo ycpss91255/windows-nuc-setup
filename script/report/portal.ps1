@@ -1,4 +1,10 @@
 ﻿#Requires -Version 5.1
+function Get-TestReportArtifactNames {
+ param([ValidateSet(1,2)][int]$SchemaVersion)
+ $files=@('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')
+ if($SchemaVersion -eq 1){return @($files+'system.svg')}
+ return @($files+@('repo_coverage.json','coverage_inventory.json','coverage.xml'))
+}
 function Get-TestIdentityMap {
  param($Snapshot)
  $map=@{}
@@ -45,10 +51,10 @@ function Test-PortalReleaseEvidence {
  if($Entry.ManifestDigest -cne ('sha256:'+$manifestActual)){throw 'GitHub manifest digest 不符。'}
  $snapshot=Get-Content -LiteralPath $Entry.SnapshotPath -Raw -Encoding UTF8|ConvertFrom-Json
  $manifest=Get-Content -LiteralPath $Entry.ManifestPath -Raw -Encoding UTF8|ConvertFrom-Json
- if($manifest.SchemaVersion -ne 1){throw '不支援的品質 manifest schema。'}
+ if($manifest.SchemaVersion -notin @(1,2) -or $manifest.SchemaVersion -ne $snapshot.SchemaVersion){throw '品質 manifest 與報告 schema 不相符。'}
  Assert-TestReportSnapshot -Report $snapshot -Release
  if($snapshot.Version -cne $Entry.Version -or $snapshot.Commit -cne $Entry.Commit -or $manifest.Version -cne $Entry.Version -or $manifest.Commit -cne $Entry.Commit -or $manifest.SnapshotSHA256 -cne $actual){throw '版本、來源提交或品質 digest 不一致。'}
- $required=@('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','system.svg','coverage.svg')
+ $required=@(Get-TestReportArtifactNames $snapshot.SchemaVersion)
  if(@($manifest.Files).Count -ne $required.Count){throw '品質 manifest 不完整。'}
  foreach($name in $required){
   $items=@($manifest.Files|Where-Object {$_.Name -ceq $name});if($items.Count -ne 1 -or $items[0].SHA256 -cnotmatch '^[a-f0-9]{64}$'){throw '品質 manifest 缺少或重複必要檔案。'}
