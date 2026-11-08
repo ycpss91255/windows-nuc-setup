@@ -20,7 +20,7 @@ Assert ($rollup.Contains('oobe_payload_inspection') -and $rollup.Contains('needs
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('oobe_workflow_'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path (Join-Path $fixture 'script/test') -Force|Out-Null
 [IO.File]::WriteAllText((Join-Path $fixture 'script/test/verify_oobe_payload.ps1'),'param($PackagePath,$EvidenceDirectory,$BaselinePath); [IO.File]::WriteAllText((Join-Path $PWD "capture.json"),(@{EvidenceDirectory=$EvidenceDirectory;OutputBeforeRead=[IO.File]::ReadAllText($env:GITHUB_OUTPUT)}|ConvertTo-Json))')
-$run=([regex]::Match($job,'(?ms)        run: \|\r?\n(?<body>.*?)(?=^      - name:)').Groups['body'].Value -replace '(?m)^          ','').Trim()
+$run=([regex]::Match($job.Substring($job.IndexOf('id: payload')),'(?ms)        run: \|\r?\n(?<body>.*?)(?=^      - name:)').Groups['body'].Value -replace '(?m)^          ','').Trim()
 $oldRunner=$env:RUNNER_TEMP;$oldOutput=$env:GITHUB_OUTPUT
 try{
  $env:RUNNER_TEMP=Join-Path $fixture 'different_runner_temp';$env:GITHUB_OUTPUT=Join-Path $fixture 'github_output'

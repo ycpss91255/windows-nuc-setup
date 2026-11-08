@@ -30,8 +30,13 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: 檢查設定包來源與原生 metadata
+        shell: powershell
+        run: |
+          .\test\powershell\integration\provisioning_asset_tests.ps1
       - name: 唯讀抽取並核對已審查內容
         id: payload
+        if: always()
         shell: powershell
         run: |
           $evidence = Join-Path ([IO.Path]::GetTempPath()) ('windows-setup-oobe-' + [guid]::NewGuid().ToString('N'))
