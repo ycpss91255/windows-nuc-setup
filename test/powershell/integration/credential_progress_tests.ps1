@@ -20,3 +20,12 @@ $global:credentialProgressActive=$false;$global:credentialProgressPromptReached=
 try{Invoke-SetupConfiguration -Hardware ([pscustomobject]@{}) -UserName fixture}catch{$caught=$_}
 Assert ($global:credentialProgressPromptReached -and $caught.Exception.Message -ceq 'controlled credential boundary reached without a progress panel') '原始主流程在帳密模組開始前不得保留進度面板；不是僅驗ReadHost替身'
 Assert $global:credentialProgressStopped '密碼輸入邊界失敗仍確實關閉transcript'
+[IO.File]::WriteAllText((Join-Path $fixture 'apply_autologon_settings.ps1'),@'
+param($UserName,$AutoLogonPassword)
+if($global:credentialProgressActive){throw 'credential prompt entered while progress panel is active'}
+$global:credentialProgressPromptReached=$true
+'@,[Text.UTF8Encoding]::new($true))
+function Get-ItemProperty {param($Path) $global:credentialProgressAfterPrompt=$global:credentialProgressActive;throw 'controlled post-credential native boundary'}
+$global:credentialProgressPromptReached=$false;$global:credentialProgressActive=$false;$global:credentialProgressAfterPrompt=$false;$caught=$null
+try{Invoke-SetupConfiguration -Hardware ([pscustomobject]@{}) -UserName fixture}catch{$caught=$_}
+Assert ($global:credentialProgressPromptReached -and $global:credentialProgressAfterPrompt -and $caught.Exception.Message -ceq 'controlled post-credential native boundary') '帳密模組返回之後恢復進度，後續原生讀取錯誤仍保留'
