@@ -66,3 +66,12 @@ function Assert-StartPinsAssetSource {
  if($xml.DocumentElement.OuterXml -cne $expectedXml.DocumentElement.OuterXml -or @($xml.ChildNodes|Where-Object {$_.NodeType -notin @([Xml.XmlNodeType]::XmlDeclaration,[Xml.XmlNodeType]::Element)}).Count){throw '開始選單 XML 必須僅包含固定身分與 空 pinnedList；不允許帳密或額外設定。'}
  return $manifest
 }
+function Assert-StartPinsAsset {
+ param([Parameter(Mandatory=$true)][string]$AssetRoot)
+ $manifest=Assert-StartPinsAssetSource -AssetRoot $AssetRoot
+ $package=Join-Path ([IO.Path]::GetFullPath($AssetRoot)) 'empty_start.ppkg'
+ $logs=Join-Path ([IO.Path]::GetTempPath()) ('windows_setup_start_metadata_'+[guid]::NewGuid().ToString('N'))
+ $metadata=@(Get-ProvisioningPackage -PackagePath $package -LogsDirectoryPath $logs -ErrorAction Stop|Where-Object {$_.PackageID})
+ if($metadata.Count -ne 1 -or $metadata[0].PackageID -ne $manifest.PackageId -or $metadata[0].PackageName -cne $manifest.PackageName -or $metadata[0].Version -ne $manifest.PackageVersion -or [int]$metadata[0].Rank -ne 0 -or [int]$metadata[0].OwnerType -ne 5000){throw '開始選單包原生 metadata 與來源不一致。'}
+ return $manifest
+}
