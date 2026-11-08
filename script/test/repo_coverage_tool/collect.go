@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -125,8 +124,8 @@ func collect(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		var evidence rc.CMDEvidence
-		if err := json.Unmarshal(data, &evidence); err != nil {
+		evidence, err := rc.DecodeCMDEvidence(data)
+		if err != nil {
 			return err
 		}
 		originals := map[string][]byte{}

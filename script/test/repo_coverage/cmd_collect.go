@@ -22,13 +22,19 @@ type CMDRun struct {
 	ExitCode, ProbeExit, Invocations int
 }
 type CMDSource struct {
-	File, SHA256, CopiedSHA256, AfterSHA256, CopyDirectory string
-	Runs                                                   []CMDRun
+	File, SHA256, CopiedSHA256, CopiedAfterSHA256, AfterSHA256, CopyDirectory string
+	Runs                                                                      []CMDRun
 }
 type CMDEvidence struct {
-	SchemaVersion       int
-	Metric, ProbeSHA256 string
-	Sources             []CMDSource
+	SchemaVersion                       int
+	Metric, ProbeSHA256, ProbeDirectory string
+	Sources                             []CMDSource
+}
+
+func DecodeCMDEvidence(data []byte) (CMDEvidence, error) {
+	var e CMDEvidence
+	err := strictJSON(data, &e)
+	return e, err
 }
 
 func launcherArguments(l CMDLauncher, dir string, extra []string) []string {
@@ -88,6 +94,7 @@ func CollectCMD(root, probe string) (CMDEvidence, error) {
 	}
 	defer os.RemoveAll(temp)
 	probeDir := filepath.Join(temp, "probe")
+	e.ProbeDirectory = probeDir
 	if err := os.Mkdir(probeDir, 0700); err != nil {
 		return e, err
 	}
@@ -158,6 +165,11 @@ func CollectCMD(root, probe string) (CMDEvidence, error) {
 			return e, err
 		}
 		s.AfterSHA256 = digest(after)
+		copyAfter, err := os.ReadFile(copyPath)
+		if err != nil {
+			return e, err
+		}
+		s.CopiedAfterSHA256 = digest(copyAfter)
 		e.Sources = append(e.Sources, s)
 	}
 	if _, _, err := NormalizeCMD(e, originals); err != nil {
@@ -174,7 +186,7 @@ func NormalizeCMD(e CMDEvidence, originals map[string][]byte) (Report, []Catalog
 	}
 	for _, s := range e.Sources {
 		b, ok := originals[s.File]
-		if !ok || r.Files[s.File] != nil || s.SHA256 != digest(b) || s.CopiedSHA256 != s.SHA256 || s.AfterSHA256 != s.SHA256 {
+		if !ok || r.Files[s.File] != nil || s.SHA256 != digest(b) || s.CopiedSHA256 != s.SHA256 || s.CopiedAfterSHA256 != s.SHA256 || s.AfterSHA256 != s.SHA256 {
 			return r, nil, fmt.Errorf("CMD source mismatch")
 		}
 		l, err := ParseCMDLauncher(b)
@@ -191,7 +203,7 @@ func NormalizeCMD(e CMDEvidence, originals map[string][]byte) (Report, []Catalog
 				expectedExit = 37
 				extra = []string{"-ProbeArgument", "含 空白 English"}
 			}
-			if run.ProbeExit != expectedExit || run.ExitCode != expectedExit || run.Invocations != 1 || run.Directory == "" || !reflect.DeepEqual(run.ExtraArguments, extra) || !reflect.DeepEqual(run.Arguments, launcherArguments(l, s.CopyDirectory, extra)) {
+			if run.ProbeExit != expectedExit || run.ExitCode != expectedExit || run.Invocations != 1 || !filepath.IsAbs(e.ProbeDirectory) || run.Directory != e.ProbeDirectory || !reflect.DeepEqual(run.ExtraArguments, extra) || !reflect.DeepEqual(run.Arguments, launcherArguments(l, s.CopyDirectory, extra)) {
 				return r, nil, fmt.Errorf("CMD argv or exit evidence differs: %s", s.File)
 			}
 		}
