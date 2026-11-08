@@ -11,6 +11,8 @@ $entry=[pscustomobject]@{Id='fixture';File='fixture.zip';SHA256=(Get-FileHash $a
 $script:installed=0;$script:expanded=0;$script:secure=0
 function New-SetupDriverExtractionRoot {$script:secure++;return $stage}
 function Expand-DriverArchive {param($Archive,$Destination) $script:expanded++}
+function Assert-SetupDriverTargetIntegrity {param($Target,$Root) return $true}
+function Get-SetupDriverDeviceInventory {throw 'fixture forbids native inventory outside the mocked target boundary'}
 function Invoke-SetupDriverTarget {$script:installed++;[pscustomobject]@{Results=@([pscustomobject]@{Status='Updated'});RebootRequired=$false;Failures=@()}}
 $r=Invoke-SetupOfficialDriverPackage -Entry $entry -Archive $archive -Build 22621 -LogPath 'fixture'
 Assert ($r.Results[0].Status -eq 'Updated' -and $script:installed -eq 1 -and $script:secure -eq 1 -and $script:expanded -eq 1) '真套件編排先freshstage再展開核實payload後目標安裝'

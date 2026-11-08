@@ -74,16 +74,22 @@ function Get-SetupDriverPnpTool {
  return Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'pnputil.exe'
 }
 function Invoke-SetupDriverInfInstall {
- param([Parameter(Mandatory=$true)][string]$InfPath,[Parameter(Mandatory=$true)][string]$LogPath)
- $output=& (Get-SetupDriverPnpTool) /add-driver $InfPath /install 2>&1
+ param([Parameter(Mandatory=$true)][string]$InfPath,[Parameter(Mandatory=$true)][string]$LogPath,[switch]$StageOnly)
+ $arguments=@('/add-driver',$InfPath);if(-not $StageOnly){$arguments+='/install'}
+ $output=& (Get-SetupDriverPnpTool) @arguments 2>&1
  $code=$LASTEXITCODE
  $output|Out-File -LiteralPath $LogPath -Append -Encoding utf8
  [pscustomobject]@{ExitCode=$code}
 }
+function Invoke-SetupDriverPnpRescan {
+ $output=& (Get-SetupDriverPnpTool) /scan-devices 2>&1
+ [pscustomobject]@{ExitCode=$LASTEXITCODE;Output=@($output)}
+}
 function Invoke-SetupDriverTarget {
- param([Parameter(Mandatory=$true)]$Target,[Parameter(Mandatory=$true)][string]$Root,[int]$Build,[string]$Architecture,[string]$LogPath)
+ param([Parameter(Mandatory=$true)]$Target,[Parameter(Mandatory=$true)][string]$Root,[int]$Build,[string]$Architecture,[string]$LogPath,[switch]$RequiredPresent)
  $null=Assert-SetupDriverTargetIntegrity -Target $Target -Root $Root
  $plans=@(Get-SetupDriverTargetPlan -Target $Target -Devices @(Get-SetupDriverDeviceInventory) -Build $Build -Architecture $Architecture)
+ if($RequiredPresent){foreach($plan in $plans){if($plan.Status -eq 'Absent'){$plan.Status='Unverified';$plan.Reason='必需子元件尚未枚舉，需續跑核實'}}}
  $failures=@();$reboot=$false;$results=@()
  if(@($plans|Where-Object Status -eq 'UpdateRequired').Count){
   $native=Invoke-SetupDriverInfInstall -InfPath (Join-Path $Root $Target.InfPath) -LogPath $LogPath
@@ -129,9 +135,25 @@ function Invoke-SetupOfficialDriverPackage {
  Expand-DriverArchive -Archive $Archive -Destination $stage
  Assert-SetupDriverPayloadFiles -Entry $Entry -Root $stage
  $results=@();$failures=@();$reboot=$false
- foreach($target in $Entry.Drivers){
+ foreach($target in $Entry.Drivers){$null=Assert-SetupDriverTargetIntegrity -Target $target -Root $stage}
+ foreach($target in @($Entry.Drivers|Where-Object {-not $_.ParentTarget})){
+  $children=@($Entry.Drivers|Where-Object {$_.ParentTarget -and $_.ParentTarget -ceq $target.Id})
+  $parentAvailable=$false
+  if($children.Count){$parentPlan=@(Get-SetupDriverTargetPlan -Target $target -Devices @(Get-SetupDriverDeviceInventory) -Build $Build -Architecture amd64);$parentAvailable=@($parentPlan|Where-Object Status -in @('UpdateRequired','Current','NewerInstalled')).Count -gt 0}
+  $dependencyFailed=$false
+  if($parentAvailable){foreach($child in $children){
+   if($Build -lt $child.MinimumBuild -or $child.Architecture -ne 'amd64'){$failures+=($child.InfPath+': 必需元件不適用目前OS');$dependencyFailed=$true;continue}
+   $native=Invoke-SetupDriverInfInstall -InfPath (Join-Path $stage $child.InfPath) -LogPath $LogPath -StageOnly
+   if($native.ExitCode -eq 3010){$reboot=$true}elseif($native.ExitCode -notin @(0,259)){$failures+=($child.InfPath+': 子元件預先加入失敗 '+$native.ExitCode);$dependencyFailed=$true}
+  }}
+  if($dependencyFailed){$results+=[pscustomobject]@{InfPath=$target.InfPath;Status='Unverified';Reason='必需元件預先加入失敗，未更新父裝置';TargetVersion=$target.DriverVersion};continue}
   $outcome=Invoke-SetupDriverTarget -Target $target -Root $stage -Build $Build -Architecture 'amd64' -LogPath $LogPath
   $results+=@($outcome.Results);$failures+=@($outcome.Failures);$reboot=$reboot -or $outcome.RebootRequired
+  if($children.Count -and $parentAvailable){$scan=Invoke-SetupDriverPnpRescan;if($scan.ExitCode -ne 0){$failures+=('子元件重新枚舉失敗：'+$scan.ExitCode)}}
+  foreach($child in $children){
+   if($parentAvailable){$childOutcome=Invoke-SetupDriverTarget -Target $child -Root $stage -Build $Build -Architecture amd64 -LogPath $LogPath -RequiredPresent;$results+=@($childOutcome.Results);$failures+=@($childOutcome.Failures);$reboot=$reboot -or $childOutcome.RebootRequired}
+   else{$results+=@(Get-SetupDriverTargetPlan -Target $child -Devices @() -Build $Build -Architecture amd64)}
+  }
  }
  [pscustomobject]@{PackageId=$Entry.Id;Results=@($results);Failures=@($failures);RebootRequired=$reboot;ExtractionRoot=$stage}
 }
