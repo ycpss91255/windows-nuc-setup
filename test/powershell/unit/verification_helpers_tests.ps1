@@ -50,6 +50,8 @@ try{
   $result=Get-Content (Resolve-NucPath 'Verification-Result.json') -Raw|ConvertFrom-Json
   Assert ($result.VerificationRunId -eq $id -and $result.UserSID -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) ('保留本輪ID及動態身分 '+$mode)
   Assert ($result.Passed -eq ($mode -eq 'Pass')) ('總結果不假通過 '+$mode)
+  $driverCheck=@($result.Checks|Where-Object Name -eq '已選驅動官方目標')
+  Assert ($driverCheck.Count -eq 1 -and $driverCheck[0].Status -eq $(if($mode -eq 'Pass'){'Passed'}else{'Failed'})) ('NUC已選包真正走freshdriver檢查而非被fixture誤略過 '+$mode)
   Assert (@($result.Checks|Where-Object Name -eq '非必要資料分享政策').Count -eq 1) ('保留隱私檢查 '+$mode)
   $expected=@{Throw='fixture submodule failed';Missing='本輪驗證未產生結果';Stale='驗證結果不是本輪產生';WrongComputer='電腦或使用者不符';WrongUser='電腦或使用者不符'}
   if($expected.ContainsKey($mode)){$detail=($result.Checks|Where-Object Name -eq '非必要資料分享政策').Detail;Assert ($detail.Contains($expected[$mode])) ('失敗原因確實來自預期本輪拒絕 '+$mode)}
