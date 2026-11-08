@@ -98,7 +98,7 @@ function Write-SetupMdnsAtomicJson {
  if(Test-Path -LiteralPath $Path){Assert-SetupUpdateProtectedPath -Path $Path}
  $temporary=Join-Path $parent ([guid]::NewGuid().ToString('N')+'.tmp')
  [IO.File]::WriteAllText($temporary,($Value|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($true));Assert-SetupUpdateProtectedPath -Path $temporary
- if(Test-Path -LiteralPath $Path){[IO.File]::Replace($temporary,$Path,$null)}else{[IO.File]::Move($temporary,$Path)}
+ if(Test-Path -LiteralPath $Path){[IO.File]::Replace($temporary,$Path,[System.Management.Automation.Language.NullString]::Value)}else{[IO.File]::Move($temporary,$Path)}
  Assert-SetupUpdateProtectedPath -Path $Path
 }
 function New-SetupMdnsStage {
