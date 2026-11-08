@@ -4,7 +4,7 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $fixture=Join-Path $env:TEMP ('nested_diagnostic_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture);$fixture=[IO.Path]::GetFullPath($fixture)
 $failed=Join-Path $fixture 'controlled_tests.ps1';$runner=Join-Path $fixture 'runner.ps1';$log=Join-Path $fixture 'parent.private.log'
 [IO.File]::WriteAllText($failed,@'
-Write-Host '@@ASSERT@@{"Name":"PRIVATE_DO_NOT_PUBLISH C:\Users\private-account\password-token","Passed":false}'
+Write-Host ('@@ASSERT@@'+(@{Name='PRIVATE_DO_NOT_PUBLISH C:\Users\private-account\password-token';Passed=$false}|ConvertTo-Json -Compress))
 throw 'PRIVATE_DO_NOT_PUBLISH C:\Users\private-account\password-token'
 '@,[Text.UTF8Encoding]::new($true))
 $text=@'
