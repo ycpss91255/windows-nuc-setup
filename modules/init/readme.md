@@ -1,40 +1,38 @@
-# Init：建立本機帳號與準備 SSH
+# Init：初始設定與正式帳號 SSH
 
-根目錄只需兩個入口：`init.cmd` 負責帳號初始化與 SSH；`windows.cmd` 負責登入後的 19 個 Windows 設定模組。兩者不會自動重新開機。
+一般使用步驟以根目錄 [readme.md](../../readme.md) 的快速開始 A／B 為準。初始設定從 USB 按 Shift+F10 呼叫 init.cmd；不要求切換稽核模式。已有正式帳號時，沿用目前帳號安裝 SSH，不重設密碼。
 
-## 正在初始設定的 Wi-Fi 畫面
+## 發行完整性
 
-1. 保持離線，按 `Shift+F10` 開命令視窗（部分鍵盤需 `Fn+Shift+F10`）。從 USB 的工具包執行 `init.cmd`，磁碟代號可不同。
-2. 此時命令視窗通常是 SYSTEM；Microsoft 不支援以 SYSTEM 執行 Sysprep。Init 會辨識並顯示下一步，不會在此寫密碼或建立帳號。
-3. 關閉命令視窗，在設定畫面按 `Ctrl+Shift+F3`。**這個快捷鍵會重新開機**並進入稽核模式的 Administrator 桌面。
-4. 按「取消」關閉自動出現的 Sysprep 對話框，從 USB 再執行同一個 `init.cmd`。
-5. 輸入 `AUDIT` 確認你是由上述快捷鍵進入。這個確認是必要護欄：系統狀態與 Administrator 帳號不能單獨證明目前是稽核模式。
-6. 輸入要建立的本機管理員帳號、密碼，再確認密碼。帳號最多 20 字，不可與現有帳號重複；密碼非空、最多 127 字，仍須符合這份 Windows 映像的密碼政策。
-7. Init 用 Windows 支援的 answer file 與 `Sysprep /oobe /quit /unattend` 準備下一輪初始設定。它不使用 generalize，不假造 Setup 完成旗標，也不使用已被部分版本移除的 bypass 命令。
-8. 顯示準備成功後，**手動重新啟動**。完成 Windows 仍要求的地區、隱私等設定，用剛才的本機帳號登入；不需要 Microsoft 帳號。
+OOBE 入口需要 assets/hide_oobe.ppkg、hide_oobe.xml、provenance.json。這是本專案自身產生的小型設定資產，只含 OOBE/Desktop/HideOobe=True，不包含帳密或 Microsoft 編譯工具。原始 XML、固定官方 ICD 身分與輸出 SHA256 都由 provenance 追溯；產物不是位元完全可重現，不能只以重新編譯 hash 相同作驗收。
 
-此流程不能保證所有 Windows 映像都可直接執行。若有既有 answer file、未知安裝狀態、S mode、仍開啟的 Sysprep、或 Sysprep 錯誤，Init 會停止並顯示原因；不要反覆重跑或假稱初始化完成。原生 Windows 安裝產生的 answer file 快取也可能觸發保守拒絕，並不代表一定是 OEM 衝突；請先了解來源，**不要任意刪除既有 answer file**。第一次部署尚需在實際全新 Windows 驗證。
+目前工作分支的真設定包與已審查內容基線仍未完成，因此不能視為已可發布的完整工具包。缺檔、hash、來源 XML、package ID／名稱／版本不符時，入口在帳號建立前拒絕。單元測試使用的合成檔案不能代替真包。
 
-## 正式使用者桌面：啟用 SSH
+## OOBE 安全順序
 
-1. 登入剛建立的正式本機管理員帳號，再執行 `init.cmd` 並允許目前帳號提權。這個階段沿用帳號，不會再詢問或重設密碼。
-2. Init 呼叫 SSH 模組安裝 OpenSSH Server、啟動服務與設定區域網路防火牆，並在這個正式使用者下準備 `.ssh` 與 hosts 同步框架。它不會把這些使用者設定放進稽核模式的 Administrator。
-3. 如果離線且系統沒有 OpenSSH 安裝來源，安裝可能失敗。請連網後重跑 `init.cmd`；只有服務實際啟動且模組完成才會顯示成功。成功後會顯示電腦名稱、目前帳號、可用 IPv4 及 `ssh 帳號@IP` 連線範例，不顯示密碼；沒有 IPv4 時會提示先接上區域網路。
-4. 接著執行 `windows.cmd` 完成 Windows 設定。更新要求重開時等整輪結束，再手動重開，依根目錄 README 執行重開後驗收。
+1. 確認 Windows 11 22H2 以上 x64 桌面版、SYSTEM、非 WinPE；官方唯讀 OOBEComplete API 必須成功且回報初始設定未完成。Setup 旗標與程序清單僅為診斷。
+2. 唯讀核對完整設定資產；於 ProgramData 建立受保護的 preparing 目錄，複製自身執行依賴、儲存不含密碼的初始狀態後，才原子更名為 windows_setup_init。失敗保留明確診斷目錄，不刪未知檔案。
+3. 準備同層 windows_setup_init.cmd 公開唯讀啟動器；此檔先 UAC，再讀私有 runtime。既有啟動器須通過位置、owner、ACL 與內容 hash，不覆寫來源不明的同名檔。
+4. 詢問新帳號與兩次 SecureString 密碼。拒絕既有同名帳號；不重設密碼或提升既有帳號。建立後讀回 SID、啟用狀態及 Administrators 群組 SID 成員。
+5. 先記錄 ApplyPending，再清楚提示 Windows 可能立即重新啟動；輸入 YES 才套用設定包。取消保留帳號及 AwaitingConsent；重跑不需重建帳號。SYSTEM 分支不使用 Sysprep。
+6. 正式帳號登入後，開啟 %ProgramData%\windows_setup_init.cmd，同意同帳號提權。續跑核對機器、目標 SID、ProfileList 與 Explorer 桌面，再呼叫完整 SSH 模組；不依原 USB 代號。SSH 服務 Running／Auto 及防火牆驗證都成功後才顯示完成與中文連線資訊。
 
-## 密碼暫存與失敗處理
+私有狀態與 runtime 只供 SYSTEM／管理員存取。狀態不包含明文、編碼或加密後的密碼；密碼僅在帳號建立呼叫中使用。公開啟動器只給 Users 讀取及執行，不能寫入私有資料。
 
-帳號密碼不會寫進 USB、Git 或輸出紀錄。Windows answer file 需要可還原的密碼編碼；**Base64 不是加密**。Init 只將它寫到本機 `%ProgramData%\NUC-Init`，資料夾限 SYSTEM 與管理員讀寫，並於正式帳號首次登入時清理自己的來源檔及可確認屬於本工具的 Windows 快取。
+## 失敗與恢復
 
-狀態看 `%ProgramData%\NUC-init\cleanup-result.json`。清理依本輪唯一標記辨認檔案，不刪除其他工具／OEM 的 answer file。若安裝未完成或清理失敗，暫存檔可能仍存在；必須先確認並處理，不能當作沒有密碼殘留。Init 發現先前暫存資料會拒絕覆寫，需先檢查原因；它不會自動刪除不明資料來強行重跑。
+- 缺少網路或 OpenSSH 元件來源：保持 SshPending，連網後執行同一公開入口重試。
+- 套包已成功但回應中斷：以已安裝的 package ID／版本／名稱恢復，不盲目重複套用。
+- 帳號已建立、SID 已儲存但群組失敗：只能恢復相同 SID，驗證後繼續。
+- 帳號已建立但所有權狀態寫入失敗：保留帳號，停止而不刪除／接管同名帳號。這種情況不宣稱可以自動恢復，需先查看錯誤及受保護紀錄。
+- 狀態檔 ACL／owner、machine ID、SID 或設定包改變：拒絕續跑，不清除紀錄硬闖。
 
-本工具無法保證安全清除磁碟上的舊資料區塊；檔案刪除也不是磁碟抹除。Windows 自身是否已處理其他快取，以其安裝狀態為準。
+既有非 SYSTEM 稽核維護程式保留相容用途，不作一般使用者安裝流程。若曾使用舊版 answer file，cleanup_oobe.ps1 仍依唯一標記清理自己的暫存；不刪除其他 OEM answer file。
 
-## 官方依據
+## 維護與內容驗證
 
-- [以 Ctrl+Shift+F3 進入稽核模式](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/boot-windows-to-audit-mode-or-oobe?view=windows-11)
-- [Sysprep 概觀與限制](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/sysprep--system-preparation--overview?view=windows-11)
-- [Sysprep 命令列選項](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/sysprep-command-line-options?view=windows-11)
-- [自動化 OOBE](https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/automate-oobe)
-- [LocalAccount 群組名稱的跨語言行為](https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-shell-setup-useraccounts-localaccounts-localaccount-group)
-- [Windows Setup 狀態](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/windows-setup-states?view=windows-11)
+維護者可以檢閱 script/package/build_oobe_asset.ps1；它只接受固定官方 ICD 的簽章、版本與 SHA256，建立自己的 XML／設定包／provenance，不下載、安裝或套用設定。一般使用者不需要 ADK／WCD。
+
+CI 的 oobe_payload_inspection 獨立使用 script/test/verify_oobe_payload.ps1，以原生 WIM 唯讀列檔和抽取七個允許路徑；所有 XML 禁止 DTD／外部實體，並限制大小。沒有已由主代理及獨立審查確認的 payload_baseline.json 時會失敗，保留七天內容證據供審查，不能視為通過。這是設定資產檢查，不是 Windows 安裝 E2E。
+
+官方依據：[OOBEComplete](https://learn.microsoft.com/en-us/windows/win32/api/oobenotification/nf-oobenotification-oobecomplete)、[WCD OOBE 設定](https://learn.microsoft.com/en-us/windows/configuration/wcd/wcd-oobe)、[設定包命令列建置](https://learn.microsoft.com/en-us/windows/configuration/provisioning-packages/provisioning-command-line)。
