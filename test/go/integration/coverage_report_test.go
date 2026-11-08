@@ -36,13 +36,13 @@ func TestGoCoveragePublishedEvidence(t *testing.T) {
 	data["go_coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d" aria-label="go coverage branch: 80.0%%"><title>go coverage branch: 80.0%%</title><defs><linearGradient id="s" x2="0" y2="100%%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="r"><rect width="%d" height="20" rx="3" fill="#fff"/></clipPath></defs><g clip-path="url(#r)"><rect width="%d" height="20" fill="#555"/><rect x="%d" width="%d" height="20" fill="#97ca00"/><rect width="%d" height="20" fill="url(#s)"/></g><g fill="#fff" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11" text-anchor="middle"><text x="%d" y="15" fill="#010101" fill-opacity=".3">%s</text><text x="%d" y="14">%s</text><text x="%d" y="15" fill="#010101" fill-opacity=".3">%s</text><text x="%d" y="14">%s</text></g></svg>`, left+right, left+right, left, left, right, left+right, left/2, label, left/2, label, left+right/2, value, left+right/2, value))
 	goBlock := `<h2>Go 程式敘述覆蓋率</h2><p>80.0% · 8/10 statements；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。</p><p>PowerShell 覆蓋率：尚未量測</p><a href="go_coverage.json">Go JSON</a><a href="go_coverage.out">Go profile</a>`
 	if r.SchemaVersion == 2 {
- goBlock = `<details><summary>分項量測明細</summary><p>Go 程式敘述覆蓋率：80.0% · 8/10 statements；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式，不等於整體覆蓋率。</p><a href="go_coverage.json">Go JSON</a><a href="go_coverage.out">Go profile</a></details>`
-}
+		goBlock = `<details><summary>分項量測明細</summary><p>Go 程式敘述覆蓋率：80.0% · 8/10 statements；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式，不等於整體覆蓋率。</p><a href="go_coverage.json">Go JSON</a><a href="go_coverage.out">Go profile</a></details>`
+	}
 	data["index.html"] = append(data["index.html"], []byte(goBlock)...)
 	data["summary.md"] = append(data["summary.md"], []byte("\nGo 程式敘述覆蓋率：80.0%；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。\nGo statements: 8/10；PowerShell 覆蓋率未量測。")...)
 	if r.SchemaVersion == 2 {
- data["summary.md"] = append(data["summary.md"], []byte("\nGo 程式敘述覆蓋率（分項）：80.0%；8/10 statements；全部自有 Go 工具含 CLI，不含 PowerShell 或第三方程式，不等於整體覆蓋率。")...)
-}
+		data["summary.md"] = append(data["summary.md"], []byte("\nGo 程式敘述覆蓋率（分項）：80.0%；8/10 statements；全部自有 Go 工具含 CLI，不含 PowerShell 或第三方程式，不等於整體覆蓋率。")...)
+	}
 	if e = a.ValidateGoCoverageReport(reader(data), owned, r.Commit, r.RunUrl, true); e != nil {
 		t.Fatal(e)
 	}

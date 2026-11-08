@@ -186,7 +186,12 @@ func portal(t *testing.T, m map[string][]byte) map[string][]byte {
 		t.Fatal(e)
 	}
 	identity := "提交 <code>" + r.Commit[:7] + "</code> 檢查時間：" + stamp.UTC().Format("2006-01-02 15:04:05") + " UTC"
-	p["index.html"] = []byte(`<h1>` + title + `</h1><a href="main/index.html">結果</a><a href="https://github.com/example/windows_setup/blob/main/readme.md">說明</a>` + identity)
+	overview := "<h2>整體覆蓋率</h2><p>尚未提供完整量測。</p>"
+	if r.RepoCoverage != nil && r.RepoCoverage.Result.Complete {
+		c := r.RepoCoverage.Result
+		overview = fmt.Sprintf("<h2>整體覆蓋率</h2><p>%.1f%%（%d/%d 可執行行）</p>", *c.Percent, c.Covered, c.Executable)
+	}
+	p["index.html"] = []byte(overview + `<h1>` + title + `</h1><a href="main/index.html">結果</a><a href="https://github.com/example/windows_setup/blob/main/readme.md">說明</a>` + identity)
 	p["versions.json"] = []byte(`[]`)
 	return p
 }

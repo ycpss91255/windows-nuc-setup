@@ -29,8 +29,9 @@ func ValidateGoCoverageReport(read Reader, files []string, sha, run string, requ
 		return e
 	}
 	var summary struct {
-		RefType    string
-		GoCoverage json.RawMessage
+		SchemaVersion int
+		RefType       string
+		GoCoverage    json.RawMessage
 	}
 	if e = decode(b, &summary); e != nil {
 		return e
@@ -122,12 +123,18 @@ func ValidateGoCoverageReport(read Reader, files []string, sha, run string, requ
 	if e != nil {
 		return e
 	}
-	page, e := ParsePage(html)
+	page, e := parsePage(html, summary.SchemaVersion == 2)
 	if e != nil {
 		return e
 	}
 	fraction := fmt.Sprintf("%d/%d", c.Covered, c.TotalStatements)
-	for _, text := range []string{"Go 程式敘述覆蓋率", value, fraction + " statements", "全部自有 Go 工具（含 CLI）", "不含 PowerShell 或第三方程式", "PowerShell 覆蓋率", "尚未量測"} {
+	htmlScope := []string{"Go 程式敘述覆蓋率", value, fraction + " statements", "全部自有 Go 工具（含 CLI）", "不含 PowerShell 或第三方程式"}
+	if summary.SchemaVersion == 2 {
+		htmlScope = append(htmlScope, "分項量測明細", "不等於整體覆蓋率")
+	} else {
+		htmlScope = append(htmlScope, "PowerShell 覆蓋率", "尚未量測")
+	}
+	for _, text := range htmlScope {
 		if !strings.Contains(page.Visible, text) {
 			return fmt.Errorf("visible HTML lacks matching Go coverage value or scope: %s", text)
 		}
@@ -139,7 +146,11 @@ func ValidateGoCoverageReport(read Reader, files []string, sha, run string, requ
 	if e != nil {
 		return e
 	}
-	for _, text := range []string{"Go 程式敘述覆蓋率：" + value, "Go statements: " + fraction, "全部自有 Go 工具（含 CLI）", "不含 PowerShell 或第三方程式", "PowerShell 覆蓋率未量測"} {
+	mdScope := []string{"Go 程式敘述覆蓋率：" + value, "Go statements: " + fraction, "全部自有 Go 工具（含 CLI）", "不含 PowerShell 或第三方程式", "PowerShell 覆蓋率未量測"}
+	if summary.SchemaVersion == 2 {
+		mdScope = []string{"Go 程式敘述覆蓋率（分項）：" + value, fraction + " statements", "全部自有 Go 工具含 CLI", "不含 PowerShell 或第三方程式", "不等於整體覆蓋率"}
+	}
+	for _, text := range mdScope {
 		if !strings.Contains(string(md), text) {
 			return fmt.Errorf("Markdown lacks matching Go coverage value or scope: %s", text)
 		}
