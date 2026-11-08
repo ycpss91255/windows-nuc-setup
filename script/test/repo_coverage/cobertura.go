@@ -39,6 +39,11 @@ func withinRoot(root, name string) (string, error) {
 }
 
 func sourcePath(root, name string, sources []string) (string, error) {
+	var rootErr error
+	root, rootErr = filepath.Abs(root)
+	if rootErr != nil {
+		return "", rootErr
+	}
 	name = strings.ReplaceAll(strings.TrimSpace(name), `\`, "/")
 	if filepath.IsAbs(filepath.FromSlash(name)) {
 		return withinRoot(root, name)
