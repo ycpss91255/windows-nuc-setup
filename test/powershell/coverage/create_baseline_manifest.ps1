@@ -3,10 +3,11 @@ param([Parameter(Mandatory=$true)][string]$SourceRoot,[Parameter(Mandatory=$true
 $ErrorActionPreference='Stop'
 $source=(Resolve-Path -LiteralPath $SourceRoot).Path
 if(Test-Path -LiteralPath $OutputPath){throw '基線清單輸出已存在。'}
-# Reviewed standalone suites only. Never include the collector's recursive PoC.
-$unit=@('hardware_confirmation','hardware','init','input_method','report')
-$integration=@('architecture','container_tools','desktop_safety','driver_prompt','go_coverage','hardware_confirmation','hardware','hosts_sync','init','layout','module_identity','naming','portal','runtime_failures','source_release','ssh_client','ssh_firewall','usb_portability')
-$tests=@($unit|ForEach-Object {'test/powershell/unit/'+$_+'_tests.ps1'})+@($integration|ForEach-Object {'test/powershell/integration/'+$_+'_tests.ps1'})
+# Same safe suite directories as run_ci. Client/native smoke suites remain separate.
+# This command only writes a manifest: it never starts coverage, including when
+# the collector's bounded synthetic tests call it from a coverage worker.
+$tests=@(Get-ChildItem (Join-Path $source 'test/powershell/unit'),(Join-Path $source 'test/powershell/integration') -File -Filter '*_tests.ps1'|ForEach-Object {$_.FullName.Substring($source.Length+1).Replace('\','/')}|Sort-Object)
+if(-not $tests.Count){throw '安全測試清單為空。'}
 foreach($test in $tests){if(-not(Test-Path -LiteralPath (Join-Path $source $test) -PathType Leaf)){throw ('安全測試遺失：'+$test)}}
 $tracked=@(& git -C $source ls-files '*.ps1')
 if($LASTEXITCODE -ne 0){throw '無法取得版本控制來源清單。'}
