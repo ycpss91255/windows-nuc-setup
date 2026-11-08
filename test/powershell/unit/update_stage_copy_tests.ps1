@@ -6,7 +6,7 @@ function Reject([scriptblock]$Action,[string]$Name,[string]$Expected){$failure=$
 . (Join-Path $root 'modules/updates/update_stage_library.ps1')
 Assert ([bool](Get-Command New-SetupUpdateStage -ErrorAction SilentlyContinue)) 'stage複製與驗證有具名入口'
 $d=Join-Path ([IO.Path]::GetTempPath()) ('stage_copy_'+[guid]::NewGuid().ToString('N'));$source=Join-Path $d 'source';$common=Join-Path $d 'programdata';[void][IO.Directory]::CreateDirectory((Join-Path $source 'native'));[void][IO.Directory]::CreateDirectory($common)
-foreach($name in @('install_windows_updates.ps1','update_progress_library.ps1','update_worker_library.ps1','update_stage_library.ps1','native/update_callback.cs')){[IO.File]::WriteAllText((Join-Path $source $name),'fixture '+$name)}
+foreach($name in @('install_windows_updates.ps1','update_entry_library.ps1','update_progress_library.ps1','update_worker_library.ps1','update_stage_library.ps1','native/update_callback.cs')){[IO.File]::WriteAllText((Join-Path $source $name),'fixture '+$name)}
 # Only ACL/native-create boundaries are mocked below. Actual paths, file copy, SHA256 and file locking remain real TEMP operations.
 function Assert-SetupUpdateAncestors {param($CommonDataRoot) if($CommonDataRoot -ne $common){throw 'test guard'};Assert-SetupUpdatePlainPath $CommonDataRoot}
 function New-SetupUpdateProtectedDirectory {param($Path) if(-not $Path.StartsWith($common+'\')){throw 'test guard'};Assert-SetupUpdatePlainPath $Path;[void][IO.Directory]::CreateDirectory($Path)}
@@ -15,7 +15,7 @@ $call=@{SourceRoot=$source;CommonDataRoot=$common;UserSid='S-1-5-21-1-2-3-1001';
 $stage=New-SetupUpdateStage @call
 try{
  Assert ($stage.Path -eq (Join-Path $common 'windows_setup_update')) 'SYSTEM來源直接使用獨立專用root而非舊父目錄'
- Assert ($stage.Context.Files.Count -eq 5 -and $stage.Context.RunId) '五個runtime依賴全部記錄SHA與本輪ID'
+ Assert ($stage.Context.Files.Count -eq 6 -and $stage.Context.RunId) '六個runtime依賴全部記錄SHA與本輪ID'
  Assert (@($stage.Context.Files|Where-Object {(Get-FileHash (Join-Path $stage.Path $_.Name)).Hash -ine $_.SHA256}).Count -eq 0) '真複製後hash逐項核對'
  Reject {New-SetupUpdateStage @call} '並行stage寫入遭獨占鎖拒絕' '已被另一個'
  $context=Read-SetupUpdateContext -StageRoot $stage.Path

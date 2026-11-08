@@ -70,6 +70,7 @@ function New-SetupUpdateProtectedDirectory {
 function Get-SetupUpdateStageFiles {
  return @(
   @{Source='install_windows_updates.ps1';Name='Update-Worker.ps1'},
+  @{Source='update_entry_library.ps1';Name='update_entry_library.ps1'},
   @{Source='update_progress_library.ps1';Name='update_progress_library.ps1'},
   @{Source='update_worker_library.ps1';Name='update_worker_library.ps1'},
   @{Source='update_stage_library.ps1';Name='update_stage_library.ps1'},
