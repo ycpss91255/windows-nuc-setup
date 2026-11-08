@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"path/filepath"
 	rc "windows_setup/script/test/repo_coverage"
@@ -21,11 +22,16 @@ func run(args []string, out io.Writer) error {
 	sha := flags.String("expected-sha", "", "預期提交")
 	runURL := flags.String("expected-run-url", "", "預期 Actions 執行 URL")
 	source := flags.String("source-root", "", "選用：核對實際來源清單與雜湊")
+	complete := flags.Bool("require-complete", false, "要求全部來源已量測")
+	minimum := flags.Int("minimum-percent", 0, "完整覆蓋率最低整數百分比")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
 	if *dir == "" || *sha == "" || flags.NArg() != 0 {
 		return fmt.Errorf("必須指定證據目錄與提交，不能帶額外位置參數")
+	}
+	if *minimum < 0 || *minimum > 100 {
+		return fmt.Errorf("覆蓋率門檻必須介於 0 與 100")
 	}
 	files := make([][]byte, 3)
 	for index, name := range []string{"repo_coverage.json", "coverage_inventory.json", "coverage.xml"} {
@@ -43,6 +49,14 @@ func run(args []string, out io.Writer) error {
 		if err := rc.ValidateInventory(*source, files[1]); err != nil {
 			return err
 		}
+	}
+	if (*complete || *minimum > 0) && (!evidence.Result.Complete || evidence.Result.Executable == 0) {
+		return fmt.Errorf("整體覆蓋率尚未完整量測")
+	}
+	covered := new(big.Int).Mul(big.NewInt(int64(evidence.Result.Covered)), big.NewInt(100))
+	threshold := new(big.Int).Mul(big.NewInt(int64(evidence.Result.Executable)), big.NewInt(int64(*minimum)))
+	if covered.Cmp(threshold) < 0 {
+		return fmt.Errorf("整體覆蓋率低於 %d%%", *minimum)
 	}
 	fmt.Fprintf(out, "整體覆蓋率證據驗證通過：%s，完整=%t，命中=%d，可執行=%d\n", evidence.Commit, evidence.Result.Complete, evidence.Result.Covered, evidence.Result.Executable)
 	return nil
