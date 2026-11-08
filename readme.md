@@ -730,11 +730,32 @@ git push origin v0.2.0
 
 從 GitHub Release 使用內建 **Source code (zip)** 或 **Source code (tar.gz)** 下載來源，不額外上傳重複來源 ZIP／SHA256。內建來源封存檔的根目錄名稱由 GitHub 決定。若使用快速開始的 USB 自動尋找指令，請改名為 `windows_setup` 並放在 USB 根目錄；腳本本身可放任意路徑，手動呼叫該位置的 `init.cmd` 即可。
 
+需要特定型號驅動時，另下載同版 Release 的 `driver_*.zip` 資產並解壓為獨立資料夾；執行 `windows.cmd` 時選取該資料夾。一般電腦可略過，不需下載驅動。資產檔名、大小、SHA256、機型設定檔與包內 manifest 雜湊，列在該版來源的 [驅動資產清單](script/release/driver_release_assets.json)；只選擇自己機型對應的包，不把其他型號包套用到本機。
+
 - 來源不包含 `.git`、驅動 ZIP、Autologon EXE、實機 Reports 或密碼暫存；來源檢查會拒絕錯誤追蹤的敏感檔案。
 - 依 [來源包準備說明](#從原始碼準備完整工具包) 補齊所選功能需要的二進位，不能把來源 ZIP 當成完整離線安裝包。
 - CI 報告與 Actions 日誌短期保留 7 天，不提交進 Git；實機續跑紀錄仍留在原機。
-- Release 只發布來源與版本說明，不會連線部署到任何電腦。OOBE、驅動、自動登入及硬體功能仍須實機驗證。
+- Release 提供來源、品質證據與該版明確宣告的可選驅動資產，不會連線部署到任何電腦。
 - v0.1.x 已發布的舊來源 ZIP／SHA256 保持原樣，新流程不回寫舊版本。
+
+### 維護者準備獨立驅動資產
+
+一般使用者只需下載與解壓，不需執行本節命令。維護者先完成獨立驅動包的離線完整性驗證，再於來源目錄載入打包函式，將已驗證的完整包封存到來源樹外的新檔案：
+
+```powershell
+. .\script\release\driver_release_library.ps1
+New-DeterministicDriverArchive -PackageDirectory '已驗證的獨立包資料夾' -OutputPath '來源樹外的資料夾\driver_機型.zip'
+```
+
+封存使用固定 UTC 時間、相對路徑與排序，且不重壓包內現成 ZIP。將實際檔名、位元數、SHA256、ProfileId、manifest SHA256 加入上述資產清單的當版紀錄，經 PR、CI 與獨立審查後再合併、建立該版標籤。歷史版本紀錄保留；未宣告驅動資產的其他版本不受影響。
+
+推送標籤後，立即從該標籤的來源目錄建立一次性草稿：
+
+```powershell
+.\script\release\stage_driver_release.ps1 -Version vX.Y.Z -Repository ycpss91255/windows_setup -AssetDirectory '已封存的資產資料夾'
+```
+
+此命令只建立尚未公開的暫時草稿，先核對標籤位於 main、遠端提交一致以及本地資產雜湊。標籤 CI 全綠後，CD 才會核對草稿身分、既有驅動與全部品質附件，最後一次發布為不可變 Release。已有其他草稿、上傳不完整或雜湊不符會停止，保留現場供維護者檢查，不覆寫或刪除既有版本。若建立草稿太晚造成 CD 失敗，先核對草稿完整後重跑該次失敗的發布工作；勿重新移動標籤或跳過品質門檻。
 
 ### 本機檢查發布內容
 
