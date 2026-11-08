@@ -58,13 +58,11 @@ $widgets=Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' -ErrorAction S
 Add-Check '天氣/小工具關閉原則' ($null -ne $widgets.AllowNewsAndInterests -and $widgets.AllowNewsAndInterests -eq 0) ('AllowNewsAndInterests：'+$widgets.AllowNewsAndInterests)
 $advanced=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\explorer\Advanced' -ErrorAction SilentlyContinue
 Add-Check '工作檢視按鈕隱藏' ($null -ne $advanced.ShowTaskViewButton -and $advanced.ShowTaskViewButton -eq 0) ('ShowTaskViewButton：'+$advanced.ShowTaskViewButton)
-$layout=Join-Path $env:ProgramData 'NUC8-Setup\TaskbarLayout.xml'
-$validLayout=$false
-if(Test-Path $layout){[xml]$xml=Get-Content $layout -Raw;$pins=@($xml.SelectNodes('//*[local-name()="TaskbarPinList"]/*'));$validLayout=$pins.Count -eq 1 -and $pins[0].DesktopApplicationID -eq 'MSEdge'}
-Add-Check 'Edge-only 釘選配置' $validLayout '檢查配置只有 MSEdge；實際圖示需在登入後查看'
-$runOnce=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -ErrorAction SilentlyContinue
-$pendingPins=[bool]$runOnce.NUC8FinalizeTaskbar
-Add-Check '釘選登入後套用' (-not $pendingPins) $(if($pendingPins){'仍待下次登入套用及解除暫時原則'}else{'沒有待執行的釘選收尾工作；請目視確認工作列'})
+try{
+ $fresh=Invoke-SetupGuiFreshVerification -PackageRoot $script:NucPackageRoot -Role Taskbar
+ Add-Check 'Edge-only 釘選配置' ([bool]$fresh.Configured -and [bool]$fresh.BindingMatches) '即時檢查受保護配置恰為 MSEdge Replace，政策及 RunOnce 對應固定 GUID 工作；實際圖示需在登入後查看'
+ Add-Check '釘選登入後套用' ([bool]$fresh.Success -and -not $fresh.RequiresNextSignIn) ('Status='+$fresh.Status+'；以目前登錄與受保護 XML 讀回確認')
+}catch{Add-Check 'Edge-only 釘選配置' $false $_.Exception.Message;Add-Check '釘選登入後套用' $false $_.Exception.Message}
 try{
  $fresh=Invoke-SetupGuiFreshVerification -PackageRoot $script:NucPackageRoot -Role Display
  Add-Check '實際解析度與縮放' ([bool]$fresh.Success) ('本輪即時結果：'+($fresh|ConvertTo-Json -Compress -Depth 5))
@@ -108,7 +106,7 @@ $amdDecision=Get-SetupModuleDecision -Module 'apply_amd_privacy_settings.ps1' -H
 if($amdDecision.Applicable){
 try{ & (Resolve-NucPath 'apply_amd_privacy_settings.ps1') -VerifyOnly|Out-Null;Add-Check 'AMD Software 位置權限' $true '已拒絕' }catch{Add-Check 'AMD Software 位置權限' $false $_.Exception.Message}
 }else{$checks.Add((New-SetupSkippedCheck -Name 'AMD Software 位置權限' -Reason $amdDecision.Reason));Write-Host ('[略過] '+$amdDecision.Reason)}
-try{ $startCheck=& (Resolve-NucPath 'apply_start_menu_settings.ps1') -VerifyOnly;$startPassed=($startCheck.Success -eq $true -and $startCheck.Status -eq 'Confirmed' -and $null -ne $startCheck.PinCount -and $startCheck.PinCount -eq 0);Add-Check '開始選單釘選清空' $startPassed ('Status='+$startCheck.Status+'; PinCount='+$startCheck.PinCount) }catch{Add-Check '開始選單釘選清空' $false $_.Exception.Message}
+try{ $startCheck=Invoke-SetupGuiFreshVerification -PackageRoot $script:NucPackageRoot -Role Start;$startPassed=($startCheck.Success -eq $true -and $startCheck.Status -eq 'Confirmed' -and $null -ne $startCheck.PinCount -and $startCheck.PinCount -eq 0);Add-Check '開始選單釘選清空' $startPassed ('Status='+$startCheck.Status+'; PinCount='+$startCheck.PinCount) }catch{Add-Check '開始選單釘選清空' $false $_.Exception.Message}
 try{ & (Resolve-NucPath 'apply_input_method_settings.ps1') -VerifyOnly|Out-Null;Add-Check '英文美式鍵盤存在且為預設' $true 'en-US、0409:00000409 與預設輸入法均已確認' }catch{Add-Check '英文美式鍵盤存在且為預設' $false $_.Exception.Message}
 try{ & (Resolve-NucPath 'apply_terminal_hotkey.ps1') -VerifyOnly|Out-Null;Add-Check 'Terminal 全域快捷鍵' $true 'Ctrl+Alt+T 已註冊，監聽程序執行中' }catch{Add-Check 'Terminal 全域快捷鍵' $false $_.Exception.Message}
 $explorer=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\explorer\Advanced'
