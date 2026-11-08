@@ -60,6 +60,8 @@ function Test-EngineVersion([string]$Engine,[string]$Version){
 $hashes=@($sources|ForEach-Object {[pscustomobject]@{File=$_.Substring($source.Length+1).Replace('\','/');SHA256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
 $output=[IO.Path]::GetFullPath($OutputDirectory)
 if($WorkerIndex -ge 0){
+ [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+ $global:OutputEncoding=[Console]::OutputEncoding
  if($WorkerIndex -ge $tests.Count -or -not(Test-Path -LiteralPath $PesterModule -PathType Leaf)){throw '子程序參數不完整。'}
  $engine=Get-TestEngine $WorkerIndex
  if(-not(Test-EngineVersion $engine $PSVersionTable.PSVersion.ToString())){throw '子程序實際引擎不符合指定版本；pwsh 必須為 7.4 以上的 7.x。'}
