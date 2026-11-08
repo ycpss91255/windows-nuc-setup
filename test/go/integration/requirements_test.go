@@ -17,7 +17,7 @@ var names = []string{"unit", "integration", "system", "coverage"}
 
 func readme() string {
 	s := ""
-	for _, n := range names {
+	for _, n := range []string{"coverage"} {
 		s += fmt.Sprintf("![%s](%smain/%s.svg?style=fixture)\n", n, base, n)
 	}
 	return s
@@ -341,4 +341,14 @@ func TestRequirementsParity(t *testing.T) {
 			t.Fatalf("retry contract: calls=%d sleeps=%d err=%v", calls, sleeps, e)
 		}
 	})
+}
+
+func TestActualReadmeCoverageBadgeLinks(t *testing.T) {
+ raw,e:=os.ReadFile(filepath.Join("..","..","..","readme.md"));if e!=nil{t.Fatal(e)}
+ doc:=strings.ReplaceAll(string(raw),"https://ycpss91255.github.io/windows_setup/",base)
+ original:=files(t,os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"));p:=portal(t,synthetic(t,original,true,"Branch"))
+ r:=decode(t,original); checkPortal:=func(p map[string][]byte,doc string)(a.Report,error){return a.ValidatePortal(reader(p),doc,r.Commit,r.RunUrl,base)}
+ if _,e:=checkPortal(p,doc);e!=nil{t.Fatalf("actual README coverage links rejected: %v",e)}
+ if _,e:=checkPortal(p,strings.ReplaceAll(doc,"main/coverage.svg","main/missing.svg"));e==nil{t.Fatal("missing actual PS coverage URL accepted")}
+ if _,e:=checkPortal(p,doc+"\n![duplicate]("+base+"main/coverage.svg)");e==nil{t.Fatal("duplicate actual coverage URL accepted")}
 }
