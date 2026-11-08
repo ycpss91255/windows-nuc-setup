@@ -30,5 +30,9 @@ Assert ($state.SourceRoot -eq 'Z:\removed_usb') 'continuation does not read orig
 $global:initFirewallPass=$false
 $rejected=$false;try{Invoke-InitSshContinuation $state 'unused' $context $ssh}catch{$rejected=$true}
 Assert ($rejected -and $state.Phase -eq 'SshPending') 'Running Auto with failed firewall cannot report Complete'
+Assert ([bool](Get-Command Get-InitConnectionInfo -ErrorAction SilentlyContinue)) 'SSH completion supplies dynamic Chinese connection information'
+function Get-NetIPAddress {param($AddressFamily,$ErrorAction) @([pscustomobject]@{IPAddress='192.0.2.20';AddressState='Preferred'},[pscustomobject]@{IPAddress='127.0.0.1';AddressState='Preferred'})}
+$info=@(Get-InitConnectionInfo -UserName 'fixture-user' -ComputerName 'TEST-PC') -join "`n"
+Assert ($info.Contains('TEST-PC') -and $info.Contains('fixture-user') -and $info.Contains('ssh "fixture-user@192.0.2.20"') -and -not $info.Contains('127.0.0.1')) 'connection display includes account host and usable IPv4 command'
 Remove-Variable initSshCalls,initSshFail,initFirewallPass -Scope Global
 Write-Host ('ALL PASS: '+$script:count+' safe continuation assertions')
