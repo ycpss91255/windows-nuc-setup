@@ -1,7 +1,9 @@
 ﻿#Requires -Version 5.1
 $ErrorActionPreference='Stop'
 # Preload before shadows: module autoload must never replace isolated task boundaries.
+$script:moduleInitiallyLoaded=[bool](Get-Module ScheduledTasks)
 Import-Module ScheduledTasks -ErrorAction Stop
+$script:nativeForbiddenCalls=0
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 . (Join-Path $root 'modules/ssh/mdns_publisher_library.ps1')
 function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Value}|ConvertTo-Json -Compress));if(-not $Value){throw $Name}}
@@ -18,6 +20,7 @@ function Assert-SetupUpdateProtectedPath {param($Path,[switch]$Directory) if(-no
 function Get-SetupMdnsPublisherFacts {return $script:facts}
 function Get-ScheduledTask {param($TaskName,$TaskPath,$ErrorAction) if($TaskName -ne 'WindowsSetup-mDNS-Publisher' -or $TaskPath -cne '\'){throw 'unapproved task query'};if($script:task){return $script:task}}
 function Register-ScheduledTask {param($TaskName,$TaskPath,$Description,$Action,$Principal,$Settings,$Trigger,[switch]$Force,$ErrorAction) if($script:task -and -not $Force){throw 'cannot overwrite existing task'};$script:registers++;$script:task=[pscustomobject]@{TaskName=$TaskName;TaskPath=$TaskPath;Description=$Description;Actions=@($Action);Principal=$Principal;Settings=$Settings;Triggers=@($Trigger);State='Ready'}}
+function Unregister-ScheduledTask {$script:nativeForbiddenCalls++;throw 'Native task deletion forbidden'} 
 function Stop-ScheduledTask {param($TaskName,$TaskPath,$ErrorAction) $script:stops++;$script:task.State='Ready'}
 function Start-ScheduledTask {
  param($TaskName,$TaskPath,$ErrorAction)
@@ -28,7 +31,7 @@ function Start-ScheduledTask {
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) if($ClassName -cne 'Win32_Process' -or $Filter -cne 'ProcessId=731'){throw 'unexpected native process query'};if($script:processPresent){$ctx=Read-SetupMdnsCurrent;$paths=Get-SetupMdnsPaths $ctx.RunId;[pscustomobject]@{SessionId=0;ExecutablePath=$paths.PowerShell;CommandLine=('"'+$paths.PowerShell+'" '+(Get-SetupMdnsTaskArguments $ctx.RunId));CreationDate=[datetime]::UtcNow.AddMinutes(-1)}}}
 function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) if($MethodName -cne 'GetOwnerSid'){throw 'unexpected native owner query'};[pscustomobject]@{ReturnValue=0;Sid=$script:ownerSid}}
 function Start-Sleep {param($Seconds,$Milliseconds) throw 'positive fixture must be immediately ready, not timeout'}
-foreach($name in @('Register-ScheduledTask','Start-ScheduledTask','Stop-ScheduledTask','Get-ScheduledTask')){if((Get-Command $name).CommandType -ne 'Function' -or (Get-Command $name).ModuleName){throw 'Unsafe native task boundary escaped fixture: '+$name}}
+foreach($name in @('Register-ScheduledTask','Start-ScheduledTask','Stop-ScheduledTask','Get-ScheduledTask','Unregister-ScheduledTask')){if((Get-Command $name).CommandType -ne 'Function' -or (Get-Command $name).ModuleName){throw 'Unsafe native task boundary escaped fixture: '+$name}}
 # The real Task constructors only allocate CIM descriptions; registration/start/stop are isolated above.
 $r=Invoke-SetupMdnsPublisher -SourceRoot $root
 Assert ($r.Success -and $r.Status -ceq 'Registered' -and -not $r.RemoteVerified -and $script:registers -eq 1 -and $script:starts -eq 1) '真控制器建立保護snapshot及原生SYSTEM startup描述後等待新心跳'
@@ -62,3 +65,4 @@ foreach($name in Get-SetupMdnsSourceNames){$target=Join-Path $package $name;[voi
 [IO.File]::AppendAllText((Join-Path $package 'modules/ssh/native/mdns_publisher.cs'),'//new source revision')
 $r=Invoke-SetupMdnsPublisher -SourceRoot $package
 Assert ($r.Success -and $script:stops -eq 1 -and $script:registers -eq 2 -and $script:starts -eq 2 -and $r.RunId -cne $ctx.RunId) '程式更新只停止已確認owner後換新snapshot與新註冊心跳'
+Assert ($script:nativeForbiddenCalls -eq 0) 'startup隔離OS mutation forbidden spy為0，模組預載後所有Task邊界仍fixture'
