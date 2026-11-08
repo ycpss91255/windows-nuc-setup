@@ -44,7 +44,7 @@ New-ItemProperty $policy -Name StartLayoutFile -Value $layoutPath -PropertyType 
 New-ItemProperty $policy -Name LockedStartLayout -Value 1 -PropertyType DWord -Force|Out-Null
 
  }
- $searchPolicy='HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search';$advanced='HKCU:\Software\Microsoft\Windows\CurrentVersion\explorer\Advanced';$widgets='HKLM:\SOFTWARE\Policies\Microsoft\Windows\Dsh'
+ $searchPolicy='HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search';$advanced='HKCU:\Software\Microsoft\Windows\CurrentVersion\explorer\Advanced';$widgets='HKLM:\SOFTWARE\Policies\Microsoft\Dsh'
  $search=(Get-ItemProperty $searchPolicy -ErrorAction SilentlyContinue).SearchOnTaskbarMode
  $advancedValues=Get-ItemProperty $advanced -ErrorAction SilentlyContinue
  $widgetsValue=(Get-ItemProperty $widgets -ErrorAction SilentlyContinue).AllowNewsAndInterests
