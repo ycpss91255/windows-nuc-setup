@@ -5,6 +5,7 @@ function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name
 $library=Join-Path $root 'modules/taskbar/taskbar_settings_library.ps1'
 Assert (Test-Path -LiteralPath $library) 'Taskbar has a named original-source leaf with independent readonly verification'
 . $library
+function Invoke-SetupTaskbarNativeAutoHide {param([string]$ModuleRoot,[bool]$Apply) return [uint32]1}
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('taskbar_leaf_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
 $script:createdKeys=@();$script:missingKeys=$true;$script:writes=@();$script:values=@{SearchOnTaskbarMode=0;TaskbarDa=0;ShowTaskViewButton=0;AllowNewsAndInterests=0};$script:pending=$true;$script:backups=0;$script:removed=@();$script:delays=@()
 function Test-Path {param($Path,$LiteralPath,$PathType) if($Path -like 'HK*'){return (-not $script:missingKeys)};Microsoft.PowerShell.Management\Test-Path @PSBoundParameters}

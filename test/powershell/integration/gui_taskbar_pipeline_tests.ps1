@@ -2,9 +2,10 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
+Add-Type 'namespace WindowsSetup { public static class Taskbar { public static uint State=1; public static int Writes=0; public static uint AutoHide(bool apply, object api) { if(apply) { Writes++; State|=1; } return State; } } }'
 . (Join-Path $root 'core/gui_stage_library.ps1')
 $files=@(Get-SetupGuiStageFiles Taskbar);$finalFiles=@(Get-SetupGuiStageFiles TaskbarFinalize)
-Assert ($files.Count -eq 4 -and ($files -join '|') -ceq ($finalFiles -join '|') -and $files -contains 'modules/taskbar/taskbar_settings_library.ps1') 'Taskbar and finite Finalize pin only fixed controller worker and original leaf'
+Assert ($files.Count -eq 5 -and ($files -join '|') -ceq ($finalFiles -join '|') -and $files -contains 'modules/taskbar/taskbar_settings_library.ps1') 'Taskbar and finite Finalize pin only fixed controller worker and original leaf'
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('gui_taskbar_pipeline_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
 $script:sid='S-1-5-21-1-2-3-1001';$script:scopeSid=$script:sid;$script:session=0;$script:desktopSession=4;$script:tasks=@{};$script:values=@{};$script:writes=0;$script:delays=@();$script:nativeInfo=0;$script:registered=@();$script:backups=0
 $ps=Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'WindowsPowerShell/v1.0/powershell.exe'
@@ -73,3 +74,6 @@ foreach($case in @(@{Status='PendingSignIn';Success=$true},@{Status='Confirmed';
  Assert ($failure.Contains('工作列結果')) ('bound Taskbar status cannot contradict mode or success: '+$case.Status+'/'+$case.Success)
 }
 [IO.File]::WriteAllText($resultPath,$original)
+[WindowsSetup.Taskbar]::State=0;$beforeNative=[WindowsSetup.Taskbar]::Writes
+$failure='';try{Invoke-SetupGuiFreshVerification -PackageRoot $root -Role Taskbar|Out-Null}catch{$failure=$_.Exception.Message}
+Assert (-not [string]::IsNullOrWhiteSpace($failure) -and [WindowsSetup.Taskbar]::Writes -eq $beforeNative) 'Fresh interactive-user verification fails when native auto-hide is disabled and never applies it'
