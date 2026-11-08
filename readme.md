@@ -40,6 +40,17 @@ for %d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do @if exist "%d:\wi
 5. 在新正式帳號桌面，接上網路，再從 USB 執行 `init.cmd` 安裝 SSH，允許同一帳號的管理員權限。等畫面顯示「Init 完成」及中文 SSH 連線資訊。
 6. 接著執行同一份 USB 工具包的 `windows.cmd`，依下方「接著套用設定」繼續。
 
+#### 可選路線：已用 Ctrl+Shift+F3 進入 Administrator 桌面
+
+`Shift+F10` 直接執行 Init 的路線仍可使用。如果你已按 `Ctrl+Shift+F3`，Windows 會重新啟動進入稽核模式的 Administrator 桌面，接著依序操作：
+
+1. 取消自動出現的「系統準備工具／Sysprep」視窗，不在該視窗選擇關機或重新啟動。
+2. 從 USB 的完整 `windows_setup` 資料夾執行 `init.cmd`。依提示輸入 `AUDIT` 確認，再輸入要建立的正式本機帳號、密碼及確認密碼。
+3. **只有看到「帳號設定已準備完成」才手動重新啟動。** 可使用開始選單的「重新啟動」，或在 CMD 輸入 `shutdown /r /t 0`。如果顯示錯誤或沒有成功文字，先處理錯誤，不把視窗結束當成成功，也不要直接執行 `windows.cmd`。
+4. 重開後完成剩餘 Windows 初始設定，登入剛準備的新正式本機帳號。稽核模式的 Administrator 只是準備帳號的暫時身分，不是後續套用設定的目標帳號。
+5. 在新正式帳號桌面，接上網路，再從 USB 執行 `init.cmd` 安裝 SSH，允許同一帳號的管理員權限。等畫面顯示「Init 完成」及中文 SSH 連線資訊。
+6. 接著執行同一份 USB 工具包的 `windows.cmd`，依下方「接著套用設定」繼續。
+
 ### B．已經進入正式帳號的 Windows 桌面
 
 1. 接上網路，按 `Windows+E` →「本機／此電腦」→ USB → `windows_setup`。
