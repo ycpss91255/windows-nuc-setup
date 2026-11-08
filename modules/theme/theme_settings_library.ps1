@@ -39,7 +39,7 @@ function Invoke-SetupThemeSettings {
   }
  }
  $wallpaper=New-Object Text.StringBuilder 1024
- [void][NUC8Theme]::ReadWallpaper(0x73,1024,$wallpaper,0)
+ if(-not [NUC8Theme]::ReadWallpaper(0x73,1024,$wallpaper,0)){throw '無法讀取桌面背景圖片，未確認目前桌布。'}
  $theme=Get-ItemProperty $personalize
  $actualColor=[NUC8Theme]::GetSysColor(1)
  $result=[ordered]@{Success=($theme.AppsUseLightTheme -eq 0 -and $theme.SystemUsesLightTheme -eq 0 -and $actualColor -eq 0 -and $wallpaper.Length -eq 0 -and $taskbarDark);AppsMode=$(if($theme.AppsUseLightTheme -eq 0){'Dark'}else{'Light'});WindowsMode=$(if($theme.SystemUsesLightTheme -eq 0){'Dark'}else{'Light'});Background='#000000';TaskbarRGB=@($taskbarColor);TaskbarIsDark=$taskbarDark;ExplorerReloaded=$shellReloaded;ActualBackgroundColor=$actualColor;ActualWallpaper=$wallpaper.ToString();AppliedAt=(Get-Date).ToString('o')}
