@@ -159,6 +159,28 @@ func TestRepoCoverageCLICollectsCleanSources(t *testing.T) {
 	run(true, args...)
 	run(true, "verify", "--artifact-dir", dest, "--expected-sha", sha, "--source-root", fixture, "--require-complete", "--minimum-percent", "80")
 	run(false, args...) // immutable existing output
+	run(false, "collect")
+	run(false, "collect", "--unknown")
+	args[4] = filepath.Join(external, "next")
+	bad := append([]string(nil), args...)
+	bad[6] = strings.Repeat("f", 40)
+	run(false, bad...)
+	bad = append([]string(nil), args...)
+	bad[4] = filepath.Join(fixture, "results")
+	run(false, bad...)
+	bad = append([]string(nil), args...)
+	bad[8] = filepath.Join(external, "absent.json")
+	run(false, bad...)
+	bad = append([]string(nil), args...)
+	bad[10] = filepath.Join(external, "absent.out")
+	run(false, bad...)
+	if err := os.WriteFile(ep, []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	run(false, args...)
+	if err := os.WriteFile(ep, data, 0600); err != nil {
+		t.Fatal(err)
+	}
 	os.WriteFile(filepath.Join(fixture, "script/test/logic/logic.go"), []byte(source+"// changed\n"), 0600)
 	args[4] = filepath.Join(external, "dirty")
 	run(false, args...) // HEAD alone cannot identify modified bytes
