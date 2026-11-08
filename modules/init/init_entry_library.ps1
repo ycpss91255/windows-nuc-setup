@@ -13,7 +13,7 @@ function Get-SetupInitContext {
  $desktopOwned=$false
  if($context.Sid -ne 'S-1-5-18'){
   $explorers=@(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction Stop|Where-Object {$_.SessionId -eq $context.SessionId})
-  foreach($process in $explorers){$owner=Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop;if($owner.ReturnValue -eq 0 -and $owner.Sid -eq $context.Sid){$desktopOwned=$true}}
+  foreach($process in $explorers){$owner=Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop;if(($owner.ReturnValue -is [uint32] -or $owner.ReturnValue -is [int]) -and $owner.ReturnValue -eq 0 -and $owner.Sid -eq $context.Sid){$desktopOwned=$true}}
  }
  $context|Add-Member NoteProperty ImageState $imageState -Force
  $context|Add-Member NoteProperty DesktopOwned $desktopOwned -Force
