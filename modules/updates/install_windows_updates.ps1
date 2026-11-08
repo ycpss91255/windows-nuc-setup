@@ -2,25 +2,25 @@
 #Requires -RunAsAdministrator
 param([switch]$Worker)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'update_stage_library.ps1')
+$commonDataRoot=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
 if(-not $Worker){
  $taskName='NUC8-Setup-WindowsUpdate'
  $existing=Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
  if($existing -and $existing.State -eq 'Running'){throw 'Windows Update 工作已在執行，請稍後再試。'}
- $state=Join-Path $env:ProgramData 'NUC8-Setup\WindowsUpdate'
- New-Item -ItemType Directory $state -Force|Out-Null
+ $stage=New-SetupUpdateStage -SourceRoot $PSScriptRoot -CommonDataRoot $commonDataRoot -UserSid ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -Computer $env:COMPUTERNAME
+ try{
+ $state=$stage.Path
+ $existing=Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+ if($existing -and $existing.State -eq 'Running'){throw 'Windows Update 工作已在執行，未註冊或重啟。'}
  $workerPath=Join-Path $state 'Update-Worker.ps1'
- Copy-Item -LiteralPath $PSCommandPath -Destination $workerPath -Force
- foreach($dependency in @('update_progress_library.ps1','update_worker_library.ps1','native/update_callback.cs')){
-  $target=Join-Path $state $dependency
-  New-Item -ItemType Directory (Split-Path $target -Parent) -Force|Out-Null
-  Copy-Item -LiteralPath (Join-Path $PSScriptRoot $dependency) -Destination $target -Force
- }
  $resultPath=Join-Path $state 'WindowsUpdate-Result.json'
- if(Test-Path $resultPath){Move-Item -LiteralPath $resultPath -Destination (Join-Path $state ('Previous-'+(Get-Date -Format yyyyMMdd-HHmmss)+'.json')) -Force}
+ if(Test-Path $resultPath){Assert-SetupUpdateProtectedPath $resultPath;Move-Item -LiteralPath $resultPath -Destination (Join-Path $state ('Previous-'+(Get-Date -Format yyyyMMdd-HHmmss)+'.json')) -Force}
 
  $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -ExecutionPolicy Bypass -File "'+$workerPath+'" -Worker')
  $principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
  $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+ $null=Read-SetupUpdateContext -StageRoot $state
  Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings -Force|Out-Null
  @{Stage='正在啟動';Detail='準備掃描更新';UpdatedAt=(Get-Date).ToString('o')}|ConvertTo-Json|Set-Content (Join-Path $state 'Update-Progress.json') -Encoding UTF8
  Start-ScheduledTask -TaskName $taskName
@@ -48,7 +48,12 @@ if(-not $Worker){
  if($exitCode -ne 0 -or -not(Test-Path $resultPath)){throw ('Windows Update 未完全成功，結束代碼：'+$exitCode+'；請查看紀錄：'+$state)}
  Write-Host 'Windows Update 本輪處理完成，未自動重新開機。' -ForegroundColor Green
  return
+ }finally{$stage.Lock.Dispose()}
 }
+$expectedStage=Join-Path $commonDataRoot 'windows_setup_update'
+if([IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\') -ine [IO.Path]::GetFullPath($expectedStage).TrimEnd('\')){throw 'SYSTEM worker只能從本機受保護stage執行。'}
+Assert-SetupUpdateAncestors $commonDataRoot
+$context=Read-SetupUpdateContext -StageRoot $PSScriptRoot
 . (Join-Path $PSScriptRoot 'update_progress_library.ps1')
 . (Join-Path $PSScriptRoot 'update_worker_library.ps1')
-Invoke-SetupWindowsUpdateWorker -StateRoot $PSScriptRoot
+Invoke-SetupWindowsUpdateWorker -StateRoot $PSScriptRoot -Context $context

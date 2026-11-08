@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 function Invoke-SetupWindowsUpdateWorker {
- param([Parameter(Mandatory=$true)][string]$StateRoot)
+ param([Parameter(Mandatory=$true)][string]$StateRoot,[Parameter(Mandatory=$true)]$Context)
  $ErrorActionPreference='Stop'
  function Set-UpdateStage {
   param([string]$Stage,[string]$Detail)
@@ -18,7 +18,7 @@ try{
  $searchCode=[int]$search.ResultCode
  $searchWarnings=@(foreach($warning in $search.Warnings){[pscustomobject]@{Message=[string]$warning.Message;HResult=$warning.HResult;Context=$warning.Context}})
  if($searchCode -ne 2){
-  [ordered]@{Found=$search.Updates.Count;Selected=0;Titles=@();Updates=@();SearchResultCode=$searchCode;SearchWarnings=$searchWarnings;RebootRequired=$false;CompletedAt=(Get-Date).ToString('o')}|ConvertTo-Json -Depth 6|Set-Content (Join-Path $StateRoot 'WindowsUpdate-Result.json') -Encoding UTF8
+  [ordered]@{RunId=$Context.RunId;Computer=$Context.Computer;UserSID=$Context.UserSID;Found=$search.Updates.Count;Selected=0;Titles=@();Updates=@();SearchResultCode=$searchCode;SearchWarnings=$searchWarnings;RebootRequired=$false;CompletedAt=(Get-Date).ToString('o')}|ConvertTo-Json -Depth 6|Set-Content (Join-Path $StateRoot 'WindowsUpdate-Result.json') -Encoding UTF8
   throw ('Windows Update搜尋未完全成功，結果碼：'+$searchCode+'；不能解讀為沒有更新。')
  }
  $collection=New-Object -ComObject Microsoft.Update.UpdateColl
@@ -29,7 +29,7 @@ try{
   if(-not $update.EulaAccepted){$update.AcceptEula()}
   [void]$collection.Add($update);$titles+=$update.Title
  }
- $result=[ordered]@{SearchResultCode=$searchCode;SearchWarnings=$searchWarnings;Found=$search.Updates.Count;Selected=$collection.Count;Titles=$titles;Updates=@();RebootRequired=$false;CompletedAt=$null}
+ $result=[ordered]@{RunId=$Context.RunId;Computer=$Context.Computer;UserSID=$Context.UserSID;SearchResultCode=$searchCode;SearchWarnings=$searchWarnings;Found=$search.Updates.Count;Selected=$collection.Count;Titles=$titles;Updates=@();RebootRequired=$false;CompletedAt=$null}
  if($collection.Count){
   Set-UpdateStage '下載更新' ('共 '+$collection.Count+' 項；準備下載，進度將由Windows Update回報')
   Write-Host '正在下載更新…'

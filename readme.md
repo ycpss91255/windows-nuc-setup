@@ -328,21 +328,23 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 
 更新階段使用 Windows Update API 回報的下載／安裝百分比，包含目前第幾項、總項數、標題與單項進度。背景工作每約 5 秒更新進度檔，主視窗每約 15 秒顯示狀態及最後回報時間。掃描階段只有狀態與經過時間，不以時間估算百分比；掃描尚未返回時，最後回報時間可能暫時不變。Windows「設定」頁面不一定會呈現這個 API 工作的相同進度，請以工具視窗及本輪紀錄為準。
 
-可另外開啟 PowerShell 查看目前狀態：
+可另外以系統管理員身分開啟 PowerShell 查看目前狀態：
 
 ```powershell
-$state = Join-Path $env:ProgramData 'NUC8-Setup\WindowsUpdate'
+$state = Join-Path $env:ProgramData 'windows_setup_update'
 Get-Content (Join-Path $state 'Update-Progress.json') -Raw -Encoding UTF8 | ConvertFrom-Json | Format-List
 ```
 
 持續查看最新一份更新日誌（按 `Ctrl+C` 只停止觀看，不會中止更新）：
 
 ```powershell
-$state = Join-Path $env:ProgramData 'NUC8-Setup\WindowsUpdate'
+$state = Join-Path $env:ProgramData 'windows_setup_update'
 $log = Get-ChildItem -LiteralPath $state -Filter 'WindowsUpdate-*.log' |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($log) { Get-Content -LiteralPath $log.FullName -Encoding UTF8 -Tail 30 -Wait }
 ```
+
+新版 SYSTEM 更新工作使用 `%ProgramData%\windows_setup_update` 專用受保護目錄，只允許 SYSTEM 與管理員存取。複製前會檢查路徑、擁有者及 ACL，複製後核對所有執行來源的 SHA-256；已有不可信或 junction 目錄會停止，不接管或刪除它。舊 `%ProgramData%\NUC8-Setup\WindowsUpdate` 紀錄保留原位。新版驗證只接受與受保護 context 的電腦、原啟動帳號及本輪 ID 相符的結果；舊格式若缺這些資訊，會要求重新執行更新，不能當作本輪已通過。
 
 `WindowsUpdate-Result.json` 保存搜尋結果碼／警告、下載結果碼／HResult、每項安裝結果及是否需要重新開機。只有搜尋與下載結果碼 `2`（完整成功）才繼續；失敗或部分成功不會當作「沒有更新」。結果檔、進度檔與 `WindowsUpdate-*.log` 都位於上述 `$state`；主流程另有工具包內 `reports\Setup-*.log`。
 
