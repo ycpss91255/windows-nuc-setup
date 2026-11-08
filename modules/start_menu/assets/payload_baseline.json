@@ -1,0 +1,49 @@
+{
+  "SchemaVersion": 1,
+  "PackageSHA256": "33557CB0486ABA671BF3CD25541B3038D57B41329B6B7A33BE8D8E9242DB322B",
+  "OnlySetting": "Policies/Start/ConfigureStartPins={\"pinnedList\":[]}",
+  "Files": [
+    {
+      "Path": "Multivariant/Multivariant.xml",
+      "SHA256": "581318275951CCEAF26A132813E661E982651CFA485481F48F85A8468A145654",
+      "RootName": "Elements",
+      "Namespace": ""
+    },
+    {
+      "Path": "Multivariant/0/customizations.xml",
+      "SHA256": "57887195A7A94789B6A96905B560B5B40C819D22D8704088165BC2FF1CA19683",
+      "RootName": "WindowsCustomizations",
+      "Namespace": ""
+    },
+    {
+      "Path": "Multivariant/0/MasterDatastore.xml",
+      "SHA256": "9101F028C2288850BE393281297500902B297C8B6ECF793292678B04A72709C9",
+      "RootName": "ConfigurationSourceList",
+      "Namespace": ""
+    },
+    {
+      "Path": "Multivariant/0/Prov/RunTime.xml",
+      "SHA256": "86792026760AC26ABDBF1A6189A6EF8F5E382D7C00046BACDE2F55374CAF48DB",
+      "RootName": "ConfigurationSource",
+      "Namespace": ""
+    },
+    {
+      "Path": "Multivariant/0/Prov/RunTime/0__Policies_Start_ConfigureStartPins.provxml",
+      "SHA256": "773703F814455C08859FAAC3805C6DF8B1D69BF1F0672CE6035A5C765FA151B2",
+      "RootName": "wap-provisioningdoc",
+      "Namespace": ""
+    },
+    {
+      "Path": "CommonSettings/CommonSettings.xml",
+      "SHA256": "E3F96B8EB067500E207494579F9306AF70819CAFD91A10AF73A9BBFFA6077396",
+      "RootName": "Elements",
+      "Namespace": ""
+    },
+    {
+      "Path": "CommonSettings/1/AnswerFile.xml",
+      "SHA256": "CA8BAF3ECAB593E8C9C2288341CD3C3DFFFB8D291737A8235C937633837C3814",
+      "RootName": "Settings",
+      "Namespace": "urn:schemas-microsoft-com:windows-provisioning"
+    }
+  ]
+}
