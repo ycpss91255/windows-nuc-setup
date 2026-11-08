@@ -30,6 +30,27 @@ public static class ManagedNativeTests {
   api.WindowSession=delegate(IntPtr handle){return 7;};api.Message=delegate(uint message,ref WindowsSetup.Taskbar.AppBarData data){return 0;};Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"unresponsive taskbar position query stops before interpreting zero state");
   api.Message=delegate(uint message,ref WindowsSetup.Taskbar.AppBarData data){if(message==5)return 1;throw new InvalidOperationException("state query failed");};Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"native state query failure propagates");
  }
+ static void MdnsAllocationOnlyAbiCases(){
+  // Independent WinDNS.h SDK layout: allocation/read/free only, never Register/DeRegister/Cancel.
+  Assert(Marshal.SizeOf(typeof(WindowsSetup.MdnsPublisher.Instance))==(IntPtr.Size==8?72:40),"DNS_SERVICE_INSTANCE SDK size");
+  Assert(Marshal.SizeOf(typeof(WindowsSetup.MdnsPublisher.Request))==(IntPtr.Size==8?48:28),"DNS_SERVICE_REGISTER_REQUEST SDK size");
+  Assert(Marshal.OffsetOf(typeof(WindowsSetup.MdnsPublisher.Request),"Unicast").ToInt32()==(IntPtr.Size==8?40:24),"native BOOL has four bytes at SDK offset");
+  foreach(string family in new[]{"v4","v6","dual","scope"}){
+   var ad=new WindowsSetup.MdnsPublisher.Advertisement{HostName="fixture.local",ServiceName="fixture._ssh._tcp.local",InterfaceIndex=7,Port=22,IPv4=family=="v4"||family=="dual"?"192.0.2.9":null,IPv6=family=="v6"||family=="dual"?"2001:db8::9":family=="scope"?"fe80::9%7":null};
+   IntPtr p=WindowsSetup.MdnsPublisher.NativeConstruct(ad);
+   try{
+    Assert(p!=IntPtr.Zero,"native allocation succeeds without advertising "+family);
+    Assert(Marshal.PtrToStringUni(Marshal.ReadIntPtr(p,0))==ad.ServiceName && Marshal.PtrToStringUni(Marshal.ReadIntPtr(p,IntPtr.Size))==ad.HostName,"raw SDK name/host offsets match native allocation "+family);
+    Assert(Marshal.ReadInt16(p,IntPtr.Size==8?32:16)==22,"native WORD port is host order 22 "+family);
+    Assert(Marshal.ReadInt32(p,IntPtr.Size==8?64:36)==0,"constructor interface is documented zero "+family);
+    var actual=WindowsSetup.MdnsPublisher.ReadInstance(p);
+    Assert(actual.HostName==ad.HostName && actual.ServiceName==ad.ServiceName && actual.Port==22,"original source reads actual native allocation "+family);
+    Assert(actual.IPv4==ad.IPv4 && actual.IPv6==(family=="scope"?"fe80::9":ad.IPv6),"native IPv4/IPv6 bytes and scope-free representation "+family);
+   }finally{WindowsSetup.MdnsPublisher.NativeFree(p);}
+  }
+  WindowsSetup.MdnsPublisher.NativeFree(IntPtr.Zero);
+  Throws(delegate{WindowsSetup.MdnsPublisher.ReadInstance(IntPtr.Zero);},"missing native allocation is rejected");
+ }
  static void MdnsCases(){
   var ad=new WindowsSetup.MdnsPublisher.Advertisement{HostName="fixture.local",ServiceName="fixture._ssh._tcp.local",InterfaceIndex=7,IPv4="192.0.2.9",IPv6="2001:db8::9",Port=22};
   foreach(string mode in new[]{"sync","async","error","timeout","late_cancel","deregister_error","host_mismatch","missing_instance","scope","callback_service","callback_port","callback_address","callback_interface"}){
@@ -205,8 +226,8 @@ public static class ManagedNativeTests {
    Assert(Marshal.ReadInt32(packet,0)==-3 && Marshal.ReadInt32(packet,4)==32,"display packet type and size are written");
    Assert(Marshal.ReadInt32(packet,8)==19 && Marshal.ReadInt32(packet,12)==23 && Marshal.ReadInt32(packet,16)==29,"display packet carries exact adapter identity");
   }finally{Marshal.FreeHGlobal(packet);Marshal.FreeHGlobal(path);}
-  MdnsCases();TaskbarAutoHideCases();ExplorerCases();ThemeCases();HotkeyCases();DisplayCases();WimCases();DesktopCases();
+  MdnsAllocationOnlyAbiCases();MdnsCases();TaskbarAutoHideCases();ExplorerCases();ThemeCases();HotkeyCases();DisplayCases();WimCases();DesktopCases();
   new WindowsSetup.UpdateCallback().Invoke(new object(),new object());Assert(true,"WUA callback accepts Automation arguments without retaining or processing them");
-  Console.WriteLine("ALL PASS: "+assertions+" managed source assertions; no native OS functions invoked");
+  Console.WriteLine("ALL PASS: "+assertions+" managed source assertions; only dnsapi allocation/read/free invoked, no registration or OS settings");
  }
 }

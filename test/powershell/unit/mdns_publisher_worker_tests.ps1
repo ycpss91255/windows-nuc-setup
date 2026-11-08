@@ -28,4 +28,15 @@ Invoke-SetupMdnsPublisherCycle -State $state -Context $context -Facts $facts -Co
 Assert (-not $state.Ready -and $state.Status -eq 'WaitingForNetwork') '離線時保活等待網路，不以localresolve冒稱公告成功'
 $facts.Addresses=@([pscustomobject]@{InterfaceIndex=7;IPAddress='192.0.2.10'});$script:failNative=$true;$failed=$false
 try{Invoke-SetupMdnsPublisherCycle -State $state -Context $context -Facts $facts -CodeRoot $root -StatusPath 'fixture'|Out-Null}catch{$failed=$true}
-Assert ($failed -and -not $state.Ready -and $script:lastStatus.Status -eq 'Failed' -and $script:lastStatus.Error.Contains('timeout')) '原生錯誤或逾時明確失敗，不依本機解析假通過'
+Assert ($failed -and -not $state.Ready -and $script:lastStatus.Status -eq 'Failed' -and $script:lastStatus.Error.Contains('timeout')) '原生錯誤或逾時明確失敗，不依本機解析假通過'# Run the actual continuous worker (not only one cycle), retaining the native boundary fixture.
+$script:failNative=$false;$script:reads=0;$script:sleeps=0;$script:liveAtSleep=$false
+$script:workerId=[guid]::NewGuid().ToString('D');$workerRoot=Join-Path ([IO.Path]::GetTempPath()) 'fixture_code'
+function Get-SetupMdnsPaths {param($RunId) [pscustomobject]@{CodeRoot=$workerRoot;Status='fixture'}}
+function Read-SetupMdnsContext {param($RunId) [pscustomobject]@{RunId=$RunId}}
+function Read-SetupMdnsCurrent {$script:reads++;[pscustomobject]@{RunId=$(if($script:reads -lt 4){$script:workerId}else{[guid]::NewGuid().ToString('D')})}}
+function Get-SetupMdnsPublisherFacts {return $script:fixtureWorkerFacts}
+function Start-Sleep {param($Seconds) $script:sleeps++;$script:liveAtSleep=($script:lastStatus.Registered -and $script:lastStatus.Count -eq 1)}
+$script:fixtureWorkerFacts=$facts
+$beforeBegins=$script:begins;$beforeCloses=$script:closes
+Invoke-SetupMdnsPublisherWorker -RunId $script:workerId -CodeRoot $workerRoot
+Assert ($script:sleeps -eq 2 -and $script:liveAtSleep -and $script:begins -eq $beforeBegins+1 -and $script:closes -eq $beforeCloses+1) '真while worker跨兩心跳續命且snapshot交接後finally解除唯一lease'
