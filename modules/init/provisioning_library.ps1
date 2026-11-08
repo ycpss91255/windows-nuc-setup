@@ -141,7 +141,7 @@ function New-InitProvisioningStage {
  Assert-InitPlainPath $SourceRoot;Assert-InitPlainPath $StageRoot
  $null=Assert-InitProvisioningAsset -AssetRoot (Join-Path $SourceRoot 'modules/init/assets')
  if(Test-Path -LiteralPath $StageRoot){throw '已有 Init 續跑目錄，請從其 resume_init.cmd 繼續，不能覆寫。'}
- $files=@('modules/init/initialize_nuc.ps1','modules/init/oobe_library.ps1','modules/init/provisioning_library.ps1','modules/init/provisioning_asset_library.ps1','modules/init/provisioning_launcher_library.ps1','modules/init/assets/hide_oobe.xml','modules/init/assets/hide_oobe.ppkg','modules/init/assets/provenance.json')
+ $files=@('modules/init/initialize_nuc.ps1','modules/init/init_entry_library.ps1','modules/init/oobe_library.ps1','modules/init/provisioning_library.ps1','modules/init/provisioning_asset_library.ps1','modules/init/provisioning_launcher_library.ps1','modules/init/assets/hide_oobe.xml','modules/init/assets/hide_oobe.ppkg','modules/init/assets/provenance.json')
  foreach($relative in $files){$path=Join-Path $SourceRoot $relative;Assert-InitPlainPath $path;if(-not(Test-Path -LiteralPath $path -PathType Leaf)){throw ('缺少 Init 依賴：'+$relative)}}
  if($null -eq $InitialState){throw '暫存前必須提供無帳密的初始狀態。'}
  $finalRoot=$StageRoot
