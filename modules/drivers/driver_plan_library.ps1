@@ -1,4 +1,14 @@
 ﻿#Requires -Version 5.1
+function Test-SetupDriverNotInstalled {
+ param([Parameter(Mandatory=$true)]$Device)
+ $code=$Device.ProblemCode
+ return ($Device.Present -eq $true -and $Device.Status -eq 'Error' -and
+  ($code -is [int] -or $code -is [uint32]) -and $code -eq 28 -and
+  $Device.DriverSignatureKnown -is [bool] -and -not $Device.DriverSignatureKnown -and
+  $Device.PSObject.Properties['DriverMetadataReadError'] -and [string]::IsNullOrEmpty([string]$Device.DriverMetadataReadError) -and
+  [string]::IsNullOrEmpty([string]$Device.DriverInfPath) -and [string]::IsNullOrEmpty([string]$Device.DriverInfName) -and
+  [string]::IsNullOrEmpty([string]$Device.DriverProvider) -and [string]::IsNullOrEmpty([string]$Device.DriverVersion) -and [string]::IsNullOrEmpty([string]$Device.DriverSigner))
+}
 function Get-SetupDriverTargetPlan {
  param([Parameter(Mandatory=$true)]$Target,[object[]]$Devices=@(),[int]$Build,[string]$Architecture)
  $matches=@($Devices|Where-Object {$ids=@($_.HardwareIds);@($Target.HardwareIds|Where-Object {$_ -in $ids}).Count -gt 0})
@@ -19,6 +29,8 @@ function Get-SetupDriverTargetPlan {
   $comparable=($device.DriverProvider -eq $Target.Provider -or $device.DriverProvider -in @($Target.ProviderAliases))
   if(-not [version]::TryParse([string]$Target.DriverVersion,[ref]$desired)){throw '目標驅動版本無法解析。'}
   if($device.HardwareIdsReadError){$status='Unverified';$reason='目標硬體屬性讀取失敗'}
+  elseif($device.DriverMetadataReadError){$status='Unverified';$reason='目標驅動狀態屬性讀取失敗'}
+  elseif(Test-SetupDriverNotInstalled -Device $device){$status='UpdateRequired';$reason='原生Code28確認未安裝驅動，使用已核相符目標'}
   elseif($device.PSObject.Properties['DriverSigned'] -and -not $device.DriverSigned){$status='Unverified';$reason='目前已載入驅動未確認簽章'}
   elseif($device.DriverProvider -eq 'Microsoft' -and $Target.Provider -ne 'Microsoft'){$status='UpdateRequired';$reason='原廠目標取代通用驅動'}
   elseif(-not $comparable -or -not [version]::TryParse([string]$device.DriverVersion,[ref]$current)){$status='Unverified';$reason='目前供應商或版本無法安全比較'}
@@ -78,8 +90,14 @@ function Get-SetupDriverDeviceInventory {
   foreach($key in @('DEVPKEY_Device_HardwareIds','DEVPKEY_Device_CompatibleIds')){
    try{$ids+=@((Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName $key -ErrorAction Stop).Data)}catch{$readError=$_.Exception.Message}
   }
+  $problemCode=$null;$driverInfPath=[string]$driver.InfName;$metadataError=''
+  $signatureKnown=($null -ne $driver.IsSigned)
+  if($device.Status -eq 'Error' -and [string]::IsNullOrEmpty([string]$driver.DriverProviderName) -and [string]::IsNullOrEmpty([string]$driver.DriverVersion)){
+   try{$property=Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode' -ErrorAction Stop;if($null -eq $property -or -not $property.PSObject.Properties['Data']){throw '原生屬性未回傳資料物件'};$problemCode=$property.Data}catch{$metadataError+='ProblemCode: '+$_.Exception.Message+'; '}
+   try{$property=Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName 'DEVPKEY_Device_DriverInfPath' -ErrorAction Stop;if($null -eq $property -or -not $property.PSObject.Properties['Data']){throw '原生屬性未回傳資料物件'};$driverInfPath=$property.Data}catch{$metadataError+='DriverInfPath: '+$_.Exception.Message+'; '}
+  }
   $ids=@($ids|Where-Object {$_}|Select-Object -Unique)
-  [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;Class=$device.Class;HardwareIds=$ids;HardwareIdsReadError=$readError;Status=$device.Status;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion;DriverSigned=[bool]$driver.IsSigned}
+  [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;Class=$device.Class;HardwareIds=$ids;HardwareIdsReadError=$readError;Status=$device.Status;Present=$true;ProblemCode=$problemCode;DriverInfPath=$driverInfPath;DriverInfName=[string]$driver.InfName;DriverMetadataReadError=$metadataError;DriverSignatureKnown=$signatureKnown;DriverSigner=[string]$driver.Signer;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion;DriverSigned=[bool]$driver.IsSigned}
  }
 }
 function Get-SetupDriverPnpTool {
