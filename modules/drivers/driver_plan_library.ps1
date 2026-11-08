@@ -8,7 +8,8 @@ function Get-SetupDriverTargetPlan {
   $possibleErrors=@($Devices|Where-Object {
    if(-not $_.HardwareIdsReadError){return $false}
    $instance=[string]$_.InstanceId
-   @($Target.HardwareIds|Where-Object {$instance.StartsWith(($_+'\'),[StringComparison]::OrdinalIgnoreCase) -or $instance.StartsWith(($_+'&'),[StringComparison]::OrdinalIgnoreCase)}).Count -gt 0
+   $software=$_.Class -eq 'SoftwareComponent' -or $instance.StartsWith('SWD\DRIVERENUM\',[StringComparison]::OrdinalIgnoreCase)
+   @($Target.HardwareIds|Where-Object {($_ -like 'SWC\*' -and $software) -or $instance.StartsWith(($_+'\'),[StringComparison]::OrdinalIgnoreCase) -or $instance.StartsWith(($_+'&'),[StringComparison]::OrdinalIgnoreCase)}).Count -gt 0
   })
   if($possibleErrors.Count){$status='Unverified';$reason='相符裝置硬體屬性未能讀取'}else{$status='Absent';$reason='未枚舉相符硬體'}
  }
