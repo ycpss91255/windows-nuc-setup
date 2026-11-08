@@ -24,10 +24,11 @@ func collect(args []string, out io.Writer) error {
 	gp := f.String("go-profile", "", "已合併 Go profile")
 	pe := f.String("powershell-evidence", "", "PowerShell 原始 worker 證據")
 	ce := f.String("cmd-evidence", "", "CMD 原始 probe 證據")
+	me := f.String("managed-evidence", "", "Microsoft managed 原生合併證據")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
-	if *root == "" || *dest == "" || *sha == "" || f.NArg() != 0 || (*ge == "") != (*gp == "") || (*ge == "" && *pe == "" && *ce == "") {
+	if *root == "" || *dest == "" || *sha == "" || f.NArg() != 0 || (*ge == "") != (*gp == "") || (*ge == "" && *pe == "" && *ce == "" && *me == "") {
 		return fmt.Errorf("需要來源、全新輸出、提交與至少一組完整收集證據")
 	}
 	source, err := filepath.Abs(*root)
@@ -139,6 +140,30 @@ func collect(args []string, out io.Writer) error {
 			}
 		}
 		report, lines, err := rc.NormalizeCMD(evidence, originals)
+		if err != nil {
+			return err
+		}
+		reports = append(reports, report)
+		catalogs = append(catalogs, lines...)
+	}
+	if *me != "" {
+		data, err := os.ReadFile(*me)
+		if err != nil {
+			return err
+		}
+		originals := map[string][]byte{}
+		for _, s := range inv.Sources {
+			if s.Language == "csharp" {
+				b, e := os.ReadFile(filepath.Join(source, filepath.FromSlash(s.Path)))
+				if e != nil {
+					return e
+				}
+				originals[s.Path] = b
+			}
+		}
+		report, lines, err := rc.NormalizeManaged(data, func(name string) ([]byte, error) {
+			return os.ReadFile(filepath.Join(filepath.Dir(*me), filepath.FromSlash(name)))
+		}, originals)
 		if err != nil {
 			return err
 		}
