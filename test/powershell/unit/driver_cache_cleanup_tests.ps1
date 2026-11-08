@@ -1,0 +1,28 @@
+#Requires -Version 5.1
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot '../../../modules/drivers/driver_plan_library.ps1')
+function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Value}|ConvertTo-Json -Compress));if(-not $Value){throw $Name}}
+Assert ([bool](Get-Command Register-SetupDriverExtractionLease -ErrorAction SilentlyContinue) -and [bool](Get-Command Remove-SetupDriverExtractionRoot -ErrorAction SilentlyContinue)) '本輪驅動解壓有記憶體lease與安全清理入口'
+$fixture=Join-Path $env:TEMP ('driver_cleanup_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
+$parent=Join-Path $fixture 'windows_setup_driver_cache';[void][IO.Directory]::CreateDirectory($parent)
+function Get-SetupDriverCacheParent {$parent}
+function Assert-SetupUpdateProtectedPath {param($Path,[switch]$Directory) if($script:denyAcl){throw 'fixture owner/acl rejected'}}
+function Assert-SetupUpdatePlainPath {param($Path)}
+function Assert-SetupUpdateAcl {param($Acl,[switch]$Directory)}
+function NewStage { $p=Join-Path $parent ([guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($p);[IO.File]::WriteAllText((Join-Path $p 'payload.sys'),'owned');Register-SetupDriverExtractionLease -Path $p;return $p }
+$one=NewStage;$two=NewStage
+Assert ((Remove-SetupDriverExtractionRoot -Path $one) -and -not(Test-Path $one) -and (Test-Path $two)) '只刪本輪指定lease，不碰兄弟stage'
+$outside=Join-Path $fixture ([guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($outside)
+Assert (-not(Remove-SetupDriverExtractionRoot -Path $outside) -and (Test-Path $outside)) '外部及未租用路徑不刪除'
+$old=Join-Path $parent ([guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($old)
+Assert (-not(Remove-SetupDriverExtractionRoot -Path $old) -and (Test-Path $old)) '既有未租用GUID目錄不當成自己的快取'
+$script:denyAcl=$true;$blocked=$false;try{Remove-SetupDriverExtractionRoot -Path $two}catch{$blocked=$true};$script:denyAcl=$false
+Assert ($blocked -and (Test-Path $two)) '擁有者或ACL不可信時保留而拒絕清理'
+$script:SetupDriverExtractionLeases[$two].NativeActive=$true
+Assert (-not(Remove-SetupDriverExtractionRoot -Path $two) -and (Test-Path $two)) '原生程序尚未明確結束不清理payload'
+$script:SetupDriverExtractionLeases[$two].NativeActive=$false
+$link=Join-Path $two 'linked';$null=New-Item -ItemType Junction -Path $link -Target $outside
+$blocked=$false;try{Remove-SetupDriverExtractionRoot -Path $two}catch{$blocked=$true}
+Assert ($blocked -and (Test-Path $outside) -and (Test-Path $two)) 'junction拒絕清理且不碰其外部目標'
+Remove-Item -LiteralPath $link -Force
+Assert ((Remove-SetupDriverExtractionRoot -Path $two) -and (Test-Path $outside) -and (Test-Path $old)) '移除junction後只清租用目錄，不連帶清舊資料'
