@@ -108,12 +108,12 @@ function Write-SetupGuiAtomicJson {
 }
 function New-SetupGuiStage {
  param([Parameter(Mandatory=$true)][string]$SourceRoot,[Parameter(Mandatory=$true)][string]$CommonDataRoot,
- [string]$Role,[string]$UserSid,[int]$CallerSession,[int]$DesktopSession,[string]$Computer,[switch]$VerifyOnly)
+ [string]$Role,[string]$UserSid,[int]$CallerSession,[int]$DesktopSession,[string]$Computer,[switch]$VerifyOnly,[string]$RunId=([guid]::NewGuid().ToString('D')))
  $ErrorActionPreference='Stop'
  $manifest=@(Get-SetupGuiStageFiles $Role)
  Assert-SetupGuiCaller -UserSid $UserSid -CallerSession $CallerSession -DesktopSession $DesktopSession -Computer $Computer
  Assert-SetupGuiAncestors $CommonDataRoot
- $paths=Get-SetupGuiRunPaths -CommonDataRoot $CommonDataRoot -Role $Role -RunId ([guid]::NewGuid().ToString('D'))
+ $paths=Get-SetupGuiRunPaths -CommonDataRoot $CommonDataRoot -Role $Role -RunId $RunId
  New-SetupGuiProtectedDirectory (Split-Path $paths.RoleRoot -Parent)
  New-SetupGuiProtectedDirectory $paths.RoleRoot
  $lockPath=Join-Path $paths.RoleRoot 'stage.lock'
@@ -241,13 +241,15 @@ function Invoke-SetupGuiScheduledWorker {
  }
 }
 function Invoke-SetupGuiRole {
- param([Parameter(Mandatory=$true)][string]$PackageRoot,[string]$Role,[switch]$Worker,[switch]$VerifyOnly)
+ param([Parameter(Mandatory=$true)][string]$PackageRoot,[string]$Role,[switch]$Worker,[switch]$VerifyOnly,[string]$VerificationRunId)
  $ErrorActionPreference='Stop'
  $null=Get-SetupGuiStageFiles $Role
  $scope=Get-SetupGuiIdentity
  if($Worker -and $scope.SessionId -eq 0){throw 'GUI -Worker不能在session 0繞過原使用者桌面身分。'}
  $desktop=Get-SetupGuiDesktopSession $scope
- $stage=New-SetupGuiStage -SourceRoot $PackageRoot -CommonDataRoot $scope.CommonDataRoot -Role $Role -UserSid $scope.UserSID -CallerSession $scope.SessionId -DesktopSession $desktop -Computer $scope.Computer -VerifyOnly:$VerifyOnly
+ $creation=@{SourceRoot=$PackageRoot;CommonDataRoot=$scope.CommonDataRoot;Role=$Role;UserSid=$scope.UserSID;CallerSession=$scope.SessionId;DesktopSession=$desktop;Computer=$scope.Computer;VerifyOnly=[bool]$VerifyOnly}
+ if($VerificationRunId){$requested=[guid]::Empty;if(-not [guid]::TryParse($VerificationRunId,[ref]$requested)){throw 'GUI 驗證本輪ID格式不符。'};$creation.RunId=$requested.ToString('D')}
+ $stage=New-SetupGuiStage @creation
  try{
   $context=Read-SetupGuiContext -CodeRoot $stage.CodeRoot -CommonDataRoot $stage.CommonDataRoot -Role $Role -RunId $stage.Context.RunId
   if(($context|ConvertTo-Json -Depth 8 -Compress) -cne ($stage.Context|ConvertTo-Json -Depth 8 -Compress)){throw 'GUI worker啟動前context已改變。'}
@@ -256,6 +258,14 @@ function Invoke-SetupGuiRole {
   if(-not $result.Success){throw $result.Error}
   return $result
  }finally{$stage.Lock.Dispose()}
+}
+function Invoke-SetupGuiFreshVerification {
+ param([Parameter(Mandatory=$true)][string]$PackageRoot,[Parameter(Mandatory=$true)][ValidateSet('Display','Theme')][string]$Role)
+ $scope=Get-SetupGuiIdentity
+ $run=[guid]::NewGuid().ToString('D')
+ $result=Invoke-SetupGuiRole -PackageRoot $PackageRoot -Role $Role -VerifyOnly -VerificationRunId $run
+ if($null -eq $result -or $result -is [array] -or $result.Schema -ne 1 -or $result.RunId -cne $run -or $result.Role -cne $Role -or $result.UserSID -cne $scope.UserSID -or $result.Computer -cne $scope.Computer -or $result.SessionId -le 0 -or ($scope.SessionId -gt 0 -and $result.SessionId -ne $scope.SessionId) -or $result.VerifyOnly -isnot [bool] -or -not $result.VerifyOnly -or $result.Success -isnot [bool]){throw 'GUI 即時驗證不是本輪、原使用者、原電腦或原桌面的受保護結果。'}
+ return $result
 }
 function Open-SetupGuiExecutionLock {
  param($Paths)
