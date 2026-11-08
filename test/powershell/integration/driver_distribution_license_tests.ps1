@@ -43,3 +43,10 @@ foreach($mode in @('wrongcase','duplicate')){
  try{$entry=$archive.CreateEntry('LICENSE');$stream=$entry.Open();try{$stream.Write($saved,0,$saved.Length)}finally{$stream.Dispose()}}finally{$archive.Dispose()}
  Reject {Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $bad)} ('Windows解壓不得接受大小寫衝突或重複的授權入口：'+$mode)
 }
+foreach($name in @('./license','sub/../license','sub\\..\\license','/license','license.','license ','license:stream','core//alias.txt')){
+ $bad=Join-Path $temp ([guid]::NewGuid().ToString('N')+'.zip')
+ Copy-Item -LiteralPath $good -Destination $bad
+ $archive=[IO.Compression.ZipFile]::Open($bad,[IO.Compression.ZipArchiveMode]::Update)
+ try{$entry=$archive.CreateEntry($name);$stream=$entry.Open();try{$bytes=[Text.Encoding]::UTF8.GetBytes('not the approved license');$stream.Write($bytes,0,$bytes.Length)}finally{$stream.Dispose()}}finally{$archive.Dispose()}
+ Reject {Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $bad)} ('ZIP不得以Windows路徑別名覆寫已核對檔案：'+$name)
+}
