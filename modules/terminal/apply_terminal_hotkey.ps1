@@ -1,6 +1,7 @@
 ﻿#Requires -RunAsAdministrator
 param([switch]$VerifyOnly)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot '../native/managed_source_library.ps1')
 $folder=Join-Path $env:LOCALAPPDATA 'NUC8-Setup\TerminalHotkey'
 $listener=Join-Path $folder 'terminal_hotkey_listener.ps1'
 $log=Join-Path $folder 'status.log'
@@ -13,6 +14,7 @@ if(-not $VerifyOnly){
  if(-not(Get-Command wt.exe -ErrorAction SilentlyContinue)){throw '找不到 Windows Terminal，請先安裝。'}
  New-Item -ItemType Directory $folder -Force|Out-Null
  Copy-Item (Join-Path $PSScriptRoot 'terminal_hotkey_listener.ps1') $listener -Force
+ $null=Copy-SetupManagedSource -SourceRoot $PSScriptRoot -DestinationRoot $folder -FileName 'terminal_hotkey.cs'
  $shell=New-Object -ComObject WScript.Shell
  $link=$shell.CreateShortcut($startup)
  $link.TargetPath=$exe;$link.Arguments=$argsText;$link.WorkingDirectory=$env:USERPROFILE;$link.WindowStyle=7;$link.Hotkey='';$link.Save()

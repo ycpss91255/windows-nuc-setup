@@ -1,4 +1,11 @@
-{
+﻿{
+  "desktop_icons.cs": "modules/desktop/native/desktop_icons.cs",
+  "display.cs": "modules/display/native/display.cs",
+  "explorer.cs": "modules/explorer/native/explorer.cs",
+  "theme.cs": "modules/theme/native/theme.cs",
+  "terminal_hotkey.cs": "modules/terminal/native/terminal_hotkey.cs",
+  "managed_source_library.ps1": "modules/native/managed_source_library.ps1",
+  "residue_library.ps1": "modules/cleanup/residue_library.ps1",
   "provisioning_library.ps1": "modules/init/provisioning_library.ps1",
   "provisioning_asset_library.ps1": "modules/init/provisioning_asset_library.ps1",
   "provisioning_launcher_library.ps1": "modules/init/provisioning_launcher_library.ps1",

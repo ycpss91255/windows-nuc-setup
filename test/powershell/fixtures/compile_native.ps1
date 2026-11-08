@@ -7,7 +7,7 @@ if(-not $type){throw ('Compiled public type is missing: '+$TypeName)}
 foreach($method in ($Methods -split ',')){if(-not $type.GetMethod($method,[Reflection.BindingFlags]'Public,Static')){throw ('Public API is missing: '+$method)}}
 if($TypeName -eq 'NUC8Display.Display'){
  $mode='NUC8Display.Mode' -as [type]
- if([Runtime.InteropServices.Marshal]::SizeOf($mode) -ne 220){throw 'DEVMODEW ABI size changed'}
+ if([Runtime.InteropServices.Marshal]::SizeOf([Activator]::CreateInstance($mode)) -ne 220){throw 'DEVMODEW ABI size changed'}
  $newMode=$type.GetMethod('NewMode',[Reflection.BindingFlags]'NonPublic,Static').Invoke($null,@())
  if($newMode.dmSize -ne 220){throw 'Managed mode initializer does not preserve ABI header'}
 }

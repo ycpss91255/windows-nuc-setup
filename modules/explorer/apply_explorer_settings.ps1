@@ -7,6 +7,8 @@ $root=Join-Path $env:ProgramData 'NUC8-Setup'
 New-Item -ItemType Directory $root -Force|Out-Null
 if(-not $Worker -and [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0){
  $workerPath=Join-Path $root 'Explorer-Worker.ps1'
+ . (Join-Path $PSScriptRoot '../native/managed_source_library.ps1')
+ $null=Copy-SetupManagedSource -SourceRoot $PSScriptRoot -DestinationRoot $root -FileName 'explorer.cs'
  Copy-Item $PSCommandPath $workerPath -Force
  $resultPath=Join-Path $root $resultFileName
  if(Test-Path $resultPath){Remove-Item $resultPath -Force}
@@ -37,19 +39,7 @@ try{
   if(-not ('NucExplorerRefresh' -as [type])){Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class NucExplorerRefresh{[DllImport("shell32.dll")]public static extern void SHChangeNotify(int e,uint f,IntPtr a,IntPtr b);}'}
   [NucExplorerRefresh]::SHChangeNotify(0x08000000,0,[IntPtr]::Zero,[IntPtr]::Zero)
  }
- if(-not ('NucExplorerLiveV2' -as [type])){Add-Type -TypeDefinition @"
-using System;using System.Runtime.InteropServices;
-public static class NucExplorerLiveV2{
- [DllImport("shell32.dll")]static extern void SHGetSetSettings(IntPtr p,uint mask,bool set);
- [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr SendMessageTimeout(IntPtr w,uint m,IntPtr a,string b,uint f,uint t,out IntPtr r);
- public static uint Options(bool set){IntPtr p=Marshal.AllocHGlobal(256);try{
-  for(int i=0;i<256;i++)Marshal.WriteByte(p,i,0);
-  SHGetSetSettings(p,3,false);
-  if(set){Marshal.WriteInt32(p,Marshal.ReadInt32(p)|3);SHGetSetSettings(p,3,true);IntPtr r;SendMessageTimeout((IntPtr)65535,26,IntPtr.Zero,"ShellState",2,2000,out r);}
-  SHGetSetSettings(p,3,false);return ((uint)Marshal.ReadInt32(p))&3;
- }finally{Marshal.FreeHGlobal(p);}}
-}
-"@}
+ if(-not ('NucExplorerLiveV2' -as [type])){Add-Type -Path (Join-Path $PSScriptRoot 'native/explorer.cs')}
  $shellOptions=[NucExplorerLiveV2]::Options((-not $VerifyOnly))
  $shellHidden=($shellOptions -band 1) -ne 0
  $shellExtensions=($shellOptions -band 2) -ne 0
