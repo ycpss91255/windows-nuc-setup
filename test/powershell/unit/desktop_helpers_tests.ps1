@@ -16,10 +16,13 @@ $hidden=Join-Path $userDesktop 'hidden.txt';[IO.File]::WriteAllText($hidden,'vis
 $system=Join-Path $commonDesktop 'desktop.ini';[IO.File]::WriteAllText($system,'keep system');[IO.File]::SetAttributes($system,([IO.FileAttributes]::Hidden -bor [IO.FileAttributes]::System))
 $nested=Join-Path $userDesktop 'nested';[void][IO.Directory]::CreateDirectory($nested);[IO.File]::WriteAllText((Join-Path $nested 'child.txt'),'delete')
 $null=New-Item -ItemType Junction -Path (Join-Path $nested 'link') -Target $outside
-$script:writes=@()
-function Test-Path {param($Path,$LiteralPath,$PathType) if($Path -like 'HK*'){return $true};Microsoft.PowerShell.Management\Test-Path @PSBoundParameters}
+$script:writes=@();$script:createdKeys=@();$script:missingRegistry=$true
+function Test-Path {param($Path,$LiteralPath,$PathType) if($Path -like 'HK*'){return (-not $script:missingRegistry)};Microsoft.PowerShell.Management\Test-Path @PSBoundParameters}
+function New-Item {param($Path,[switch]$Force) if($Path -notlike 'HK*' -or -not $Force){throw 'unexpected desktop key creation'};$script:createdKeys+=@($Path)}
 function New-ItemProperty {param($Path,$Name,$Value,$PropertyType,[switch]$Force) if($Path -notlike 'HK*' -or $PropertyType -ne 'DWord' -or -not $Force){throw 'unexpected desktop registry mutation'};$script:writes+=@([pscustomobject]@{Path=$Path;Name=$Name;Value=$Value})}
 $r=Invoke-SetupDesktopSettings -ModuleRoot (Join-Path $root 'modules/desktop') -SourcePackageRoot $source -DesktopRoots @($userDesktop,$commonDesktop)
+$script:missingRegistry=$false
+Assert ($script:createdKeys.Count -eq 3) 'first-use missing Edge and desktop icon policy keys are created only through mocked registry boundary'
 Assert ($r.Success -and @($r.RemainingFiles).Count -eq 0 -and -not(Test-Path -LiteralPath (Join-Path $userDesktop 'plain.txt')) -and -not(Test-Path -LiteralPath $nested)) 'Desktop removes plain fixture files and nested folders'
 Assert ([IO.File]::ReadAllText((Join-Path $outside 'keep.txt')) -eq 'outside' -and [IO.File]::ReadAllText((Join-Path $source 'keep.txt')) -eq 'source') 'recursive cleanup removes junction itself without following outside target or deleting source package'
 Assert (-not(Test-Path -LiteralPath $hidden)) 'Hidden-only ordinary file is removed because Explorer displays hidden items'
