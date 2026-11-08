@@ -2,6 +2,7 @@
 # Definitions only: loading this file never creates accounts or applies a package.
 . (Join-Path $PSScriptRoot 'oobe_library.ps1')
 . (Join-Path $PSScriptRoot 'provisioning_asset_library.ps1')
+. (Join-Path $PSScriptRoot 'provisioning_launcher_library.ps1')
 function Test-InitProvisioningContext {
  param([string]$Sid,[int]$Build,[int]$ProductType,[bool]$Is64Bit,[bool]$IsWinPE,[int]$OobeInProgress,[int]$SetupInProgress,[bool]$OobeProcessInSession,[bool]$OobeApiSucceeded,[bool]$OobeComplete)
  return ($Sid -eq 'S-1-5-18' -and $Build -ge 22621 -and $ProductType -eq 1 -and $Is64Bit -and -not $IsWinPE -and $OobeApiSucceeded -and -not $OobeComplete)
@@ -128,7 +129,7 @@ function New-InitProvisioningStage {
  Assert-InitPlainPath $SourceRoot;Assert-InitPlainPath $StageRoot
  $null=Assert-InitProvisioningAsset -AssetRoot (Join-Path $SourceRoot 'modules/init/assets')
  if(Test-Path -LiteralPath $StageRoot){throw '已有 Init 續跑目錄，請從其 resume_init.cmd 繼續，不能覆寫。'}
- $files=@('modules/init/initialize_nuc.ps1','modules/init/oobe_library.ps1','modules/init/provisioning_library.ps1','modules/init/provisioning_asset_library.ps1','modules/init/assets/hide_oobe.xml','modules/init/assets/hide_oobe.ppkg','modules/init/assets/provenance.json')
+ $files=@('modules/init/initialize_nuc.ps1','modules/init/oobe_library.ps1','modules/init/provisioning_library.ps1','modules/init/provisioning_asset_library.ps1','modules/init/provisioning_launcher_library.ps1','modules/init/assets/hide_oobe.xml','modules/init/assets/hide_oobe.ppkg','modules/init/assets/provenance.json')
  $sshRoot=Join-Path $SourceRoot 'modules/ssh'
  Assert-InitPlainPath $sshRoot
  foreach($file in @(Get-ChildItem -LiteralPath $sshRoot -Recurse -File)){
@@ -189,7 +190,8 @@ function Invoke-InitOobeFlow {
   $state=New-InitProvisioningState $context.MachineGuid $context.ComputerName $SourceRoot $asset.PackageSHA256
   New-InitProvisioningStage $SourceRoot $StageRoot $state
  }
- Write-Host ('續跑入口（USB 拔除後仍可用）：'+(Join-Path $StageRoot 'resume_init.cmd')) -ForegroundColor Cyan
+ $launcher=New-InitPublicLauncher -StageRoot $StageRoot
+ Write-Host ('續跑入口（USB 拔除後仍可用）：'+$launcher) -ForegroundColor Cyan
  if($state.Phase -eq 'Prepared'){
   $name=Read-Host '新的本機管理員帳號'
   if(-not(Test-InitUserName -Name $name -ExistingNames @((Get-LocalUser).Name))){throw '帳號無效或已存在；不變更既有帳號。'}
@@ -242,4 +244,32 @@ namespace WindowsSetup { public static class InitOobeNative {
  $complete=$false
  $success=[WindowsSetup.InitOobeNative]::OOBEComplete([ref]$complete)
  return [pscustomobject]@{Succeeded=$success;Complete=$complete;ErrorCode=$(if($success){0}else{[Runtime.InteropServices.Marshal]::GetLastWin32Error()})}
+}
+function Invoke-InitProvisioningEntry {
+ param([string]$SourceRoot,[string]$StageRoot,[string]$ResumeStatePath,[string]$ExpectedUserSID)
+ $context=Get-InitProvisioningContext
+ if($ExpectedUserSID -and $ExpectedUserSID -ne $context.Sid){throw '提權後帳號已改變，請使用原帳號的管理員權限。'}
+ $statePath=Join-Path $StageRoot 'state.json'
+ if($ResumeStatePath -and [IO.Path]::GetFullPath($ResumeStatePath) -ine [IO.Path]::GetFullPath($statePath)){throw '續跑狀態位置不符，拒絕載入。'}
+ if($context.Sid -eq 'S-1-5-18'){
+  $runtime=if(Test-Path -LiteralPath $statePath){Join-Path $StageRoot 'runtime'}else{$SourceRoot}
+  Invoke-InitOobeFlow -SourceRoot $runtime -StageRoot $StageRoot
+  return $true
+ }
+ if(-not $ResumeStatePath -and -not(Test-Path -LiteralPath $statePath)){return $false}
+ if(-not $context.IsAdministrator){
+  if($ResumeStatePath){throw '請從公開 windows_setup_init.cmd 續跑並允許原帳號管理員權限。'}
+  return $false
+ }
+ Assert-InitProtectedDirectory $StageRoot
+ $asset=Assert-InitProvisioningAsset -AssetRoot (Join-Path $StageRoot 'runtime/modules/init/assets')
+ $state=Read-InitProvisioningState $statePath $context.MachineGuid $asset.PackageSHA256
+ if($context.Sid -ne $state.TargetSid){throw '目前帳號不是本輪建立的目標 SID，停止續跑。'}
+ if($state.Phase -eq 'ApplyPending'){
+  $installed=@(Get-ProvisioningPackage -AllInstalledPackages -ErrorAction Stop|Where-Object {$_.IsInstalled -and $_.PackageID -eq $state.PackageId -and $_.Version -eq $state.PackageVersion -and $_.PackageName -eq 'windows_setup_hide_oobe'})
+  if($installed.Count -ne 1){throw '初始設定包尚未確認完成；保留續跑紀錄，不假報初始化成功。'}
+  $state.Phase='AwaitingLogon';Save-InitProvisioningState $state $statePath
+ }
+ Invoke-InitSshContinuation $state $statePath $context (Join-Path $StageRoot 'runtime/modules/ssh/apply_ssh_settings.ps1')
+ return $true
 }
