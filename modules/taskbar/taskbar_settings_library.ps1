@@ -65,5 +65,7 @@ function Invoke-SetupTaskbarFinalize {
  if($current.StartLayoutFile -cne $LayoutPath){return [pscustomobject]@{Success=$false;Status='Obsolete';TemporaryLayoutPolicyRemoved=$false;Error='工作列政策已屬於其他配置，未解除。'}}
  Remove-ItemProperty $policy -Name LockedStartLayout -ErrorAction SilentlyContinue
  Remove-ItemProperty $policy -Name StartLayoutFile -ErrorAction SilentlyContinue
+ $after=Get-ItemProperty $policy -ErrorAction SilentlyContinue
+ if($null -ne $after.StartLayoutFile -or $null -ne $after.LockedStartLayout){return [pscustomobject]@{Success=$false;Status='Failed';TemporaryLayoutPolicyRemoved=$false;Error='工作列暫時政策讀回仍存在，未完成解除。'}}
  [pscustomobject]@{Success=$true;Status='Finalized';TemporaryLayoutPolicyRemoved=$true;FinalizedAt=(Get-Date).ToString('o')}
 }
