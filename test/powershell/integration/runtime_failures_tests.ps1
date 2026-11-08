@@ -99,7 +99,20 @@ foreach($case in @(@{Selected=0;Updates=@();Expected=$true},@{Selected=1;Updates
 # Mock task construction, not scheduling: prove run IDs and ownership reach desktop workers.
 function New-ScheduledTaskAction {param($Execute,$Argument);[pscustomobject]@{Arguments=$Argument}}
 function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel);[pscustomobject]@{UserId=$UserId}}
-foreach($relative in @('modules/display/apply_display_settings.ps1','modules/theme/apply_theme_settings.ps1','modules/desktop/desktop_icon_layout.ps1')){
+function Invoke-SetupGuiRole {param($PackageRoot,$Role,[switch]$Worker,[switch]$VerifyOnly,$VerificationRunId);$script:capturedGuiCall=[pscustomobject]@{Root=$PackageRoot;Role=$Role;Worker=[bool]$Worker;VerifyOnly=[bool]$VerifyOnly;RunId=$VerificationRunId}}
+foreach($role in @('Display','Theme')){
+ $relative='modules/'+$role.ToLowerInvariant()+'/apply_'+$role.ToLowerInvariant()+'_settings.ps1'
+ $tokens=$null;$parseErrors=$null;$entryAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root $relative),[ref]$tokens,[ref]$parseErrors)
+ $call=$entryAst.Find({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Invoke-SetupGuiRole'},$true)
+ $VerificationRunId=[guid]::NewGuid().ToString();$VerifyOnly=$true;$Worker=$true
+ $moduleLiteral="'"+(Split-Path (Join-Path $root $relative) -Parent).Replace("'","''")+"'"
+ & ([scriptblock]::Create($call.Extent.Text.Replace('$PSScriptRoot',$moduleLiteral)))|Out-Null
+ Assert ($script:capturedGuiCall.RunId -ceq $VerificationRunId) ('private GUI role receives exact verification run ID: '+$relative)
+ Assert ($script:capturedGuiCall.VerifyOnly -and $script:capturedGuiCall.Worker) ('private GUI role preserves Worker and VerifyOnly modes: '+$relative)
+ $identityParameters=@($call.CommandElements|Where-Object {$_ -is [Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -in @('UserSID','Computer','SessionId','ScriptPath')})
+ Assert ($script:capturedGuiCall.Root -ieq $root -and $script:capturedGuiCall.Role -ceq $role -and $identityParameters.Count -eq 0) ('private GUI role preserves portable package root and delegates current identity to fixed protected controller: '+$relative)
+}
+foreach($relative in @('modules/desktop/desktop_icon_layout.ps1')){
  $source=[IO.File]::ReadAllText((Join-Path $root $relative))
  $VerificationRunId=[guid]::NewGuid().ToString();$VerifyOnly=$true;$Mode='Verify';$workerPath='C:\fixture\worker.ps1'
  if($relative -notmatch 'desktop_icon_layout'){

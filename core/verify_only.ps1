@@ -17,5 +17,6 @@ if(-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
  Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)));exit
 }
 . (Resolve-NucPath 'update_stage_library.ps1')
+. (Resolve-NucPath 'gui_stage_library.ps1')
 . (Join-Path $PSScriptRoot 'verification_library.ps1')
 Invoke-SetupVerification -Hardware $hardware -DriverPackagePath $DriverPackagePath -VerificationRunId $VerificationRunId
