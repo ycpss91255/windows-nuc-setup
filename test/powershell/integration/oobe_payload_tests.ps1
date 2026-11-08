@@ -6,6 +6,11 @@ $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 Assert (Test-Path $scriptPath) 'read-only payload verifier exists'
 . $scriptPath
+$reviewedPath=Join-Path $root 'modules/init/assets/payload_baseline.json'
+Assert (Test-Path -LiteralPath $reviewedPath) 'release contains the independently reviewed payload baseline'
+$reviewed=[IO.File]::ReadAllText($reviewedPath)|ConvertFrom-Json
+Assert ($reviewed.SchemaVersion -eq 1 -and $reviewed.OnlySetting -ceq 'OOBE/Desktop/HideOobe=True' -and $reviewed.PackageSHA256 -ceq (Get-FileHash -LiteralPath (Join-Path $root 'modules/init/assets/hide_oobe.ppkg') -Algorithm SHA256).Hash) 'reviewed baseline binds the exact shipped package'
+Assert (@($reviewed.Files).Count -eq 7 -and (($reviewed.Files.Path|Sort-Object) -join '|') -ceq ((Get-OobePayloadPaths|Sort-Object) -join '|') -and @($reviewed.Files|Where-Object {$_.SHA256 -cnotmatch '^[A-F0-9]{64}$'}).Count -eq 0) 'reviewed baseline binds seven unique allowed XML files'
 Initialize-OobeWimReader
 Assert ([bool]('WindowsSetup.OobeWimReader' -as [type])) 'native adapter compiles without invoking WIM'
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('payload_test_'+[guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Path $temp|Out-Null
