@@ -28,8 +28,15 @@ try{
  $result=@{RunId=$stage.Context.RunId;Computer=$call.Computer;UserSID=$call.UserSid;Selected=0;Updates=@();CompletedAt='fixture'}
  $result|ConvertTo-Json|Set-Content (Join-Path $stage.Path 'WindowsUpdate-Result.json') -Encoding UTF8
  $r=Read-SetupUpdateResult -CommonDataRoot $common -LegacyRoot (Join-Path $d 'legacy') -UserSid $call.UserSid -Computer $call.Computer
- Assert ($r.RunId -eq $stage.Context.RunId) '結果只接受本機本帳號與受保護context本輪ID'
+  Assert ($r.RunId -eq $stage.Context.RunId) '結果只接受本機本帳號與受保護context本輪ID'
+ $result.SearchResultCode=4;$result|ConvertTo-Json|Set-Content (Join-Path $stage.Path 'WindowsUpdate-Result.json') -Encoding UTF8
+ Reject {Read-SetupUpdateResult -CommonDataRoot $common -LegacyRoot (Join-Path $d 'legacy') -UserSid $call.UserSid -Computer $call.Computer} '搜尋失敗的零項結果不可在總驗證變成成功' '搜尋'
+ $result.SearchResultCode=2
  $result.RunId=[guid]::NewGuid().ToString();$result|ConvertTo-Json|Set-Content (Join-Path $stage.Path 'WindowsUpdate-Result.json') -Encoding UTF8
  Reject {Read-SetupUpdateResult -CommonDataRoot $common -LegacyRoot (Join-Path $d 'legacy') -UserSid $call.UserSid -Computer $call.Computer} '舊輪成功結果不得混用' '身分或本輪'
 }finally{$stage.Lock.Dispose()}
 Assert (Test-Path (Join-Path $stage.Path 'Update-Worker.ps1')) '完成測試保留stage不遞迴刪除資料'
+$verifyText=Get-Content (Join-Path $root 'core/verification_library.ps1') -Raw
+Assert ($verifyText.Contains('Read-SetupUpdateResult')) '正式總驗證使用受保護context讀取更新結果'
+$auditText=Get-Content (Join-Path $root 'core/audit_nuc.ps1') -Raw
+Assert ($auditText.Contains('Read-SetupUpdateResult')) '稽核使用相同更新結果身分核對'
