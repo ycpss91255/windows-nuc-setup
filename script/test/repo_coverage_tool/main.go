@@ -13,6 +13,16 @@ import (
 )
 
 func run(args []string, out io.Writer) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "powershell-shard-plan":
+			return powershellShardPlan(args[1:], out)
+		case "powershell-shard-pack":
+			return powershellShardPack(args[1:], out)
+		case "powershell-shard-merge":
+			return powershellShardMerge(args[1:], out)
+		}
+	}
 	if len(args) > 0 && args[0] == "export-powershell" {
 		return exportPowerShell(args[1:], out)
 	}
