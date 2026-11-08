@@ -67,10 +67,10 @@ public static class ManagedNativeTests {
   var start=NucTerminalHotkey.CreateStartInfo("terminal fixture.exe","home with spaces");Assert(start.UseShellExecute && start.FileName=="terminal fixture.exe" && start.WorkingDirectory=="home with spaces","production launch options preserve dynamic paths without starting a process");
  }
  static void DisplayCases(){
-  var api=new NUC8Display.Display.NativeApi();int changes=0,freed=0,gets=0,sets=0;bool missing=false;
-  api.Aware=delegate{return true;};api.Dpi=delegate{return 96;};
-  api.Enumerate=delegate(string name,int index,ref NUC8Display.Mode mode){Assert(mode.dmSize==220,"display initializes native mode size");if(missing)return false;if(index<0){mode.dmPelsWidth=changes>0?1920U:1280U;mode.dmPelsHeight=changes>0?1080U:720U;return true;}if(index>1)return false;mode.dmPelsWidth=index==1?1920U:1280U;mode.dmPelsHeight=index==1?1080U:720U;return true;};
-  api.Change=delegate(ref NUC8Display.Mode mode,uint flags){Assert(mode.dmFields==0x180000 && mode.dmPelsWidth==1920 && mode.dmPelsHeight==1080,"display only changes requested dimensions");if(flags==1)changes++;return 0;};
+  var api=new NUC8Display.Display.NativeApi();int changes=0,freed=0,gets=0,sets=0,dpiReads=0,status=0;bool missing=false,afterUnavailable=false,unchanged=false;
+  api.Aware=delegate{return true;};api.Dpi=delegate{dpiReads++;return 96;};
+  api.Enumerate=delegate(string name,int index,ref NUC8Display.Mode mode){Assert(mode.dmSize==220,"display initializes native mode size");if(missing)return false;if(index<0){mode.dmPelsWidth=changes>0 && !unchanged?1920U:1280U;mode.dmPelsHeight=changes>0 && !unchanged?1080U:720U;return !(changes>0 && afterUnavailable);}if(index>1)return false;mode.dmPelsWidth=index==1?1920U:1280U;mode.dmPelsHeight=index==1?1080U:720U;return true;};
+  api.Change=delegate(ref NUC8Display.Mode mode,uint flags){Assert(mode.dmFields==0x180000 && mode.dmPelsWidth==1920 && mode.dmPelsHeight==1080,"display only changes requested dimensions");if(flags==1){changes++;return status;}return 0;};
   api.Allocate=Marshal.AllocHGlobal;api.Free=delegate(IntPtr p){freed++;Marshal.FreeHGlobal(p);};
   api.Buffer=delegate(uint flags,out uint paths,out uint modes){Assert(flags==2,"display queries active paths only");paths=2;modes=1;return 0;};
   api.Query=delegate(uint flags,ref uint paths,IntPtr pathData,ref uint modes,IntPtr modeData,IntPtr topology){for(int n=0;n<2;n++){Marshal.WriteInt32(pathData,n*72,11);Marshal.WriteInt32(pathData,n*72+4,12);Marshal.WriteInt32(pathData,n*72+8,13);}return 0;};
@@ -79,6 +79,17 @@ public static class ManagedNativeTests {
   var read=NUC8Display.Display.Read(api);Assert(read[0]==1280 && read[1]==720 && read[2]==144 && freed==4 && gets==1,"display reads and deduplicates physical source without applying");
   var scales=NUC8Display.Display.NativeScales(true,api);Assert(scales.Length==1 && scales[0]==100 && sets==1 && gets==3 && freed==8,"native DPI applies and verifies preset then frees buffers");
   var changed=NUC8Display.Display.Apply(api);Assert(changed[0]==1280 && changed[1]==720 && changed[2]==1920 && changed[3]==1080 && changes==1 && changed[5]==96,"display tests applies and reads back through fake native boundary");
+  changes=0;afterUnavailable=true;int priorDpi=dpiReads;Exception displayError=null;
+  try{NUC8Display.Display.Apply(api);}catch(Exception error){displayError=error;}
+  Console.WriteLine("PROBE after Enum: rejected="+(displayError!=null)+" dpiReads="+dpiReads+" expectedUnchanged="+priorDpi);
+  Assert(displayError!=null && displayError.Message.Contains("after change") && dpiReads==priorDpi,"failed after Enum cannot reuse populated desired dimensions or read DPI as success");
+  afterUnavailable=false;changes=0;unchanged=true;status=1;displayError=null;
+  try{NUC8Display.Display.Apply(api);}catch(Exception error){displayError=error;}
+  Assert(displayError!=null && displayError.Message.Contains("manual restart") && dpiReads==priorDpi,"DISP_CHANGE_RESTART requires manual restart instead of returning completed apply");
+  changes=0;status=0;displayError=null;
+  try{NUC8Display.Display.Apply(api);}catch(Exception error){displayError=error;}
+  Assert(displayError!=null && displayError.Message.Contains("1920x1080") && dpiReads==priorDpi,"native success code cannot conceal unchanged 1280x720 active mode");
+  unchanged=false;changes=0;
   missing=true;Throws(delegate{NUC8Display.Display.Read(api);},"unavailable display read rejected",typeof(Exception));Throws(delegate{NUC8Display.Display.Apply(api);},"unavailable display apply rejected",typeof(Exception));missing=false;
   api.Change=delegate(ref NUC8Display.Mode mode,uint flags){return flags==2?-1:0;};Throws(delegate{NUC8Display.Display.Apply(api);},"failed native test prevents applying mode",typeof(Exception));
   api.Change=delegate(ref NUC8Display.Mode mode,uint flags){return flags==2?0:-2;};Throws(delegate{NUC8Display.Display.Apply(api);},"failed native change rejected",typeof(Exception));
