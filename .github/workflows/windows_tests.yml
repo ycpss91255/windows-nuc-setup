@@ -10,27 +10,25 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 9da438718c5e8e8e9345d0740db3b2567d68121f
+          ref: 93f7e5095b7d0d6f8c2a979698f812baebc3df6d
           persist-credentials: false
-      - name: 僅診斷原始137斷言的前置拒絕位置
+      - name: 原生內建帳號下驗證原始完整152斷言
         shell: powershell
         run: |
           $ErrorActionPreference='Stop'
           $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
           $kind=if($sid -eq 'S-1-5-18'){'System'}elseif($sid -match '-500$'){'BuiltinAdministrator'}else{'StandardUser'}
           Write-Host ('NativeIdentityKind='+$kind+';Is64Bit='+[Environment]::Is64BitProcess)
+          if($kind -ne 'BuiltinAdministrator'){throw 'This proof requires the native BuiltinAdministrator runner.'}
+          $sha=(& git rev-parse HEAD).Trim()
+          if($LASTEXITCODE -ne 0 -or $sha -cne '93f7e5095b7d0d6f8c2a979698f812baebc3df6d'){throw 'Source identity mismatch.'}
           $path=Join-Path $PWD 'test/powershell/integration/native_process_owner_tests.ps1'
-          $source=[IO.File]::ReadAllText($path)
-          $needle=' Assert ($errorRecord -and ($errorRecord.Exception.Message'
-          $insert=@'
-           if($errorRecord){
-            $message=$errorRecord.Exception.Message
-            $reason=if($message -like '*SYSTEM*'){'ForbiddenNativeIdentity'}elseif($message -like '*unexpected preflight*'){'UnexpectedMockRead'}else{'Other'}
-            Microsoft.PowerShell.Utility\Write-Host ('@@DIAG@@'+(@{Case=$case.Name;Reason=$reason;Exception=$errorRecord.Exception.GetType().FullName;File=[IO.Path]::GetFileName($errorRecord.InvocationInfo.ScriptName);Line=$errorRecord.InvocationInfo.ScriptLineNumber}|ConvertTo-Json -Compress))
-           }
-          '@
-          if(-not $source.Contains($needle)){throw 'Diagnostic insertion anchor missing'}
-          $source=$source.Replace($needle,($insert+"`r`n"+$needle))
-          [IO.File]::WriteAllText($path,$source,[Text.UTF8Encoding]::new($true))
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $path
-          if($LASTEXITCODE -ne 0){throw 'Original unchanged assertion failed; diagnostic only, not a GREEN result.'}
+          $lines=@(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $path)
+          $code=$LASTEXITCODE
+          $lines|ForEach-Object {Write-Host $_}
+          $assertions=@($lines|Where-Object {$_ -like '@@ASSERT@@*'})
+          $failed=@($assertions|Where-Object {$_ -like '*"Passed":false*'})
+          Write-Host ('SourceCommit='+$sha+';Assertions='+$assertions.Count+';Failed='+$failed.Count+';ExitCode='+$code)
+          if($code -ne 0 -or $assertions.Count -ne 152 -or $failed.Count -ne 0){throw 'The unchanged complete owner suite failed.'}
+          & git diff --exit-code
+          if($LASTEXITCODE -ne 0){throw 'The proof changed tracked source files.'}
