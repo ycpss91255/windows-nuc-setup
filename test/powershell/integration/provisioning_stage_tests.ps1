@@ -21,7 +21,7 @@ $rejected=$false;try{New-InitProvisioningStage $source $stage $initial}catch{$re
 Assert ($rejected -and -not(Test-Path $stage)) 'asset failure causes no stage creation'
 $script:assetOK=$true
 New-InitProvisioningStage $source $stage $initial
-Assert ($script:protected -and (Test-Path (Join-Path $stage 'runtime/modules/ssh/custom_hosts_sync/ssh_readme.md'))) 'stage contains nested SSH dependencies after ACL protection'
+Assert ($script:protected -and -not(Test-Path (Join-Path $stage 'runtime/modules/ssh'))) 'new account-only Init stage does not copy SSH implementation'
 Assert (-not(Test-Path (Join-Path $stage 'runtime/modules/ssh/custom_hosts_sync/runtime.json'))) 'source machine state is never staged'
 $launcher=[IO.File]::ReadAllText((Join-Path $stage 'resume_init.cmd'))
 Assert ($launcher.Contains('%~dp0') -and -not $launcher.Contains($source)) 'resume launcher uses its own location, never original USB'
