@@ -9,12 +9,16 @@ Assert ([bool](Get-Command Save-InitProvisioningState -ErrorAction SilentlyConti
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('init_state_'+[guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Path $temp|Out-Null
 $path=Join-Path $temp 'state.json'
 $script:allow=$false
+$script:fileProtected=$false
+function Protect-InitStateFile {param($Path) $script:fileProtected=$true}
+function Assert-InitProtectedFile {param($Path) if(-not $script:fileProtected){throw 'temporary file owner was not protected'}}
 function Assert-InitProtectedDirectory {param($Path) if(-not $script:allow){throw 'synthetic ACL rejection'}}
 $state=New-InitProvisioningState 'fixture' 'TEST' 'Q:\source' ('b'*64)
 $rejected=$false;try{Save-InitProvisioningState $state $path}catch{$rejected=$true}
 Assert ($rejected -and -not(Test-Path -LiteralPath $path)) 'unsafe ACL prevents any state write'
 $script:allow=$true
 Save-InitProvisioningState $state $path
+Assert $script:fileProtected 'temporary state file owner and ACL are explicitly protected before publishing'
 $saved=[IO.File]::ReadAllText($path)|ConvertFrom-Json
 Assert ($saved.MachineGuid -eq 'fixture' -and $saved.Phase -eq 'Prepared') 'protected state serialized without credentials'
 $original=[IO.File]::ReadAllText($path)
