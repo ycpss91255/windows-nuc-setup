@@ -1,11 +1,26 @@
 ﻿#Requires -Version 5.1
+function Get-SetupSystemIconNames {
+ $shell=New-Object -ComObject Shell.Application
+ $desktop=$shell.NameSpace(0)
+ if($null -eq $desktop){throw '無法辨識四個系統圖示名稱。'}
+ foreach($id in @('{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}','{20D04FE0-3AEA-1069-A2D8-08002B30309D}','{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}','{645FF040-5081-101B-9F08-00AA002F954E}')){
+  $item=$desktop.ParseName(('::'+$id))
+  if($null -eq $item -or [string]::IsNullOrWhiteSpace($item.Name)){throw '無法辨識四個系統圖示名稱。'}
+  [string]$item.Name
+ }
+}
+function Assert-SetupSystemIconSet {
+ param($Icons,[string[]]$Names)
+ if(@($Icons).Count -ne 4 -or @($Names).Count -ne 4 -or @($Names|Select-Object -Unique).Count -ne 4){throw '目前桌面不是四個唯一系統圖示。'}
+ foreach($name in $Names){if(@($Icons|Where-Object Name -eq $name).Count -ne 1){throw ('找不到唯一系統圖示：'+$name)}}
+}
 function Invoke-SetupIconsSettings {
  param([Parameter(Mandatory=$true)][string]$ModuleRoot,[ValidateSet('Save','Load','Verify')][string]$Mode='Load',$Reference)
  if(-not ('NUC8Icons.Desktop' -as [type])){Add-Type -Path (Join-Path $ModuleRoot 'native/desktop_icons.cs')}
  $snapshot=[NUC8Icons.Desktop]::Capture()
 
  if($Mode -eq 'Save'){
-  if($snapshot.Icons.Count -ne 4){throw ('目前桌面不是四個圖示，請先確認：'+$snapshot.Icons.Count)}
+  Assert-SetupSystemIconSet -Icons $snapshot.Icons -Names @(Get-SetupSystemIconNames)
   $reference=[ordered]@{Width=$snapshot.Width;Height=$snapshot.Height;Icons=@($snapshot.Icons|Select-Object Name,X,Y);SavedAt=(Get-Date).ToString('o')}
 
   $result=[ordered]@{Success=$true;Mode=$Mode;Reference=$reference}
