@@ -35,6 +35,7 @@ namespace WindowsSetup {
    IPAddress ip;if(!IPAddress.TryParse(value,out ip) || ip.AddressFamily!=family || IPAddress.IsLoopback(ip) || ip.Equals(IPAddress.Any) || ip.Equals(IPAddress.IPv6Any) || ip.IsIPv6Multicast || (family==AddressFamily.InterNetwork && ip.GetAddressBytes()[0]>=224))throw new InvalidOperationException("Invalid publication address.");
    return ip;
   }
+  static bool SameAddress(string a,string b,AddressFamily family){var x=Address(a,family);var y=Address(b,family);if(x==null || y==null)return x==null && y==null;byte[] xb=x.GetAddressBytes(),yb=y.GetAddressBytes();for(int i=0;i<xb.Length;i++)if(xb[i]!=yb[i])return false;return true;}
   static void Validate(Advertisement ad){
    if(ad==null || ad.InterfaceIndex==0 || ad.Port!=22 || ad.HostName==null || !ad.HostName.EndsWith(".local",StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Invalid fixed publication schema.");
    string label=ad.HostName.Substring(0,ad.HostName.Length-6);
@@ -71,7 +72,7 @@ namespace WindowsSetup {
    internal void Start(){
     instance=api.Construct(ad);if(instance==IntPtr.Zero)throw new InvalidOperationException("Cannot construct native publication.");
     var actual=api.Read(instance);
-    if(!SameName(actual.HostName,ad.HostName) || !SameName(actual.ServiceName,ad.ServiceName) || actual.Port!=22 || actual.IPv4!=ad.IPv4 || actual.IPv6!=ad.IPv6)throw new InvalidOperationException("Native constructor readback differs.");
+    if(!SameName(actual.HostName,ad.HostName) || !SameName(actual.ServiceName,ad.ServiceName) || actual.Port!=22 || !SameAddress(actual.IPv4,ad.IPv4,AddressFamily.InterNetwork) || !SameAddress(actual.IPv6,ad.IPv6,AddressFamily.InterNetworkV6))throw new InvalidOperationException("Native constructor readback differs.");
     callback=OnCompleted;root=GCHandle.Alloc(this);
     request=Marshal.AllocHGlobal(Marshal.SizeOf(typeof(Request)));cancel=Marshal.AllocHGlobal(IntPtr.Size);Marshal.WriteIntPtr(cancel,IntPtr.Zero);
     var r=new Request{Version=1,InterfaceIndex=ad.InterfaceIndex,Instance=instance,Callback=Marshal.GetFunctionPointerForDelegate(callback),Context=IntPtr.Zero,Credentials=IntPtr.Zero,Unicast=0};Marshal.StructureToPtr(r,request,false);
@@ -92,7 +93,7 @@ namespace WindowsSetup {
      lock(gate){
       status=result;
       if(operation==0){
-       if(result==0){if(copy==IntPtr.Zero || !SameName(api.Read(copy).HostName,ad.HostName)){status=13;error="Native registration returned another hostname or no instance.";}else registered=true;}
+       if(result==0){registered=true;if(copy==IntPtr.Zero || !SameName(api.Read(copy).HostName,ad.HostName)){status=13;error="Native registration returned another hostname or no instance.";}else registered=true;}
        else{registered=false;error="Native registration callback failed: "+result;}
       }else{if(result==0)registered=false;else error="Native deregistration callback failed: "+result;}
      }
