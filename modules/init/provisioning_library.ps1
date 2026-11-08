@@ -90,3 +90,21 @@ function Invoke-InitSshContinuation {
  Save-InitProvisioningState -State $State -StatePath $StatePath
  Write-Host 'Init 完成：正式帳號與 SSH 已確認。' -ForegroundColor Green
 }
+function Invoke-InitProvisioningApply {
+ param($State,[string]$StatePath,[string]$AssetRoot,[scriptblock]$Confirm)
+ if($State.Phase -notin @('AccountReady','AwaitingConsent','ApplyPending','AwaitingLogon')){throw '未確認正式帳號，不能套用初始設定包。'}
+ $asset=Assert-InitProvisioningAsset -AssetRoot $AssetRoot
+ Assert-InitProvisioningState -State $State -MachineGuid $State.MachineGuid -PackageHash $asset.PackageSHA256
+ $user=Get-LocalUser -SID $State.TargetSid -ErrorAction Stop
+ $members=@(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction Stop)
+ if(-not $user -or -not $user.Enabled -or $user.SID.Value -ne $State.TargetSid -or $user.Name -cne $State.TargetUserName -or -not @($members|Where-Object {$_.SID.Value -eq $State.TargetSid}).Count){throw '正式帳號讀回驗證失敗，不套用初始設定包。'}
+ $installed=@(Get-ProvisioningPackage -AllInstalledPackages -ErrorAction Stop|Where-Object {$_.IsInstalled -and $_.PackageID -eq $State.PackageId -and $_.Version -eq $State.PackageVersion -and $_.PackageName -eq 'windows_setup_hide_oobe'})
+ if($installed.Count -eq 1){$State.Phase='AwaitingLogon';Save-InitProvisioningState $State $StatePath;return}
+ $State.Phase='ApplyPending';Save-InitProvisioningState $State $StatePath
+ Write-Host '下一步會完成初始設定；Windows 可能立即重新啟動。請先保存其他工作。' -ForegroundColor Yellow
+ if($null -eq $Confirm -or (& $Confirm) -ne $true){$State.Phase='AwaitingConsent';Save-InitProvisioningState $State $StatePath;Write-Host '已取消套用；帳號與無密碼續跑紀錄保留。';return}
+ Install-ProvisioningPackage -PackagePath (Join-Path $AssetRoot 'hide_oobe.ppkg') -QuietInstall -ErrorAction Stop|Out-Null
+ $installed=@(Get-ProvisioningPackage -AllInstalledPackages -ErrorAction Stop|Where-Object {$_.IsInstalled -and $_.PackageID -eq $State.PackageId -and $_.Version -eq $State.PackageVersion -and $_.PackageName -eq 'windows_setup_hide_oobe'})
+ if($installed.Count -ne 1){throw '尚未確認設定包完成；保留 Pending，請重新執行以讀回狀態。'}
+ $State.Phase='AwaitingLogon';$State.LastErrorCode='';Save-InitProvisioningState $State $StatePath
+}
