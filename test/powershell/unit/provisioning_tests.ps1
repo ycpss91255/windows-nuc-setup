@@ -6,10 +6,10 @@ $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 Assert (Test-Path -LiteralPath $library) 'OOBE provisioning has a safely loadable implementation'
 . $library
-$good=@{Sid='S-1-5-18';Build=22631;ProductType=1;Is64Bit=$true;IsWinPE=$false;OobeInProgress=1;SetupInProgress=1;OobeProcessInSession=$true}
+$good=@{Sid='S-1-5-18';Build=22631;ProductType=1;Is64Bit=$true;IsWinPE=$false;OobeInProgress=1;SetupInProgress=1;OobeProcessInSession=$true;OobeApiSucceeded=$true;OobeComplete=$false}
 Assert (Test-InitProvisioningContext @good) 'Windows 11 client SYSTEM in actual OOBE is accepted'
-foreach($field in @('Sid','Build','ProductType','Is64Bit','IsWinPE','OobeInProgress','SetupInProgress','OobeProcessInSession')){
- $bad=$good.Clone();$bad[$field]=switch($field){Sid {'S-1-5-21-1-2-3-1001'} Build {19045} ProductType {3} IsWinPE {$true} default {0}}
+foreach($field in @('Sid','Build','ProductType','Is64Bit','IsWinPE','OobeApiSucceeded','OobeComplete')){
+ $bad=$good.Clone();$bad[$field]=switch($field){Sid {'S-1-5-21-1-2-3-1001'} Build {19045} ProductType {3} IsWinPE {$true} OobeComplete {$true} default {0}}
  Assert (-not(Test-InitProvisioningContext @bad)) ('reject context mismatch: '+$field)
 }
 $state=New-InitProvisioningState -MachineGuid 'test-machine' -ComputerName 'TEST' -SourceRoot 'Q:\arbitrary\setup' -PackageHash ('a'*64)

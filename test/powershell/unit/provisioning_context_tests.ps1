@@ -5,6 +5,8 @@ $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 Assert ([bool](Get-Command Get-InitProvisioningContext -ErrorAction SilentlyContinue)) 'context collector reads registry and session ownership'
 $script:sid='S-1-5-18';$script:session=7;$script:otherSession=$false
+$script:apiSuccess=$true;$script:apiComplete=$false
+function Invoke-InitOobeCompleteNative { [pscustomobject]@{Succeeded=$script:apiSuccess;Complete=$script:apiComplete;ErrorCode=5} }
 function Get-InitIdentityContext { @{Sid=$script:sid;IsAdministrator=$true;SessionId=7} }
 function Get-ItemProperty {param($LiteralPath,$Path,$ErrorAction)
  $p=if($LiteralPath){$LiteralPath}else{$Path}
@@ -30,4 +32,10 @@ Assert (-not (Get-InitProvisioningContext).OobeProcessInSession) 'OOBE process f
 $script:sid='S-1-5-21-1-2-3-1001'
 $context=Get-InitProvisioningContext
 Assert ($context.DesktopOwned -and $context.RegisteredProfile -eq $env:USERPROFILE) 'formal profile comes from SID registry and Explorer owner'
+$script:apiSuccess=$false
+$context=Get-InitProvisioningContext
+Assert (-not $context.OobeApiSucceeded) 'native BOOL failure cannot be treated as incomplete OOBE'
+$script:apiSuccess=$true;$script:apiComplete=$true
+$context=Get-InitProvisioningContext
+Assert ($context.OobeApiSucceeded -and $context.OobeComplete) 'native success and completed output are distinct facts'
 Write-Host ('ALL PASS: '+$script:count+' collector command-mock assertions')
