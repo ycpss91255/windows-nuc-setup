@@ -9,7 +9,7 @@ Assert (Test-Path -LiteralPath $library) 'Theme has a named original-source leaf
 Add-Type -TypeDefinition 'using System;using System.Text;public static class NUC8Theme{public static bool ColorOk=true,WallpaperOk=true,ReadOk=true;public static uint Color;public static string Wallpaper="";public static int SetColorCalls,SetWallpaperCalls,NotifyCalls,Reads,LightReads;public static bool SetSysColors(int count,int[] elements,uint[] colors){SetColorCalls++;if(count!=1||elements[0]!=1||colors[0]!=0)throw new Exception("wrong colors");return ColorOk;}public static bool SystemParametersInfo(uint action,uint param,string value,uint flags){SetWallpaperCalls++;if(action!=20||param!=0||value!=""||flags!=3)throw new Exception("wrong wallpaper");if(WallpaperOk)Wallpaper="";return WallpaperOk;}public static IntPtr SendMessageTimeout(IntPtr hwnd,uint msg,IntPtr wp,string lp,uint flags,uint timeout,out IntPtr result){NotifyCalls++;result=IntPtr.Zero;return IntPtr.Zero;}public static int[] TaskbarColor(){Reads++;if(LightReads>0){LightReads--;return new int[]{240,240,240};}return new int[]{21,21,21};}public static bool ReadWallpaper(uint action,uint param,StringBuilder value,uint flags){if(ReadOk)value.Append(Wallpaper);return ReadOk;}public static uint GetSysColor(int index){return Color;}}'
 $personalize='HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 $wallpapers='HKCU:\Software\Microsoft\Windows\CurrentVersion\explorer\Wallpapers';$cloud='HKCU:\Software\Policies\Microsoft\Windows\CloudContent'
-$script:keys=@{};$script:values=@{AppsUseLightTheme=0;SystemUsesLightTheme=0};$script:writes=@();$script:created=@();$script:stopped=@();$script:started=0
+$script:keys=@{};$script:values=@{AppsUseLightTheme=0;SystemUsesLightTheme=0};$script:writes=@();$script:created=@();$script:stopped=@();$script:started=0;$script:startedPaths=@()
 $session=[Diagnostics.Process]::GetCurrentProcess().SessionId
 $script:processes=@([pscustomobject]@{SessionId=$session;Name='current'},[pscustomobject]@{SessionId=($session+10);Name='other'})
 function Test-Path {param($Path) if($Path -notin @($personalize,$wallpapers,$cloud)){throw 'unexpected theme registry path'};$script:keys.ContainsKey($Path)}
@@ -19,7 +19,7 @@ function Set-ItemProperty {param($Path,$Name,$Value) if(($Path -ne 'HKCU:\Contro
 function Get-ItemProperty {param($Path) if($Path -ne $personalize){throw 'unexpected theme verification read'};[pscustomobject]$script:values}
 function Get-Process {param($Name,$ErrorAction) if($Name -ne 'explorer'){throw 'unexpected process lookup'};$script:processes}
 function Stop-Process {param([Parameter(ValueFromPipeline=$true)]$InputObject,[switch]$Force) process{if(-not $Force -or $InputObject.SessionId -ne $session){throw 'unsafe theme Explorer stop'};$script:stopped+=@($InputObject.Name);$script:processes=@($script:processes|Where-Object SessionId -ne $session)}}
-function Start-Process {param($FilePath) if($FilePath -ne 'explorer.exe'){throw 'unexpected theme process'};$script:started++}
+function Start-Process {param($FilePath) if($FilePath -notin @('explorer.exe',$actualExplorer)){throw 'unexpected theme process'};$script:startedPaths+=@($FilePath);$script:started++}
 function Start-Sleep {param($Seconds,$Milliseconds)}
 $module=Join-Path $root 'modules/theme'
 $r=Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly
@@ -32,7 +32,13 @@ $script:values.AppsUseLightTheme=1;Reject {Invoke-SetupThemeSettings -ModuleRoot
 $r=Invoke-SetupThemeSettings -ModuleRoot $module
 Assert ($r.Success -and -not $r.ExplorerReloaded -and $script:writes.Count -eq 6 -and $script:created.Count -eq 3 -and [NUC8Theme]::SetColorCalls -eq 1 -and [NUC8Theme]::SetWallpaperCalls -eq 1 -and [NUC8Theme]::NotifyCalls -eq 1) 'Theme apply retains six approved HKCU preferences and original native application'
 Assert ($script:values.AppsUseLightTheme -eq 0 -and $script:values.SystemUsesLightTheme -eq 0 -and $script:values.BackgroundType -eq 1 -and $script:values.DisableSpotlightCollectionOnDesktop -eq 1) 'Theme applies dark modes solid-color background and desktop Spotlight preference'
-[NUC8Theme]::LightReads=1;$r=Invoke-SetupThemeSettings -ModuleRoot $module
+[NUC8Theme]::LightReads=1
+$actualExplorer=Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::Windows)) 'explorer.exe'
+$poison=Join-Path ([IO.Path]::GetTempPath()) ('theme_explorer_poison_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($poison)
+[IO.File]::WriteAllText((Join-Path $poison 'explorer.exe'),'inert same-name fixture; never executed')
+$oldWindows=$env:SystemRoot;$oldPath=$env:PATH;$oldLocation=Get-Location
+try{$env:SystemRoot=$poison;$env:PATH=$poison;Set-Location -LiteralPath $poison;$r=Invoke-SetupThemeSettings -ModuleRoot $module}finally{$env:SystemRoot=$oldWindows;$env:PATH=$oldPath;Set-Location -LiteralPath $oldLocation.Path}
+Assert ($script:startedPaths.Count -eq 1 -and $script:startedPaths[0] -ceq $actualExplorer) 'Explorer fallback uses the OS Windows folder despite poisoned CWD PATH and SystemRoot'
 Assert ($r.Success -and $r.ExplorerReloaded -and ($script:stopped -join ',') -ceq 'current' -and $script:started -eq 1 -and @($script:processes|Where-Object Name -eq 'other').Count -eq 1) 'only current desktop Explorer reloads when taskbar has not accepted dark mode'
 [NUC8Theme]::LightReads=100;$before=[NUC8Theme]::Reads;Reject {Invoke-SetupThemeSettings -ModuleRoot $module} '即時驗證' 'persistent light taskbar cannot be falsely accepted'
 Assert (([NUC8Theme]::Reads-$before) -eq 21) 'taskbar retry is bounded to twenty native reads after the first sample'
