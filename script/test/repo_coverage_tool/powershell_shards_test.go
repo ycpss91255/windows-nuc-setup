@@ -360,3 +360,13 @@ func TestPowerShellShardInstrumentedCommands(t *testing.T) {
 		t.Fatal("real commands did not emit Go runtime counters")
 	}
 }
+
+func TestPowerShellShardPackRejectsUnboundNativeContext(t *testing.T) {
+	root, manifest, sha := shardCLIFixture(t)
+	dir := filepath.Join(t.TempDir(), "unbound")
+	writeShardCLIProof(t, root, dir, 123, true)
+	args := append(shardCLIArgs(root, manifest, sha), "--shard-index", "0", "--evidence-dir", dir)
+	if err := powershellShardPack(args, &bytes.Buffer{}); err == nil {
+		t.Fatal("native worker without actual case/run context must not be relabelled into a current shard")
+	}
+}
