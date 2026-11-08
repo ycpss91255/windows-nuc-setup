@@ -55,7 +55,7 @@ New-ItemProperty $policy -Name LockedStartLayout -Value 1 -PropertyType DWord -F
  $bindingOK=($null -eq $policy.StartLayoutFile -or $policy.StartLayoutFile -ceq $LayoutPath) -and ($null -eq $runOnce -or ($ExpectedFinalizeCommand -and $runOnce -ceq $ExpectedFinalizeCommand))
  $configured=($search -eq 0 -and $advancedValues.ShowTaskViewButton -eq 0 -and $widgetsValue -eq 0 -and $layoutOK)
  $success=if($VerifyOnly){$configured -and $bindingOK -and -not $pending}else{$true}
- [pscustomobject]@{Success=[bool]$success;Configured=[bool]$configured;SearchPolicyMode=$search;TaskbarDa=$advancedValues.TaskbarDa;WidgetsPolicy=$widgetsValue;ShowTaskViewButton=$advancedValues.ShowTaskViewButton;TaskbarLayout=$LayoutPath;PinnedDesktopApp='MSEdge';RequiresNextSignIn=[bool]$(if($VerifyOnly){$pending}else{$true});Error=$(if(-not $success){'工作列設定尚未完成或暫時政策與本輪配置不符。'}else{''});CheckedAt=(Get-Date).ToString('o')}
+ [pscustomobject]@{Success=[bool]$success;Status=$(if(-not $VerifyOnly){'Applied'}elseif($success){'Confirmed'}elseif($configured -and $bindingOK -and $pending){'PendingSignIn'}else{'Failed'});BindingMatches=[bool]$bindingOK;Configured=[bool]$configured;SearchPolicyMode=$search;TaskbarDa=$advancedValues.TaskbarDa;WidgetsPolicy=$widgetsValue;ShowTaskViewButton=$advancedValues.ShowTaskViewButton;TaskbarLayout=$LayoutPath;PinnedDesktopApp='MSEdge';RequiresNextSignIn=[bool]$(if($VerifyOnly){$pending}else{$true});Error=$(if(-not $success){'工作列設定尚未完成或暫時政策與本輪配置不符。'}else{''});CheckedAt=(Get-Date).ToString('o')}
 }
 function Invoke-SetupTaskbarFinalize {
  param([Parameter(Mandatory=$true)][string]$LayoutPath)
