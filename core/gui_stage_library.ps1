@@ -195,7 +195,7 @@ function Read-SetupGuiResult {
 }
 function Get-SetupGuiIdentity {
  $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
- [pscustomobject]@{UserSID=$identity.User.Value;Computer=$env:COMPUTERNAME;SessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId;CommonDataRoot=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData);PowerShell=(Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe')}
+ [pscustomobject]@{UserSID=$identity.User.Value;Computer=[Environment]::MachineName;SessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId;CommonDataRoot=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData);PowerShell=(Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'WindowsPowerShell/v1.0/powershell.exe')}
 }
 function Get-SetupGuiDesktopSession {
  param($Scope)
