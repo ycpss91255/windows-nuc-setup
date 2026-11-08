@@ -1,10 +1,18 @@
 ﻿#Requires -Version 5.1
 function Get-InitRoute {
- param([string]$Sid,[string]$ImageState,[bool]$IsAdministrator,[bool]$DesktopOwned)
+ param([string]$Sid,[string]$ImageState,[bool]$IsAdministrator,[bool]$DesktopOwned,$ModeFacts)
  if($Sid -eq 'S-1-5-18'){return 'OobeProvisioning'}
+ if($null -ne $ModeFacts){
+  if($ModeFacts.ReadSucceeded -isnot [bool] -or -not $ModeFacts.ReadSucceeded){return 'RejectUnknownSetupState'}
+  foreach($flag in @('IsWinPE','OobeApiSucceeded','OobeComplete','OobeProcessInSession','SetupProcessInSession','ProfileMatches','LocalBuiltin')){if($ModeFacts.$flag -isnot [bool]){return 'RejectUnknownSetupState'}}
+  if($ModeFacts.Build -lt 22621 -or $ModeFacts.ProductType -ne 1 -or $ModeFacts.IsWinPE -or -not $ModeFacts.OobeApiSucceeded -or $ModeFacts.SetupProcessInSession -or $ModeFacts.OobeProcessInSession -or -not $ModeFacts.ProfileMatches -or -not $DesktopOwned){return 'RejectUnknownSetupState'}
+  if($ImageState -eq 'IMAGE_STATE_COMPLETE' -and $ModeFacts.OobeComplete -and $Sid -notmatch '-500$'){if(-not $IsAdministrator){return 'ElevationRequired'};return 'DesktopReady'}
+  # Operational eligibility only: no public IsAuditMode contract is inferred here.
+  if($IsAdministrator -and $Sid -match '-500$' -and $ModeFacts.LocalBuiltin -and -not $ModeFacts.OobeComplete -and $ImageState -in @('IMAGE_STATE_UNDEPLOYABLE','IMAGE_STATE_GENERALIZE_RESEAL_TO_AUDIT','IMAGE_STATE_SPECIALIZE_RESEAL_TO_AUDIT','IMAGE_STATE_GENERALIZE_RESEAL_TO_OOBE','IMAGE_STATE_SPECIALIZE_RESEAL_TO_OOBE')){return 'PrepareOobe'}
+  return 'RejectUnknownSetupState'
+ }
  if(-not $IsAdministrator){return 'ElevationRequired'}
  if($Sid -match '-500$'){
-  if($ImageState -in @('IMAGE_STATE_UNDEPLOYABLE','IMAGE_STATE_GENERALIZE_RESEAL_TO_AUDIT','IMAGE_STATE_SPECIALIZE_RESEAL_TO_AUDIT')){return 'ConfirmAudit'}
   return 'RejectBuiltinAdministrator'
  }
  if($ImageState -eq 'IMAGE_STATE_COMPLETE' -and $DesktopOwned){return 'DesktopReady'}

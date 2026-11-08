@@ -56,7 +56,7 @@ foreach($directory in @($true,$false)){
 }
 $bad=NewAcl $false;$directoryAcl=[Security.AccessControl.DirectorySecurity]::new();$directoryAcl.SetAccessRuleProtection($true,$false);$directoryAcl.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'));foreach($id in @('S-1-5-18','S-1-5-32-544')){$directoryAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($id),'FullControl','Allow'))};$script:aclMap[$fixture]=$directoryAcl;Reject {Assert-InitProtectedDirectory $fixture} '保護規則' '目錄FullControl仍必須子檔繼承';$script:aclMap.Remove($fixture)
 $s=State AwaitingLogon;Save-InitProvisioningState $s $path;$r=Read-InitProvisioningState $path 'fixture-machine' $hash;Assert ($r.TargetSid -eq $sid) '原始受保護state讀取與真檔案JSON驗證'
-$context=@{MachineGuid='fixture-machine';Sid=$sid;ImageState='IMAGE_STATE_COMPLETE';DesktopOwned=$true;IsAdministrator=$true;ProfilePath=$fixture;RegisteredProfile=$fixture}
+$context=@{OobeApiSucceeded=$true;OobeComplete=$true;MachineGuid='fixture-machine';Sid=$sid;ImageState='IMAGE_STATE_COMPLETE';DesktopOwned=$true;IsAdministrator=$true;ProfilePath=$fixture;RegisteredProfile=$fixture}
 Reject {Confirm-InitAccountCheckpoint (State AccountReady) $path $context $hash} '尚未準備' '帳號未登入階段不得完成checkpoint'
 $script:users[$sid].Enabled=$false;Reject {Confirm-InitAccountCheckpoint (State AwaitingLogon) $path $context $hash} '群組驗證' 'checkpoint拒絕停用帳號';$script:users[$sid].Enabled=$true
 $s=State AwaitingLogon;Confirm-InitAccountCheckpoint $s $path $context $hash;Assert ($s.Phase -eq 'AccountConfirmed') 'checkpoint建立無密碼快照後確認'

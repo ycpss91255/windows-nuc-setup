@@ -5,7 +5,7 @@
 ## 已用 Ctrl+Shift+F3，Init 跑完接著做什麼？
 
 1. `Ctrl+Shift+F3` 會重新啟動到稽核模式的 Administrator 桌面；先取消自動出現的 Sysprep 視窗。
-2. 從 USB 執行 `windows_setup\init.cmd`，依提示輸入 `AUDIT`，再輸入新正式本機帳號、密碼及確認密碼。
+2. 從 USB 執行 `windows_setup\init.cmd`，Init 自動檢查帳號與 OOBE 準備條件，不需要輸入 `AUDIT`；同意受限的帳號／OOBE 變更並輸入 `YES` 後，再輸入新正式本機帳號、密碼及確認密碼。
 3. 看到 **「帳號設定已準備完成」**，表示這一階段成功，接著才手動重新啟動。可由開始選單操作，或在 CMD 輸入 `shutdown /r /t 0`。腳本不會自行替你重新啟動。
 4. 重開後完成剩餘 OOBE，登入新正式本機帳號；不要在稽核模式 Administrator 身分直接套用 Windows 設定。
 5. 在新帳號桌面接上網路，直接從完整工具包執行 `windows.cmd`；不需要第二次 Init。SSH 由 Windows 第 4 階段安裝。
@@ -52,3 +52,13 @@ CI 的 oobe_payload_inspection 獨立使用 script/test/verify_oobe_payload.ps1�
 官方依據：[OOBEComplete](https://learn.microsoft.com/en-us/windows/win32/api/oobenotification/nf-oobenotification-oobecomplete)、[WCD OOBE 設定](https://learn.microsoft.com/en-us/windows/configuration/wcd/wcd-oobe)、[設定包命令列建置](https://learn.microsoft.com/en-us/windows/configuration/provisioning-packages/provisioning-command-line)。
 
 來源與原生 metadata 分層：Assert-InitProvisioningAssetSource 只核對三檔來源；runtime 使用的 Assert-InitProvisioningAsset 始終再呼叫 Windows 11 client 原生 API，缺少命令或 metadata 不符即失敗。Server CI 的真 WIM 內容檢驗不冒稱 client metadata 測試；本機唯讀六項檢查命令見根目錄 README 的 Windows CI 章節。
+
+## 自動判斷的範圍
+
+此入口判斷的是受控帳號／OOBE 準備條件，並非呼叫 Windows 的正式 Audit 模式識別 API。它同時要求 Windows 11 client x64、非 WinPE、原生 OOBEComplete 成功且未完成、目前管理員 token 對應的本機內建 Administrator SID500（不要求 SAM 帳號 Enabled；稽核登入後帳號可能停用）、同工作階段桌面擁有權與原生／登錄家目錄一致、已知未完成 ImageState、沒有同工作階段 OOBE／Setup／Sysprep 程序。ImageState 不單獨證明目前模式，也不使用猜測的 AuditBoot registry 結構。未公開文件定義的 Setup registry 旗標只保留原型別作診斷，不把缺省值轉成 0 或當成模式證明。未知、讀取失敗或矛盾會於帳密與任何寫入前停止。
+
+完成 OOBE 的正式帳號桌面只提示執行 windows.cmd，不重新準備帳號。受控準備仍保留現有 answer file、Sysprep 程序、S mode、暫存擁有權及清理防護；同意後只執行 /oobe /quit，不執行 generalize 或自動重開。
+
+依據：[OOBEComplete](https://learn.microsoft.com/en-us/windows/win32/api/oobenotification/nf-oobenotification-oobecomplete)、[Windows Setup States](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/windows-setup-states?view=windows-11)、[Sysprep 選項](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/sysprep-command-line-options?view=windows-11)。此路線用於全新安裝前置，不用來修復已交付或損壞的 Windows。
+
+原生帳號狀態依據：[Microsoft KB3141410](https://learn.microsoft.com/en-us/troubleshoot/windows-client/setup-upgrade-and-drivers/fail-to-turn-off-computer-from-audit-mode)，Audit 的內建 Administrator 可於登入後立即停用；本工具不因此啟用它。
