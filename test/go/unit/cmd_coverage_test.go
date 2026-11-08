@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"strings"
+	"encoding/json"
 	"testing"
 	rc "windows_setup/script/test/repo_coverage"
 )
@@ -17,4 +18,9 @@ func TestCMDLauncherCatalogAndUnsupportedSyntax(t *testing.T) {
 			t.Fatalf("accepted unsupported %q", bad)
 		}
 	}
+}
+
+func TestCMDRejectsAmbiguousRawJSON(t *testing.T){
+ for _,bad:=range []string{`{"SchemaVersion":1,"SchemaVersion":2}`,`{"Unexpected":1}`,`{} {}`} {if _,err:=rc.DecodeCMDEvidence([]byte(bad));err==nil{t.Fatal("ambiguous evidence accepted")}}
+ data,_:=json.Marshal(rc.CMDEvidence{SchemaVersion:1});if _,err:=rc.DecodeCMDEvidence(data);err!=nil{t.Fatal(err)}
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"encoding/json"
 	"testing"
 	rc "windows_setup/script/test/repo_coverage"
 )
@@ -16,7 +17,10 @@ func TestCMDOriginalLaunchersWithRealProbe(t *testing.T) {
 	}
 	repo, _ := filepath.Abs("../../..")
 	probe := filepath.Join(t.TempDir(), "powershell.exe")
-	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go.exe"), "build", "-mod=vendor", "-o", probe, "./test/fixtures/cmd_probe")
+	probeSource:=filepath.Join(t.TempDir(),"main.go")
+	probeBytes,err:=os.ReadFile(filepath.Join(repo,"test/fixtures/cmd_probe/main.go.txt"));if err!=nil{t.Fatal(err)}
+	if err:=os.WriteFile(probeSource,probeBytes,0600);err!=nil{t.Fatal(err)}
+	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go.exe"), "build", "-mod=vendor", "-o", probe, probeSource)
 	build.Dir = repo
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("probe build: %v %s", err, out)
@@ -98,9 +102,16 @@ func TestCMDOriginalLaunchersWithRealProbe(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "result")
 	run(true, "collect", "--source-root", snapshot, "--output-dir", output, "--expected-sha", sha, "--cmd-evidence", evidencePath)
 	run(true, "verify", "--artifact-dir", output, "--expected-sha", sha, "--require-complete", "--minimum-percent", "100")
-	evidence.Sources[0].Runs[0].Arguments = []string{"wrong target"}
-	if _, _, err := rc.NormalizeCMD(evidence, sources); err == nil {
-		t.Fatal("forged argv accepted")
+	for _,mutate:=range []func(*rc.CMDEvidence){
+	 func(e *rc.CMDEvidence){e.Sources[0].Runs[0].Arguments=[]string{"wrong target"}},
+	 func(e *rc.CMDEvidence){e.Sources[0].CopiedAfterSHA256=strings.Repeat("0",64)},
+	 func(e *rc.CMDEvidence){e.Sources[0].Runs[0].Directory="wrong directory"},
+	 func(e *rc.CMDEvidence){e.Sources[0].Runs[0].Invocations=0},
+	 func(e *rc.CMDEvidence){e.Sources[0].Runs[1].ExitCode=0},
+	 func(e *rc.CMDEvidence){e.Sources=e.Sources[1:]},
+	}{
+	 data,_:=json.Marshal(evidence);var changed rc.CMDEvidence;json.Unmarshal(data,&changed);mutate(&changed)
+	 if _,_,err:=rc.NormalizeCMD(changed,sources);err==nil{t.Fatal("forged command evidence accepted")}
 	}
 	if err := os.WriteFile(filepath.Join(snapshot, "unknown.cmd"), []byte("@echo off\necho unsupported\n"), 0600); err != nil {
 		t.Fatal(err)
