@@ -6,7 +6,9 @@ if(Test-Path -LiteralPath $OutputPath){throw '基線清單輸出已存在。'}
 # Same safe suite directories as run_ci. Client/native smoke suites remain separate.
 # This command only writes a manifest: it never starts coverage, including when
 # the collector's bounded synthetic tests call it from a coverage worker.
-$tests=@(Get-ChildItem (Join-Path $source 'test/powershell/unit'),(Join-Path $source 'test/powershell/integration') -File -Filter '*_tests.ps1'|ForEach-Object {$_.FullName.Substring($source.Length+1).Replace('\','/')}|Sort-Object)
+$tests=@(foreach($layer in @('unit','integration')){
+ Get-ChildItem -LiteralPath (Join-Path $source ('test/powershell/'+$layer)) -File -Filter '*_tests.ps1'|ForEach-Object {'test/powershell/'+$layer+'/'+$_.Name}
+})
 if(-not $tests.Count){throw '安全測試清單為空。'}
 [Array]::Sort($tests,[StringComparer]::Ordinal)
 foreach($test in $tests){if(-not(Test-Path -LiteralPath (Join-Path $source $test) -PathType Leaf)){throw ('安全測試遺失：'+$test)}}
