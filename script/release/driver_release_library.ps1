@@ -34,7 +34,7 @@ function Assert-ReleaseAssetSet {
 }
 function Assert-ReleaseDriverDraft {
  param($Draft,[string]$Version,[string]$Commit,[string]$MetadataPath,[object[]]$Assets)
- if($Draft.draft -isnot [bool] -or $Draft.draft -cne $true -or $Draft.tag_name -cne $Version -or $Draft.target_commitish -cne $Commit -or $Draft.name -cne $Version -or $Draft.body -cne (Get-DriverDraftMarker $Version $Commit $MetadataPath)){throw 'Foreign or mismatched driver staging draft.'}
+ if($Draft.prerelease -isnot [bool] -or $Draft.prerelease -cne [bool]($Version -cmatch '-rc[1-9][0-9]*$') -or $Draft.draft -isnot [bool] -or $Draft.draft -cne $true -or $Draft.tag_name -cne $Version -or $Draft.target_commitish -cne $Commit -or $Draft.name -cne $Version -or $Draft.body -cne (Get-DriverDraftMarker $Version $Commit $MetadataPath)){throw 'Foreign or mismatched driver staging draft.'}
  Assert-ReleaseAssetSet -Actual $Draft.assets -Expected $Assets
 }
 function Assert-LocalDriverReleaseAsset {
