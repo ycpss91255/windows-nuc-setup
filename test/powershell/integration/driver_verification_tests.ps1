@@ -30,6 +30,13 @@ Assert (-not $r.Success -and $r.Targets[0].Status -eq 'Unverified') '版本較�
 $script:device.HardwareIds=@('PCI\VEN_9999&DEV_0000');$r=Invoke-SetupDriverVerification -DriverRoot $fixture -VerificationRunId $run
 Assert (-not $r.Success -and $r.Targets[0].Status -eq 'Absent') '全部目標都沒讀到不得假稱官方driver已確認'
 Assert (-not(Test-Path (Join-Path $fixture 'driver_logs'))) '唯讀驗證不建立安裝紀錄或payloadcache'
+$validDate=$manifest.AuditedAt
+foreach($badDate in @('','2026-02-30','2026-11-08 extra')){
+ $manifest.AuditedAt=$badDate;$manifest|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $fixture 'manifest.json') -Encoding UTF8
+ $rejected=$false;try{Invoke-SetupDriverVerification -DriverRoot $fixture -VerificationRunId $run}catch{$rejected=$_.Exception.Message -match 'AuditedAt'}
+ Assert $rejected ('空白或無效查核日期不冒稱已核 '+$badDate)
+}
+$manifest.AuditedAt=$validDate
 $manifest.SchemaVersion=1;$manifest|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $fixture 'manifest.json') -Encoding UTF8
 $failed=$false;try{Invoke-SetupDriverVerification -DriverRoot $fixture -VerificationRunId $run}catch{$failed=$_.Exception.Message -match '目標'}
 Assert $failed '舊包不能冒充已核官方目標版本驗證'

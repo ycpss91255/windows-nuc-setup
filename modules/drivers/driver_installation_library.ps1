@@ -6,10 +6,12 @@ function Invoke-SetupDriverVerification {
  $parsed=[guid]::Empty;if(-not [guid]::TryParse($VerificationRunId,[ref]$parsed)){throw '驅動驗證需要合法本輪識別。'}
  $raw=Get-Content -LiteralPath (Join-Path $DriverRoot 'manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json
  if($raw.SchemaVersion -ne 2){throw '舊版驅動包沒有已核官方目標；請取得新版獨立包再驗證。'}
+ $auditedAt=[string]$raw.AuditedAt;$auditDate=[datetime]::MinValue
+ if(-not [datetime]::TryParseExact($auditedAt,'yyyy-MM-dd',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$auditDate)){throw '官方驅動清單缺少有效的 AuditedAt 查核日期。'}
  $entries=@(Get-SetupDriverManifestEntries -Manifest $raw)
  foreach($entry in $entries){if((Get-FileHash -LiteralPath (Join-Path $DriverRoot $entry.File) -Algorithm SHA256 -ErrorAction Stop).Hash -ne $entry.SHA256){throw ('驅動封存檔 SHA256 不符：'+$entry.File)}}
  $allTargets=@($entries|ForEach-Object Drivers)
- Write-Host ('唯讀重新盤點 '+$allTargets.Count+' 個已核官方目標；查核日期 '+$raw.CheckedAt) -ForegroundColor Cyan
+ Write-Host ('唯讀重新盤點 '+$allTargets.Count+' 個已核官方目標；查核日期 '+$auditedAt) -ForegroundColor Cyan
  $devices=@(Get-SetupDriverDeviceInventory -Targets $allTargets)
  $build=[int](Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).BuildNumber
  $results=@();$step=0
@@ -39,7 +41,7 @@ function Invoke-SetupDriverVerification {
  }
  $failures=@($results|Where-Object Status -notin @('Current','NewerInstalled','Absent','NotApplicable'))
  $matched=@($results|Where-Object InstanceId).Count
- [pscustomobject]@{Success=($failures.Count -eq 0 -and $matched -gt 0);VerificationRunId=$VerificationRunId;Computer=[Environment]::MachineName;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;CheckedAt=(Get-Date).ToString('o');OfficialCheckedAt=$raw.CheckedAt;Targets=@($results);MatchedDeviceCount=$matched;FailureCount=$failures.Count}
+ [pscustomobject]@{Success=($failures.Count -eq 0 -and $matched -gt 0);VerificationRunId=$VerificationRunId;Computer=[Environment]::MachineName;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;CheckedAt=(Get-Date).ToString('o');OfficialCheckedAt=$auditedAt;Targets=@($results);MatchedDeviceCount=$matched;FailureCount=$failures.Count}
 }
 function Invoke-SetupLegacyDriverPackages {
  param([object[]]$Entries,[string]$DriverRoot,[string]$LogDirectory,[string]$Stamp)
