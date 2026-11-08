@@ -29,13 +29,13 @@ if(Test-Path $resultPath){
    $decision=Get-SetupModuleDecision -Module $file -Hardware $hardware
    if(-not $decision.Applicable){Write-Host ('[略過] '+$decision.Reason);continue}
    Write-Host ('重試未完成模組：'+$file) -ForegroundColor Cyan
-   try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -NonInteractive -DriverPackagePath $DriverPackagePath @confirmation}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
+   try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -NonInteractive -DriverPackagePath $DriverPackagePath @confirmation}elseif($file -eq 'apply_start_menu_settings.ps1'){& (Resolve-NucPath $file) -VerifyOnly|Out-Null}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
   }
  }
 }
 Write-Host '重新掃描更新；完成後再次清理預載程式並驗證。' -ForegroundColor Cyan
 foreach($file in @('install_windows_updates.ps1','apply_debloat.ps1','apply_copilot_settings.ps1','remove_setup_residue.ps1')){
- try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -NonInteractive -DriverPackagePath $DriverPackagePath @confirmation}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
+ try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -NonInteractive -DriverPackagePath $DriverPackagePath @confirmation}elseif($file -eq 'apply_start_menu_settings.ps1'){& (Resolve-NucPath $file) -VerifyOnly|Out-Null}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
 }
 if($previous -and $previous.Computer -eq $env:COMPUTERNAME -and $previous.UserSID -eq $sid){
  $previous|Add-Member -NotePropertyName HardwareProfile -NotePropertyValue $hardware -Force
@@ -60,6 +60,12 @@ try{
  $verification=$candidate
 }catch{$errors+=('驗證結果：'+$_.Exception.Message)}
 if($null -eq $verification){$verification=[pscustomobject]@{Passed=$false;Checks=@()}}
+if($previous -and $previous.Computer -eq $env:COMPUTERNAME -and $previous.UserSID -eq $sid){
+ $startPassed=@($verification.Checks|Where-Object {$_.Name -eq '開始選單釘選清空' -and $_.Passed}).Count -eq 1
+ if($startPassed){$previous|Add-Member -NotePropertyName PendingModules -NotePropertyValue @($previous.PendingModules|Where-Object {$_.Module -ne 'apply_start_menu_settings.ps1'}) -Force}
+ $previous.Success=($verification.Passed -and $errors.Count -eq 0)
+ $previous|ConvertTo-Json -Depth 6|Set-Content $resultPath -Encoding UTF8
+}
 @{Computer=$env:COMPUTERNAME;CheckedAt=(Get-Date).ToString('o');Success=($verification.Passed -and $errors.Count -eq 0);Errors=$errors;SkippedChecks=@($verification.Checks|Where-Object Status -eq Skipped);HardwareProfile=$hardware;FailedChecks=@($verification.Checks|Where-Object {$_.Status -ne 'Skipped' -and -not $_.Passed})}|ConvertTo-Json -Depth 6|Set-Content (Resolve-NucPath 'Acceptance-Result.json') -Encoding UTF8
 if($errors.Count -or -not $verification.Passed){throw '驗收尚未全部通過。請查看 Acceptance-Result.json；若要求重新開機，手動重開後再執行此入口。'}
 Write-Host '設定及清理驗收通過。請目視確認自動登入、工作列僅釘選 Edge ；NUC 適用時再確認無 AMD 位置提示。' -ForegroundColor Green
