@@ -77,6 +77,8 @@ for($i=0;$i -lt $tests.Count;$i++){
 }
 foreach($item in $hashes){if((Get-FileHash -LiteralPath (Join-Path $source $item.File)).Hash.ToLowerInvariant() -cne $item.SHA256){throw '量測期間來源變更。'}}
 $xml=[xml]'<?xml version="1.0" encoding="utf-8"?><coverage version="1" lines-covered="0" lines-valid="0" line-rate="0"><sources><source>.</source></sources><packages><package name="PowerShell"><classes /></package></packages></coverage>'
+$xml.coverage.SetAttribute('coverage-metric','complete-executable-lines-v1')
+$xml.coverage.SetAttribute('coverage-schema','1')
 $total=0;$covered=0
 foreach($item in $hashes){
  $class=$xml.CreateElement('class');$class.SetAttribute('name',$item.File);$class.SetAttribute('filename',$item.File)
