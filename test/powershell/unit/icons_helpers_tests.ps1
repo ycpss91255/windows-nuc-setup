@@ -26,3 +26,7 @@ foreach($names in @(@('控制台','本機','網路'),@('控制台','本機','網
  $r=Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Load -Reference $reference
  Assert (-not $r.Success -and $r.Error) ('after Capture refuses missing duplicate or extra icons: '+($names -join ','))
 }
+function Get-SetupSystemIconNames {@('控制台','本機','網路','資源回收筒')}
+[NUC8Icons.Desktop]::Frames.Enqueue((Frame -names @('a','b','c','d')));$failure=''
+try{Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Save|Out-Null}catch{$failure=$_.Exception.Message}
+Assert (-not [string]::IsNullOrWhiteSpace($failure)) 'Save refuses four arbitrary icons instead of the four system CLSIDs'
