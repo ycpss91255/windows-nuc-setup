@@ -74,25 +74,13 @@ func copyFiles(m map[string][]byte) map[string][]byte {
 }
 func flag(b bool) *bool { return &b }
 func badge(r a.Report, n string) []byte {
-	value := "not run"
-	if n == "coverage" {
-		value = "not measured"
-	} else if n != "system" {
-		for _, c := range r.Checks {
-			if strings.EqualFold(c.Layer, n) && c.Executed {
-				if value == "not run" {
-					value = "passed"
-				}
-				if c.Passed == nil || !*c.Passed {
-					value = "failed"
-				}
-			}
-		}
-	}
+	value := a.BadgeStatus(r, n)
 	label := n + " " + strings.ToLower(r.RefType)
 	l, q := len(label)*7+12, len(value)*7+12
 	color := "#9f9f9f"
-	if value == "passed" {
+	if n == "coverage" && r.RepoCoverage != nil && r.RepoCoverage.Result.Complete {
+		color = "#007ec6"
+	} else if value == "passed" {
 		color = "#4c1"
 	} else if value == "failed" {
 		color = "#e05d44"
