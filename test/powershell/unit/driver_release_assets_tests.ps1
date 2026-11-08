@@ -31,12 +31,13 @@ foreach($mode in @('published','tag','commit','body','extra','digest','size','mi
  Reject {Assert-ReleaseDriverDraft -Draft $bad -Version v1.0.0 -Commit ('c'*40) -MetadataPath $metadata -Assets $assets} ('拒絕不符草稿 '+$mode)
 }
 $input=Join-Path $temp 'package';[void][IO.Directory]::CreateDirectory((Join-Path $input 'nested'))
-[IO.File]::WriteAllText((Join-Path $input 'manifest.json'),'{}')
+[IO.File]::WriteAllText((Join-Path $input 'manifest.json'),'{"SchemaVersion":2,"Packages":[{"File":"payload.zip"}]}')
 [IO.File]::WriteAllText((Join-Path $input 'package.json'),'{"SchemaVersion":2,"ProfileId":"fixture"}')
-[IO.File]::WriteAllText((Join-Path $input 'nested/a.txt'),'fixture data')
+Copy-Item -LiteralPath (Join-Path $root 'license') -Destination (Join-Path $input 'license')
+foreach($name in @('readme.md','install.cmd','payload.zip','core/hardware.ps1','modules/drivers/install_drivers.ps1','modules/drivers/driver_archive_library.ps1','modules/drivers/driver_plan_library.ps1','modules/drivers/driver_installation_library.ps1','modules/updates/update_stage_library.ps1','drivers/fixture/profile.json')){$path=Join-Path $input $name;[void][IO.Directory]::CreateDirectory((Split-Path $path));[IO.File]::WriteAllText($path,'inert fixture data')}
 $a=Join-Path $temp 'a.zip';$b=Join-Path $temp 'b.zip'
 New-DeterministicDriverArchive -PackageDirectory $input -OutputPath $a
-(Get-Item (Join-Path $input 'nested/a.txt')).LastWriteTime=Get-Date
+(Get-Item (Join-Path $input 'readme.md')).LastWriteTime=Get-Date
 New-DeterministicDriverArchive -PackageDirectory $input -OutputPath $b
 Assert ((Get-FileHash $a).Hash -ceq (Get-FileHash $b).Hash) '固定時間與排序產生相同 ZIP 位元'
 Reject {New-DeterministicDriverArchive -PackageDirectory $input -OutputPath $a} '封存不覆寫'
