@@ -45,9 +45,15 @@ function Get-SetupDriverManifestEntries {
    foreach($driver in $drivers){
     if($driver.DriverVersion -notmatch '^\d+(\.\d+){3}$' -or -not $driver.Provider -or $driver.Architecture -ne 'amd64' -or $driver.MinimumBuild -lt 10240 -or $driver.MinimumBuild -gt 99999){throw '驅動版本、架構或最低作業系統規格不合法。'}
     if(@($driver.HardwareIds).Count -lt 1){throw '驅動需要明確硬體 ID。'}
-    foreach($id in $driver.HardwareIds){if($id -notmatch '^(PCI|ACPI|HDAUDIO|USB)\\[A-Z0-9_&]+$'){throw '驅動硬體 ID 不合法。'}}
+    foreach($id in $driver.HardwareIds){if($id -notmatch '^(?:(PCI|ACPI|HDAUDIO|USB)\\[A-Z0-9_&]+|SWC\\[A-Z0-9_&.-]+)$'){throw '驅動硬體 ID 不合法。'}}
     $inf=[string]$driver.InfPath
     if($inf -notmatch '^[a-zA-Z0-9_ .()/-]+\.inf$' -or $inf -match '(^|/)\.\.(/|$)' -or [IO.Path]::IsPathRooted($inf)){throw '驅動 INF 路徑必須是安全相對路徑。'}
+   }
+   $named=@($drivers|Where-Object Id)
+   if(@($named.Id|Select-Object -Unique).Count -ne $named.Count){throw '驅動目標識別重複。'}
+   foreach($child in @($drivers|Where-Object ParentTarget)){
+    $parent=@($drivers|Where-Object {$_.Id -and $_.Id -ceq $child.ParentTarget})
+    if(-not $child.Id -or $child.Id -ceq $child.ParentTarget -or $parent.Count -ne 1 -or $parent[0].ParentTarget -or $child.PreStage -ne $true){throw '驅動依賴需唯一父目標、單層無循環且明確預先加入。'}
    }
   }
  }else{
