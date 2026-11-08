@@ -9,5 +9,5 @@ if($AfterRestart -or $VerifyOnly){
 }else{
  . (Join-Path $PSScriptRoot 'hardware.ps1')
  $request=Select-SetupDriverRequest -PackageRoot (Split-Path -Parent $PSScriptRoot) -DriverPackagePath $DriverPackagePath -PathSpecified:$PSBoundParameters.ContainsKey('DriverPackagePath') -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer -Interactive:((Test-SetupInteractiveHost) -and -not $NonInteractive)
- & (Join-Path $PSScriptRoot $entry) -DriverPackagePath $request.DriverPackagePath -ConfirmedBoard $request.ConfirmedBoard -ConfirmationComputer $request.ConfirmationComputer
+ & (Join-Path $PSScriptRoot $entry) -DriverPackagePath $request.DriverPackagePath -ConfirmedBoard $request.ConfirmedBoard -ConfirmationComputer $request.ConfirmationComputer -NonInteractive:$NonInteractive
 }
