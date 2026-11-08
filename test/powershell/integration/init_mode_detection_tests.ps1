@@ -6,7 +6,7 @@ function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Na
 $script:prompts=@();$script:writes=0
 function Invoke-InitProvisioningEntry {return $false}
 function Get-SetupInitContext {
- [pscustomobject]@{Sid='S-1-5-21-1-2-3-500';UserSID='S-1-5-21-1-2-3-500';IsAdministrator=$true;Is64Bit=$true;Architecture='AMD64';ImageState='IMAGE_STATE_UNDEPLOYABLE';DesktopOwned=$true;ModeFacts=@{ReadSucceeded=$true;Build=26200;ProductType=1;IsWinPE=$false;OobeApiSucceeded=$true;OobeComplete=$false;AuditBoot=1;SetupInProgress=0;OobeInProgress=0;OobeProcessInSession=$false;ProfileMatches=$true}}
+ [pscustomobject]@{Sid='S-1-5-21-1-2-3-500';UserSID='S-1-5-21-1-2-3-500';IsAdministrator=$true;Is64Bit=$true;Architecture='AMD64';ImageState='IMAGE_STATE_UNDEPLOYABLE';DesktopOwned=$true;ModeFacts=@{ReadSucceeded=$true;Build=26200;ProductType=1;IsWinPE=$false;OobeApiSucceeded=$true;OobeComplete=$false;AuditBoot=1;SetupInProgress=0;OobeInProgress=0;OobeProcessInSession=$false;ProfileMatches=$true;LocalBuiltin=$true}}
 }
 function Get-Process {return @()}
 function Get-ItemProperty {return [pscustomobject]@{SkuPolicyRequired=0;UnattendFile=$null}}

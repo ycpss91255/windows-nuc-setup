@@ -5,7 +5,7 @@ $moduleRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\modules\in
 $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++;Write-Host ('PASS: '+$Name)}
 Assert ((Get-InitRoute 'S-1-5-18' 'IMAGE_STATE_UNDEPLOYABLE' $true $false) -eq 'OobeProvisioning') 'SYSTEM routes to guarded provisioning without audit shortcut'
-Assert ((Get-InitRoute 'S-1-5-21-1-2-3-500' 'IMAGE_STATE_UNDEPLOYABLE' $true $true) -eq 'ConfirmAudit') 'known unfinished built-in administrator requires audit confirmation'
+Assert ((Get-InitRoute 'S-1-5-21-1-2-3-500' 'IMAGE_STATE_UNDEPLOYABLE' $true $true) -eq 'RejectBuiltinAdministrator') 'unfinished image without native facts never authorizes OOBE preparation'
 Assert ((Get-InitRoute 'S-1-5-21-1-2-3-500' 'unexpected' $true $true) -eq 'RejectBuiltinAdministrator') 'unknown setup state cannot prepare account'
 Assert ((Get-InitRoute 'S-1-5-21-1-2-3-500' 'IMAGE_STATE_COMPLETE' $true $true) -eq 'RejectBuiltinAdministrator') 'normal built-in administrator is not audit'
 Assert ((Get-InitRoute 'S-1-5-21-1-2-3-1001' 'IMAGE_STATE_COMPLETE' $true $true) -eq 'DesktopReady') 'formal account desktop routes to Windows guidance only'
@@ -34,3 +34,14 @@ Assert ($xml.SelectSingleNode('//u:HideOnlineAccountScreens',$n).InnerText -eq '
 Assert ($xml.SelectSingleNode('//u:settings',$n).GetAttribute('pass') -eq 'oobeSystem') 'answer uses oobeSystem pass'
 
 Write-Host ('ALL PASS: '+$script:count+' Init unit assertions; no accounts or files changed.')
+
+$facts=@{ReadSucceeded=$true;Build=26200;ProductType=1;IsWinPE=$false;OobeApiSucceeded=$true;OobeComplete=$false;SetupInProgress=0;OobeInProgress=0;OobeProcessInSession=$false;ProfileMatches=$true;LocalBuiltin=$true}
+$builtin='S-1-5-21-1-2-3-500'
+Assert ((Get-InitRoute $builtin 'IMAGE_STATE_UNDEPLOYABLE' $true $true $facts) -ceq 'PrepareOobe') 'multiple current facts authorize controlled preparation without claiming Audit mode'
+foreach($entry in @(@('ReadSucceeded',$false),@('Build',22000),@('ProductType',3),@('IsWinPE',$true),@('OobeApiSucceeded',$false),@('OobeComplete',$true),@('SetupInProgress',1),@('SetupInProgress',$null),@('SetupInProgress','0'),@('OobeInProgress',1),@('OobeProcessInSession',$true),@('ProfileMatches',$false),@('LocalBuiltin',$false))){$bad=$facts.Clone();$bad[$entry[0]]=$entry[1];Assert ((Get-InitRoute $builtin 'IMAGE_STATE_UNDEPLOYABLE' $true $true $bad) -ceq 'RejectUnknownSetupState') ('conflicting/missing native fact rejected: '+$entry[0])}
+Assert ((Get-InitRoute $builtin 'IMAGE_STATE_COMPLETE' $true $true $facts) -ceq 'RejectUnknownSetupState') 'complete image versus incomplete native OOBE is contradictory'
+Assert ((Get-InitRoute $builtin 'UNKNOWN' $true $true $facts) -ceq 'RejectUnknownSetupState') 'unknown ImageState cannot prepare'
+Assert ((Get-InitRoute $builtin 'IMAGE_STATE_UNDEPLOYABLE' $true $false $facts) -ceq 'RejectUnknownSetupState') 'remote or unowned desktop cannot prepare'
+$desktop=$facts.Clone();$desktop.LocalBuiltin=$false;$desktop.OobeComplete=$true
+Assert ((Get-InitRoute 'S-1-5-21-1-2-3-1001' 'IMAGE_STATE_COMPLETE' $true $true $desktop) -ceq 'DesktopReady') 'completed formal desktop only receives windows.cmd guidance'
+Assert ((Get-InitRoute $builtin 'IMAGE_STATE_UNDEPLOYABLE' $true $true $desktop) -ceq 'RejectUnknownSetupState') 'completed OOBE never returns to new-account preparation'
