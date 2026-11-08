@@ -40,7 +40,7 @@ func TestSourceDistributionLicenseReferencesResolve(t *testing.T) {
 		refs := regexp.MustCompile(`\]\(([^)]+)\)`).FindAllStringSubmatch(string(b), -1)
 		found := false
 		for _, ref := range refs {
-			if ref[1] != "./license" && ref[1] != "../license" {
+			if ref[1] != "license" && ref[1] != "./license" && ref[1] != "../license" {
 				continue
 			}
 			path := filepath.Clean(filepath.Join(root, filepath.Dir(name), ref[1]))
