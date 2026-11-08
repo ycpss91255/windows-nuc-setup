@@ -14,9 +14,9 @@ function Get-LocalUser { @() }
 function New-InitProvisioningAccount {param($State,$UserName,$Password,$StatePath) $script:accounts++;Assert ($Password -is [Security.SecureString]) 'flow passes SecureString to account function';$State.TargetSid='S-1-5-21-1-2-3-1001';$State.TargetUserName=$UserName;$State.Phase='AccountReady'}
 function Invoke-InitProvisioningApply {param($State,$StatePath,$AssetRoot,$Confirm) $script:applied=$true}
 $stage=Join-Path ([IO.Path]::GetTempPath()) ('not_created_'+[guid]::NewGuid().ToString('N'))
-$rejected=$false;try{Invoke-InitOobeFlow 'X:\fixture' $stage}catch{$rejected=$true}
+$rejected=$false;try{Invoke-InitOobeFlow (Join-Path ([IO.Path]::GetTempPath()) 'fixture_source') $stage}catch{$rejected=$true}
 Assert ($rejected -and $script:accounts -eq 0 -and $script:prompts -eq 0 -and -not $script:staged) 'missing package causes zero prompts, staging or accounts'
 $script:assetOK=$true
-Invoke-InitOobeFlow 'X:\fixture' $stage
+Invoke-InitOobeFlow (Join-Path ([IO.Path]::GetTempPath()) 'fixture_source') $stage
 Assert ($script:accounts -eq 1 -and $script:prompts -eq 3 -and $script:applied) 'new flow stages then asks only username and password twice before applying'
 Write-Host ('ALL PASS: '+$script:count+' safely mocked full OOBE flow assertions')

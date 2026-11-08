@@ -1,5 +1,7 @@
 ﻿#Requires -Version 5.1
 # Definitions only: loading this file never creates accounts or applies a package.
+. (Join-Path $PSScriptRoot 'oobe_library.ps1')
+. (Join-Path $PSScriptRoot 'provisioning_asset_library.ps1')
 function Test-InitProvisioningContext {
  param([string]$Sid,[int]$Build,[int]$ProductType,[bool]$Is64Bit,[bool]$IsWinPE,[int]$OobeInProgress,[int]$SetupInProgress,[bool]$OobeProcessInSession)
  return ($Sid -eq 'S-1-5-18' -and $Build -ge 22621 -and $ProductType -eq 1 -and $Is64Bit -and -not $IsWinPE -and $OobeInProgress -eq 1 -and $SetupInProgress -eq 1 -and $OobeProcessInSession)
@@ -145,4 +147,55 @@ function New-InitProvisioningStage {
  }
  $command='@echo off'+"`r`n"+'powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0runtime\modules\init\initialize_nuc.ps1" -ResumeStatePath "%~dp0state.json"'+"`r`n"
  [IO.File]::WriteAllText((Join-Path $StageRoot 'resume_init.cmd'),$command,[Text.Encoding]::ASCII)
+}
+function Test-InitSecurePasswordPair {
+ param([Security.SecureString]$Password,[Security.SecureString]$Confirmation)
+ if($null -eq $Password -or $null -eq $Confirmation -or $Password.Length -lt 1 -or $Password.Length -gt 127 -or $Password.Length -ne $Confirmation.Length){return $false}
+ $one=[IntPtr]::Zero;$two=[IntPtr]::Zero
+ try{
+  $one=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password);$two=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($Confirmation)
+  for($i=0;$i -lt $Password.Length;$i++){
+   $value=[Runtime.InteropServices.Marshal]::ReadInt16($one,$i*2)
+   if($value -ge 0 -and $value -lt 32){return $false}
+   if($value -ne [Runtime.InteropServices.Marshal]::ReadInt16($two,$i*2)){return $false}
+  }
+  return $true
+ }finally{if($one -ne [IntPtr]::Zero){[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($one)};if($two -ne [IntPtr]::Zero){[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($two)}}
+}
+function Read-InitProvisioningState {
+ param([string]$StatePath,[string]$MachineGuid,[string]$PackageHash)
+ Assert-InitProtectedDirectory (Split-Path $StatePath -Parent)
+ Assert-InitProtectedFile $StatePath
+ $state=[IO.File]::ReadAllText($StatePath)|ConvertFrom-Json
+ Assert-InitProvisioningState $state $MachineGuid $PackageHash
+ return $state
+}
+function Invoke-InitOobeFlow {
+ param([string]$SourceRoot,[string]$StageRoot)
+ $context=Get-InitProvisioningContext
+ if(-not(Test-InitProvisioningContext -Sid $context.Sid -Build $context.Build -ProductType $context.ProductType -Is64Bit $context.Is64Bit -IsWinPE $context.IsWinPE -OobeInProgress $context.OobeInProgress -SetupInProgress $context.SetupInProgress -OobeProcessInSession $context.OobeProcessInSession)){throw '目前不是可確認的 Windows 11 22H2 以上初始設定環境；未建立帳號或套用設定。'}
+ $asset=Assert-InitProvisioningAsset -AssetRoot (Join-Path $SourceRoot 'modules/init/assets')
+ $statePath=Join-Path $StageRoot 'state.json'
+ if(Test-Path -LiteralPath $StageRoot){
+  $state=Read-InitProvisioningState $statePath $context.MachineGuid $asset.PackageSHA256
+ }else{
+  New-InitProvisioningStage $SourceRoot $StageRoot
+  $state=New-InitProvisioningState $context.MachineGuid $context.ComputerName $SourceRoot $asset.PackageSHA256
+  Save-InitProvisioningState $state $statePath
+ }
+ Write-Host ('續跑入口（USB 拔除後仍可用）：'+(Join-Path $StageRoot 'resume_init.cmd')) -ForegroundColor Cyan
+ if($state.Phase -eq 'Prepared'){
+  $name=Read-Host '新的本機管理員帳號'
+  if(-not(Test-InitUserName -Name $name -ExistingNames @((Get-LocalUser).Name))){throw '帳號無效或已存在；不變更既有帳號。'}
+  $password=$null;$confirmation=$null
+  try{
+   $password=Read-Host '新帳號密碼' -AsSecureString;$confirmation=Read-Host '再次輸入密碼' -AsSecureString
+   if(-not(Test-InitSecurePasswordPair $password $confirmation)){throw '兩次密碼不同、為空或含不允許字元。'}
+   New-InitProvisioningAccount $state $name $password $statePath
+  }finally{if($password){$password.Dispose()};if($confirmation){$confirmation.Dispose()}}
+ }elseif($state.Phase -eq 'AccountCreated'){
+  New-InitProvisioningAccount $state $state.TargetUserName $null $statePath
+ }
+ Invoke-InitProvisioningApply $state $statePath (Join-Path $StageRoot 'runtime/modules/init/assets') { (Read-Host '是否現在繼續？Windows 可能重新啟動；同意請輸入 YES') -ceq 'YES' }
+ if($state.Phase -eq 'AwaitingLogon'){Write-Host '請依 Windows 畫面登入剛建立的正式帳號，再開啟上述續跑入口完成 SSH。'}
 }
