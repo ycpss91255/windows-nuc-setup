@@ -35,6 +35,11 @@ try{
   Write-Host '正在下載更新…'
   $downloader=$session.CreateUpdateDownloader();$downloader.Updates=$collection
   $downloadResult=Invoke-SetupUpdateOperation -Operation Download -Client $downloader -Titles $titles -ProgressPath (Join-Path $StateRoot 'Update-Progress.json')
+  $result.DownloadResultCode=[int]$downloadResult.ResultCode;$result.DownloadHResult=$downloadResult.HResult
+  if($result.DownloadResultCode -ne 2){
+   $result.CompletedAt=(Get-Date).ToString('o');$result|ConvertTo-Json -Depth 6|Set-Content (Join-Path $StateRoot 'WindowsUpdate-Result.json') -Encoding UTF8
+   throw ('Windows Update下載未完全成功，結果碼：'+$result.DownloadResultCode+'；未啟動安裝，即使存在舊快取。')
+  }
   $installSet=New-Object -ComObject Microsoft.Update.UpdateColl
   foreach($update in $collection){if($update.IsDownloaded){[void]$installSet.Add($update)}else{Write-Warning ('尚未下載完成：'+$update.Title)}}
   if($installSet.Count){
