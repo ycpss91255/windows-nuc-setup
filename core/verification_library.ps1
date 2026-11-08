@@ -21,6 +21,10 @@ try{
  $privacy=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'apply_privacy_settings.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup/Privacy-Result.json') -Arguments @{VerifyOnly=$true}
  Add-Check '非必要資料分享政策' $privacy.Success ('九項政策讀回；Windows診斷級別：'+$privacy.DiagnosticLevel+'；不代表其他應用程式不傳送資料。')
 }catch{Add-Check '非必要資料分享政策' $false $_.Exception.Message}
+try{
+ $uac=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'apply_uac_settings.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup/UAC-Result.json') -Arguments @{VerifyOnly=$true}
+ Add-Check '管理員提權提示政策' $uac.Success 'EnableLUA仍為1；此電腦管理員自動核准提權。'
+}catch{Add-Check '管理員提權提示政策' $false $_.Exception.Message}
 $sshFirewall=Get-SetupSSHFirewallStatus
 Add-Check 'SSH 防火牆規則' $sshFirewall.Passed $sshFirewall.Detail
 foreach($setting in @('STANDBYIDLE','HIBERNATEIDLE')){
