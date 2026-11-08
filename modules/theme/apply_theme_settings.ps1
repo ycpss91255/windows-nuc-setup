@@ -7,6 +7,8 @@ $root=Join-Path $env:ProgramData 'NUC8-Setup'
 New-Item -ItemType Directory $root -Force|Out-Null
 if(-not $Worker -and [Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0){
  $workerPath=Join-Path $root 'Theme-Worker.ps1'
+ . (Join-Path $PSScriptRoot '../native/managed_source_library.ps1')
+ $null=Copy-SetupManagedSource -SourceRoot $PSScriptRoot -DestinationRoot $root -FileName 'theme.cs'
  Copy-Item $PSCommandPath $workerPath -Force
  $resultPath=Join-Path $root $resultFileName
  if(Test-Path $resultPath){Remove-Item $resultPath -Force}
@@ -43,24 +45,7 @@ try{
  if(-not(Test-Path $cloud)){New-Item $cloud -Force|Out-Null}
  New-ItemProperty $cloud -Name DisableSpotlightCollectionOnDesktop -Value 1 -PropertyType DWord -Force|Out-Null
  }
-Add-Type -TypeDefinition @"
-using System;using System.Text;using System.Runtime.InteropServices;
-public static class NUC8Theme {
- [StructLayout(LayoutKind.Sequential)]public struct Rect{public int Left,Top,Right,Bottom;}
- [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr FindWindow(string cls,string title);
- [DllImport("user32.dll")]static extern bool GetWindowRect(IntPtr hwnd,out Rect rect);
- [DllImport("user32.dll")]static extern IntPtr GetDC(IntPtr hwnd);
- [DllImport("user32.dll")]static extern int ReleaseDC(IntPtr hwnd,IntPtr dc);
- [DllImport("gdi32.dll")]static extern uint GetPixel(IntPtr dc,int x,int y);
- [DllImport("user32.dll")]static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
- public static int[] TaskbarColor(){SetThreadDpiAwarenessContext(new IntPtr(-4));IntPtr bar=FindWindow("Shell_TrayWnd",null);Rect r;if(bar==IntPtr.Zero||!GetWindowRect(bar,out r)||r.Bottom<=r.Top)throw new Exception("Taskbar is not ready.");IntPtr dc=GetDC(IntPtr.Zero);try{uint color=GetPixel(dc,r.Left+8,r.Top+(r.Bottom-r.Top)/2);if(color==0xffffffff)throw new Exception("Unable to read taskbar color.");return new int[]{(int)(color&255),(int)((color>>8)&255),(int)((color>>16)&255)};}finally{ReleaseDC(IntPtr.Zero,dc);}}
- [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)]public static extern bool SystemParametersInfo(uint action,uint param,string value,uint flags);
- [DllImport("user32.dll",EntryPoint="SystemParametersInfoW",CharSet=CharSet.Unicode,SetLastError=true)]public static extern bool ReadWallpaper(uint action,uint param,StringBuilder value,uint flags);
- [DllImport("user32.dll")]public static extern bool SetSysColors(int count,int[] elements,uint[] colors);
- [DllImport("user32.dll")]public static extern uint GetSysColor(int index);
- [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)]public static extern IntPtr SendMessageTimeout(IntPtr hwnd,uint msg,IntPtr wp,string lp,uint flags,uint timeout,out IntPtr result);
-}
-"@
+Add-Type -Path (Join-Path $PSScriptRoot 'native/theme.cs')
  if(-not $VerifyOnly){
  if(-not [NUC8Theme]::SetSysColors(1,@(1),@([uint32]0))){throw '無法設定桌面背景顏色。'}
  if(-not [NUC8Theme]::SystemParametersInfo(20,0,'',3)){throw '無法移除桌面背景圖片。'}
