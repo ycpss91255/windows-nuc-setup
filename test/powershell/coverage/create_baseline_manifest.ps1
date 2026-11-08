@@ -8,11 +8,13 @@ if(Test-Path -LiteralPath $OutputPath){throw '基線清單輸出已存在。'}
 # the collector's bounded synthetic tests call it from a coverage worker.
 $tests=@(Get-ChildItem (Join-Path $source 'test/powershell/unit'),(Join-Path $source 'test/powershell/integration') -File -Filter '*_tests.ps1'|ForEach-Object {$_.FullName.Substring($source.Length+1).Replace('\','/')}|Sort-Object)
 if(-not $tests.Count){throw '安全測試清單為空。'}
+[Array]::Sort($tests,[StringComparer]::Ordinal)
 foreach($test in $tests){if(-not(Test-Path -LiteralPath (Join-Path $source $test) -PathType Leaf)){throw ('安全測試遺失：'+$test)}}
 $tracked=@(& git -C $source ls-files '*.ps1')
 if($LASTEXITCODE -ne 0){throw '無法取得版本控制來源清單。'}
 $sources=@($tracked|Where-Object {$_ -match '^(core|modules|script)/' -and $_ -notmatch '^modules/debloat/win11debloat/'}|Sort-Object)
 if(-not $sources.Count){throw '正式 PowerShell 來源清單為空。'}
+[Array]::Sort($sources,[StringComparer]::Ordinal)
 $testEngines=[ordered]@{}
 $metadataSuite='test/powershell/integration/managed_catalog_tests.ps1'
 if($metadataSuite -cin $tests){$testEngines[$metadataSuite]='pwsh'}
