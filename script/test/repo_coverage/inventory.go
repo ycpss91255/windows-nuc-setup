@@ -183,6 +183,13 @@ func ScanInventory(root string) (Inventory, error) {
 				return e
 			}
 			inv.Sources = append(inv.Sources, Source{Path: rel, Language: language, SHA256: fmt.Sprintf("%x", sha256.Sum256(data))})
+			if language == "cmd" {
+				if _, err := ParseCMDLauncher(data); err != nil {
+					inv.Blockers = append(inv.Blockers, rel+": unsupported CMD executable syntax requires collector support")
+				} else {
+					inv.Excluded = append(inv.Excluded, Exclusion{rel + "#echo", "shell display directive @echo off has no setup executable point"})
+				}
+			}
 			if language == "powershell" {
 				data, e := os.ReadFile(full)
 				if e != nil {

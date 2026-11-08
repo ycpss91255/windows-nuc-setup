@@ -37,7 +37,7 @@ func ParseCMDLauncher(data []byte) (CMDLauncher, error) {
 			return result, fmt.Errorf("unsupported CMD control flow")
 		}
 		tokens := cmdToken.FindAllString(line, -1)
-		if len(tokens) < 4 || !strings.EqualFold(tokens[0], "powershell.exe") {
+		if len(tokens) < 3 || !strings.EqualFold(tokens[0], "powershell.exe") {
 			return result, fmt.Errorf("unsupported CMD command")
 		}
 		if strings.Join(tokens, " ") != line {
