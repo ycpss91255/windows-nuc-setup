@@ -9,6 +9,7 @@ $temp=Join-Path $env:TEMP ('driver_stage_'+[guid]::NewGuid().ToString('N'));[voi
 $package=Join-Path $temp 'package';[void][IO.Directory]::CreateDirectory($package)
 [IO.File]::WriteAllText((Join-Path $package 'manifest.json'),'{}')
 [IO.File]::WriteAllText((Join-Path $package 'package.json'),'{"SchemaVersion":2,"ProfileId":"fixture"}')
+Copy-Item -LiteralPath (Join-Path $root 'license') -Destination (Join-Path $package 'license')
 $zip=Join-Path $temp 'driver_fixture.zip';New-DeterministicDriverArchive $package $zip
 $metadata=Join-Path $temp 'assets.json';$asset=@{Name='driver_fixture.zip';Size=(Get-Item $zip).Length;SHA256=(Get-FileHash $zip).Hash.ToLowerInvariant();ProfileId='fixture';ManifestSHA256=(Get-FileHash (Join-Path $package 'manifest.json')).Hash.ToLowerInvariant()}
 @{SchemaVersion=1;Releases=@(@{Version='v1.0.0';Assets=@($asset)})}|ConvertTo-Json -Depth 8|Set-Content $metadata -Encoding UTF8

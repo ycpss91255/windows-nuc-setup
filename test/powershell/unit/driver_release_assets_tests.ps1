@@ -33,6 +33,7 @@ foreach($mode in @('published','tag','commit','body','extra','digest','size','mi
 $input=Join-Path $temp 'package';[void][IO.Directory]::CreateDirectory((Join-Path $input 'nested'))
 [IO.File]::WriteAllText((Join-Path $input 'manifest.json'),'{}')
 [IO.File]::WriteAllText((Join-Path $input 'package.json'),'{"SchemaVersion":2,"ProfileId":"fixture"}')
+Copy-Item -LiteralPath (Join-Path $root 'license') -Destination (Join-Path $input 'license')
 [IO.File]::WriteAllText((Join-Path $input 'nested/a.txt'),'fixture data')
 $a=Join-Path $temp 'a.zip';$b=Join-Path $temp 'b.zip'
 New-DeterministicDriverArchive -PackageDirectory $input -OutputPath $a
