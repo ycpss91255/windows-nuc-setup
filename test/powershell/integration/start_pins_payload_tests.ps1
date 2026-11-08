@@ -36,4 +36,15 @@ try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPoli
 Assert ($cliExit -ne 0 -and (Test-Path -LiteralPath (Join-Path $cliEvidence 'evidence.json'))) 'public CLI preserves supplied package evidence and baseline arguments through imports'
 $cliData=[IO.File]::ReadAllText((Join-Path $cliEvidence 'evidence.json'))|ConvertFrom-Json
 Assert (-not $cliData.Verified -and $cliData.PackageSHA256 -ceq (Get-FileHash -LiteralPath $package).Hash -and $cliData.Files.Count -eq 7 -and [IO.File]::ReadAllText($cliLog) -match 'XML') 'public CLI reaches extraction and missing-baseline rejection with exact package digest'
+# Literal -File entry also preserves parameters before safe, pre-native rejection.
+$directLog=Join-Path $temp 'direct_file.log';$missingPackage=Join-Path $temp 'missing package.ppkg'
+$savedPreference=$ErrorActionPreference
+try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $verifier -PackagePath $missingPackage -EvidenceDirectory (Join-Path $temp 'direct evidence') -BaselinePath $cliBaseline *> $directLog;$directExit=$LASTEXITCODE}finally{$ErrorActionPreference=$savedPreference}
+Assert ($directExit -ne 0 -and [IO.File]::ReadAllText($directLog) -match '設定包不存在或超過') 'literal File invocation retains package argument and rejects missing file before native access'
+$oobeEvidence=Join-Path $temp 'oobe cli evidence';$oobeLog=Join-Path $temp 'oobe_cli.log'
+$savedPreference=$ErrorActionPreference
+try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $fixture -TargetScript (Join-Path $root 'script/test/verify_oobe_payload.ps1') -PackagePath $package -EvidenceDirectory $oobeEvidence -BaselinePath $cliBaseline *> $oobeLog;$oobeExit=$LASTEXITCODE}finally{$ErrorActionPreference=$savedPreference}
+Assert ($oobeExit -ne 0 -and (Test-Path -LiteralPath (Join-Path $oobeEvidence 'evidence.json'))) 'original OOBE public entry still reaches baseline rejection after safe extraction'
+$oobeData=[IO.File]::ReadAllText((Join-Path $oobeEvidence 'evidence.json'))|ConvertFrom-Json
+Assert (-not $oobeData.Verified -and $oobeData.Files.Count -eq 7 -and @($oobeData.Files|Where-Object {$_.Path -match 'HideOobe'}).Count -eq 1) 'OOBE public entry retains its original seven-file scope'
 Write-Host ('ALL PASS: '+$script:count+' synthetic Start payload contract assertions; no native extraction or installation')
