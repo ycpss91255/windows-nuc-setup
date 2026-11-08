@@ -12,8 +12,13 @@ try{
  throw
 }
 if($result.Success -and -not $VerifyOnly){
-  $folder=[IO.Path]::GetFullPath((Join-Path $env:USERPROFILE 'OneDrive'))
-  if([IO.Path]::GetDirectoryName($folder) -ine $env:USERPROFILE.TrimEnd('\')){throw 'OneDrive 路徑不符。'}
+  $rawProfile=$env:USERPROFILE
+  $profile=[IO.Path]::GetFullPath($rawProfile).TrimEnd('\','/')
+  $profileRoot=[IO.Path]::GetPathRoot($profile).TrimEnd('\','/')
+  if($rawProfile -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+(?:\\|$))' -or $profile -ieq $profileRoot){throw ('OneDrive 路徑不符。raw='+$rawProfile+'; canonical='+$profile+'; root='+$profileRoot)}
+  $folder=[IO.Path]::GetFullPath((Join-Path $profile 'OneDrive'))
+  $parent=[IO.Path]::GetFullPath([IO.Path]::GetDirectoryName($folder)).TrimEnd('\','/')
+  if($parent -ine $profile){throw ('OneDrive 路徑不符。raw='+$rawProfile+'; canonical='+$profile+'; parent='+$parent)}
   if(Test-Path -LiteralPath $folder -PathType Container){
    $item=Get-Item -LiteralPath $folder -Force
    if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0){
