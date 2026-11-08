@@ -11,12 +11,12 @@ $encoding=[Text.UTF8Encoding]::new($true)
 $keys=@('GITHUB_SHA','GITHUB_REF_TYPE','GITHUB_HEAD_REF','GITHUB_REF_NAME','GITHUB_REPOSITORY','GITHUB_RUN_ID','GITHUB_STEP_SUMMARY','WINDOWS_SETUP_TEST_CONTEXT')
 $saved=@{};foreach($key in $keys){$saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process');[Environment]::SetEnvironmentVariable($key,$null,'Process')}
 function Put([string]$Relative,[string]$Content){$path=Join-Path $fixture $Relative;[void][IO.Directory]::CreateDirectory((Split-Path $path));[IO.File]::WriteAllText($path,$Content,$encoding)}
-function Git([string[]]$Arguments){$output=& git.exe -C $fixture @Arguments 2>&1;if($LASTEXITCODE -ne 0){throw ($output|Out-String)};return $output}
+function Invoke-FixtureGit([string[]]$Arguments){$output=& git.exe -c core.autocrlf=false -C $fixture @Arguments 2>&1;if($LASTEXITCODE -ne 0){throw ($output|Out-String)};return $output}
 function Run([string]$Name,[string]$Layer='All',[string]$ExpectedError=''){
  $out=Join-Path $temp $Name;$actual=''
  try{Invoke-SetupCI -PackageRoot $fixture -ReportDirectory $out -Layer $Layer}catch{$actual=$_.Exception.Message}
  if($ExpectedError){Assert ($actual -like ('*'+$ExpectedError+'*')) ($Name+' 拒絕正確原因：'+$actual)}else{Assert (-not $actual) ($Name+' 真實執行成功：'+$actual)}
- $summary=Join-Path $out 'public/summary.json';if(Test-Path $summary){return (Get-Content -LiteralPath $summary -Raw|ConvertFrom-Json)}
+ $summary=Join-Path $out 'public/summary.json';if(Test-Path $summary){return (Get-Content -LiteralPath $summary -Encoding UTF8 -Raw|ConvertFrom-Json)}
 }
 try{
  foreach($dir in @('core','modules','script','test/powershell/unit','test/powershell/integration')){[void][IO.Directory]::CreateDirectory((Join-Path $fixture $dir))}
@@ -26,8 +26,8 @@ try{
  Put 'doc/changelog/changelog.md' "## [Unreleased]`n- 安全測試來源`n## [v1.2.3]`n- 已發布測試來源"
  Put 'test/powershell/unit/first_tests.ps1' $pass
  Put 'test/powershell/integration/layout_tests.ps1' ('param([string]$PackageRoot,[switch]$SourceOnly)' + "`n" + 'if(-not $SourceOnly -or -not (Test-Path (Join-Path $PackageRoot ''.version''))){exit 9}' + "`n" + $pass)
- Git @('init','--quiet')|Out-Null;Git @('add','.')|Out-Null;Git @('-c','user.name=CI Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','fixture')|Out-Null
- $head=(Git @('rev-parse','HEAD')).Trim()
+ Invoke-FixtureGit @('init','--quiet')|Out-Null;Invoke-FixtureGit @('add','.')|Out-Null;Invoke-FixtureGit @('-c','user.name=CI Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','fixture')|Out-Null
+ $head=(Invoke-FixtureGit @('rev-parse','HEAD')).Trim()
  $r=Run 'clean'
  Assert ($r.Success -and $r.Checks.Count -eq 3 -and $r.Totals.AssertionsExecuted -eq 2) '完整清單含語法與兩層真子程序斷言'
  Assert ($r.Commit -eq $head -and $r.SourceState -eq 'Clean' -and $r.SchemaVersion -eq 2 -and $r.Coverage -eq 'NotMeasured') '實際 Git 身分與現行 schema 不偽造覆蓋率'
@@ -51,6 +51,15 @@ try{
  Put 'test/powershell/unit/ignored.ps1' '# invalid suite name'
  $null=Run 'invalid' 'All' 'Invalid or empty test inventory'
  Remove-Item -LiteralPath (Join-Path $fixture 'test/powershell/unit/ignored.ps1')
+ # Release metadata is fixture data, backed by a real clean local commit and the real parser.
+ Put 'script/release/release.ps1' ([IO.File]::ReadAllText((Join-Path $root 'script/release/release.ps1')))
+ Invoke-FixtureGit @('add','.')|Out-Null;Invoke-FixtureGit @('-c','user.name=CI Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','release fixture')|Out-Null
+ $env:GITHUB_SHA=(Invoke-FixtureGit @('rev-parse','HEAD')).Trim();$env:GITHUB_REF_TYPE='tag';$env:GITHUB_HEAD_REF=$null;$env:GITHUB_REF_NAME='v1.2.3'
+ $r=Run 'release'
+ Assert ($r.RefType -eq 'Release' -and $r.RefName -eq 'v1.2.3' -and $r.Changes[0] -eq '已發布測試來源' -and $r.SourceState -eq 'Clean') '真版本章節解析與發布證據條件保留'
+ $env:GITHUB_REF_TYPE=$null
+ Remove-Item -LiteralPath (Join-Path $fixture '.version')
+ $r=Run 'unversioned' 'Unit';Assert ($r.Version -eq 'Unknown' -and $r.SourceState -eq 'Dirty') '缺版本不假設有效版本'
  # The CLI contract is executed using an isolated copy with a harmless named delegate.
  $cli=Join-Path $temp 'cli/script/test';[void][IO.Directory]::CreateDirectory($cli)
  Copy-Item -LiteralPath (Join-Path $root 'script/test/run_ci.ps1') -Destination $cli
