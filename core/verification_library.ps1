@@ -1,4 +1,11 @@
 ﻿#Requires -Version 5.1
+function Invoke-SetupDriverFreshVerification {
+ param([Parameter(Mandatory=$true)][string]$DriverPackagePath,[Parameter(Mandatory=$true)][string]$VerificationRunId)
+ . (Resolve-NucPath 'driver_installation_library.ps1')
+ $results=@(Invoke-SetupDriverVerification -DriverRoot $DriverPackagePath -VerificationRunId $VerificationRunId)
+ if($results.Count -ne 1 -or $results[0].Success -isnot [bool] -or $results[0].VerificationRunId -cne $VerificationRunId -or $results[0].Computer -cne [Environment]::MachineName -or $results[0].UserSID -cne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value){throw '驅動結果不是本輪、同機、同帳號的可信結果。'}
+ return $results[0]
+}
 function Invoke-SetupVerification {
  param([Parameter(Mandatory=$true)]$Hardware,[string]$DriverPackagePath,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9-]{36}$')][string]$VerificationRunId)
@@ -36,8 +43,13 @@ foreach($setting in @('STANDBYIDLE','HIBERNATEIDLE')){
 $auto=Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
 Add-Check '自動登入設定' ($auto.AutoAdminLogon -eq '1' -and  $auto.DefaultUserName -eq $env:USERNAME) ('啟用值：'+$auto.AutoAdminLogon+'；帳號：'+$auto.DefaultUserName+'；實際自動登入仍需開機觀察')
 $driverDecision=Get-SetupModuleDecision -Module 'install_drivers.ps1' -Hardware $hardware
-if(-not $driverDecision.Applicable){$checks.Add((New-SetupSkippedCheck -Name 'NUC 驅動封存檔' -Reason $driverDecision.Reason));Write-Host ('[略過] '+$driverDecision.Reason)}
-else{try{$null=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $DriverPackagePath;Add-Check 'NUC 驅動封存檔' $true '四個封存檔完整性通過'}catch{Add-Check 'NUC 驅動封存檔' $false $_.Exception.Message}}
+if(-not $driverDecision.Applicable){$checks.Add((New-SetupSkippedCheck -Name '已選驅動官方目標' -Reason $driverDecision.Reason));Write-Host ('[略過] '+$driverDecision.Reason)}
+else{try{
+ $null=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $DriverPackagePath
+ $driver=Invoke-SetupDriverFreshVerification -DriverPackagePath $DriverPackagePath -VerificationRunId $VerificationRunId
+ $states=@($driver.Targets|Group-Object Status|ForEach-Object {$_.Name+'='+$_.Count}) -join '；'
+ Add-Check '已選驅動官方目標' $driver.Success ('本輪重新讀取供應商、版本及狀態；'+$states)
+}catch{Add-Check '已選驅動官方目標' $false $_.Exception.Message}}
 $devices=@(Get-PnpDevice -PresentOnly|Where-Object Status -ne 'OK')
 Add-Check '驅動裝置' ($devices.Count -eq 0) ('異常數：'+$devices.Count)
 $search=Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -ErrorAction SilentlyContinue
