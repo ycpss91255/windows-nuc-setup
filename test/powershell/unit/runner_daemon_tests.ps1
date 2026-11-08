@@ -16,6 +16,8 @@ function Invoke-Scenario([string]$Mode,[hashtable]$Identity=$hosted){
    $script:probes++
    if($Mode -eq 'linux'){return @{ExitCode=0;Output='{"OSType":"linux"}'}}
    if($Mode -eq 'invalid'){return @{ExitCode=0;Output='not json'}}
+   $shapes=@{'os-boolean'='{"OSType":true}';'os-empty-array'='{"OSType":[]}';'os-array'='{"OSType":["windows"]}';'root-array'='[{"OSType":"windows"}]';'root-boolean'='true';'os-missing'='{}';'os-null'='{"OSType":null}'}
+   if($shapes.ContainsKey($Mode)){return @{ExitCode=0;Output=$shapes[$Mode]}}
    if($Mode -eq 'throw'){throw 'owned native process timed out'}
    if($Mode -eq 'ready' -or ($script:probes -gt 1 -and $Mode -in @('running','stopped'))){return @{ExitCode=0;Output='{"OSType":"windows"}'}}
    return @{ExitCode=1;Output='private error must not become success'}
@@ -40,6 +42,10 @@ Assert (Invoke-Scenario running) 'named pipe 尚未就緒的 Running 服務可�
 Assert (@($script:calls|Where-Object{$_ -eq 'sc.exe stop Docker'}).Count -eq 1 -and @($script:calls|Where-Object{$_ -eq 'sc.exe start Docker'}).Count -eq 1) 'Running 僅一次 stop 與一次 start'
 Assert (Invoke-Scenario stopped) 'Stopped 服務可一次啟動後確認 Windows'
 Assert (@($script:calls|Where-Object{$_ -eq 'sc.exe stop Docker'}).Count -eq 0 -and @($script:calls|Where-Object{$_ -eq 'sc.exe start Docker'}).Count -eq 1) 'Stopped 不重啟而僅一次 start'
+foreach($shape in @('os-boolean','os-empty-array','os-array','root-array','root-boolean','os-missing','os-null')){
+ Assert (-not(Invoke-Scenario $shape @{})) ('真 Windows 就緒只接受單一 JSON object 及實際 string OSType：'+$shape)
+ Assert ($script:calls.Count -eq 1) '未知 metadata 立即失敗而不嘗試服務恢復'
+}
 foreach($mode in @('linux','invalid','throw','missing','denied','action-fail','pending','never')){
  Assert (-not(Invoke-Scenario $mode)) ('錯 OS／服務失敗／期限保持失敗：'+$mode)
  Assert (@($script:calls|Where-Object{$_ -eq 'sc.exe start Docker'}).Count -le 1) '所有失敗不重複恢復'
