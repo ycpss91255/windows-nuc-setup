@@ -7,7 +7,7 @@ Assert (Test-Path -LiteralPath $library) 'WU既有控制器提供可隔離執行
 . $library
 $fixture=Join-Path $env:TEMP ('update_entry_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
 function Get-SetupWindowsUpdateCommonDataRoot {$global:UpdateFixture.Common}
-function Get-ScheduledTask {param($TaskName,$ErrorAction) $global:UpdateFixture.TaskReads++;[pscustomobject]@{State=$(if($global:UpdateFixture.Mode -eq 'initial_running' -or ($global:UpdateFixture.Mode -eq 'race_running' -and $global:UpdateFixture.TaskReads -gt 1) -or $global:UpdateFixture.Mode -eq 'timeout' -or $global:UpdateFixture.TaskReads -eq 3){'Running'}else{'Ready'})}}
+function Get-ScheduledTask {param($TaskName,$ErrorAction) $global:UpdateFixture.TaskReads++;[pscustomobject]@{State=$(if($global:UpdateFixture.Mode -eq 'initial_running' -or ($global:UpdateFixture.Mode -eq 'race_running' -and $global:UpdateFixture.TaskReads -gt 1) -or ($global:UpdateFixture.Mode -eq 'timeout' -and $global:UpdateFixture.TaskReads -ge 3) -or $global:UpdateFixture.TaskReads -eq 3){'Running'}else{'Ready'})}}
 function Get-ScheduledTaskInfo {param($TaskName) [pscustomobject]@{LastRunTime=$global:UpdateFixture.BaseDate.AddSeconds(1);LastTaskResult=$(if($global:UpdateFixture.Mode -eq 'native_failure'){5}else{0})}}
 function New-ScheduledTaskAction {param($Execute,$Argument) $global:UpdateFixture.Action=@{Execute=$Execute;Argument=$Argument};'action'}
 function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel) $global:UpdateFixture.Principal=@{UserId=$UserId;LogonType=$LogonType;RunLevel=$RunLevel};'principal'}
