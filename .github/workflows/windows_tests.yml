@@ -31,7 +31,7 @@ jobs:
           $directory = Join-Path $env:RUNNER_TEMP 'actionlint-1.7.12'
           Install-ContainerToolArtifact -Artifact $artifact -Destination $directory -ArchiveDirectory (Join-Path $env:RUNNER_TEMP 'actionlint-download')
           "WINDOWS_SETUP_ACTIONLINT=$(Join-Path $directory 'actionlint.exe')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-      - name: Reproduce one unchanged configuration suite with full sources
+      - name: Reproduce original concurrent pair with full sources
         run: |
           $ErrorActionPreference='Stop'
           [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
@@ -45,18 +45,20 @@ jobs:
           $manifest=Get-Content $path -Raw -Encoding UTF8|ConvertFrom-Json
           $case='test/powershell/integration/configuration_helpers_tests.ps1'
           if($manifest.Tests[7] -cne $case){throw 'Unexpected canonical case'}
-          $manifest.Tests=@($case)
+          $manifest.Tests=@($manifest.Tests[3],$case)
           $manifest.TestEngines=[pscustomobject]@{}
-          $manifest|Add-Member ShardContext ([pscustomobject]@{Commit=$head;RunUrl='https://github.com/ycpss91255/windows_setup/actions/runs/42512829236';RunAttempt=1;ShardIndex=3;ShardCount=4;GlobalIndices=@(7)})
+          $manifest|Add-Member ShardContext ([pscustomobject]@{Commit=$head;RunUrl='https://github.com/ycpss91255/windows_setup/actions/runs/42512829236';RunAttempt=1;ShardIndex=3;ShardCount=4;GlobalIndices=@(3,7)})
           [IO.File]::WriteAllText($path,($manifest|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
           $nativeSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
           $kind=if($nativeSid -eq 'S-1-5-18'){'System'}elseif($nativeSid -match '-500$'){'BuiltinAdministrator'}else{'StandardAccount'}
           Write-Host ('NativeIdentityKind='+$kind+';SourceCommit='+$head+';Sources='+$manifest.Sources.Count)
           $proof=Join-Path $folder 'proof'
           $old=$ErrorActionPreference
-          try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\powershell_coverage.ps1 -ManifestPath $path -OutputDirectory $proof *> (Join-Path $folder 'collector.private.log');$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
-          $stdout=Join-Path $proof 'worker_0.private.stdout.log'
-          $stderr=Join-Path $proof 'worker_0.private.stderr.log'
+          try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\powershell_coverage.ps1 -ManifestPath $path -OutputDirectory $proof -ThrottleLimit 2 *> (Join-Path $folder 'collector.private.log');$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
+          foreach($workerIndex in @(0,1)){
+            Write-Host ('DiagnosticWorkerIndex='+$workerIndex)
+            $stdout=Join-Path $proof ('worker_'+$workerIndex+'.private.stdout.log')
+          $stderr=Join-Path $proof ('worker_'+$workerIndex+'.private.stderr.log')
           if(Test-Path $stdout){
             $markers=@(foreach($line in Get-Content $stdout -Encoding UTF8){$pos=$line.IndexOf('@@ASSERT@@');if($pos -ge 0){try{$item=$line.Substring($pos+10)|ConvertFrom-Json;if($item.Name -is [string] -and $item.Passed -is [bool]){$name=$item.Name;if($name.Length -gt 300 -or $name -match '[A-Za-z]:[\\/]|https?://|\\\\|[\r\n]'){$name='RedactedAssertionName'};[pscustomobject]@{Name=$name;Passed=$item.Passed}}}catch{}}})
             foreach($marker in @($markers|Select-Object -Last 15)){Write-Host ('DIAG_ASSERT '+($marker|ConvertTo-Json -Compress))}
@@ -64,6 +66,7 @@ jobs:
           }
           if(Test-Path $stderr){
             foreach($line in Get-Content $stderr -Encoding UTF8){if($line -match '^At (.+\.ps1):(\d+) char:(\d+)'){$file=[IO.Path]::GetFileName($matches[1]);Write-Host ('DIAG_LOCATION '+(@{File=$file;Line=[int]$matches[2];Column=[int]$matches[3]}|ConvertTo-Json -Compress))}}
+          }
           }
           Write-Host ('NativeExitCode='+$code+';CompletedEvidence='+(Test-Path (Join-Path $proof 'evidence.json')))
           & git diff --exit-code
