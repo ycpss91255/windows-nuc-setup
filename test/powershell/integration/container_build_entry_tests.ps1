@@ -4,6 +4,8 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Message}}
 $fixture=Join-Path $env:TEMP ('docker_entry_'+[guid]::NewGuid().ToString('N'));$source=Join-Path $fixture 'source'
 [void][IO.Directory]::CreateDirectory((Join-Path $source '.git'))
+$sourceItem=Get-Item -LiteralPath $source -ErrorAction Stop
+Assert ($sourceItem -is [IO.DirectoryInfo] -and $source -ceq $sourceItem.FullName) 'owned fixture uses the real existing directory name before passing source to a child process'
 foreach($file in @('dockerfile/windows_tests.dockerfile','script/docker/download_library.ps1','script/docker/install_min_git.ps1','script/docker/install_go.ps1','script/docker/install_managed_tools.ps1','script/docker/container_test.ps1','script/docker/docker.ps1','script/docker/library.ps1','script/test/ci_tasks.ps1','.dockerignore','compose.yaml')){
  $target=Join-Path $source $file;[void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target));Copy-Item -LiteralPath (Join-Path $root $file) -Destination $target
 }
