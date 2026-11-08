@@ -31,15 +31,18 @@ jobs:
         with:
           persist-credentials: false
       - name: 唯讀抽取並核對已審查內容
+        id: payload
         shell: powershell
         run: |
-          .\script\test\verify_oobe_payload.ps1 -PackagePath .\modules\init\assets\hide_oobe.ppkg -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'oobe-payload-evidence') -BaselinePath .\modules\init\assets\payload_baseline.json
+          $evidence = Join-Path ([IO.Path]::GetTempPath()) ('windows-setup-oobe-' + [guid]::NewGuid().ToString('N'))
+          "evidence=$evidence" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          .\script\test\verify_oobe_payload.ps1 -PackagePath .\modules\init\assets\hide_oobe.ppkg -EvidenceDirectory $evidence -BaselinePath .\modules\init\assets\payload_baseline.json
       - name: 保留內容驗證證據七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: oobe-payload-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/oobe-payload-evidence/
+          path: ${{ steps.payload.outputs.evidence }}
           retention-days: 7
           if-no-files-found: warn
 
