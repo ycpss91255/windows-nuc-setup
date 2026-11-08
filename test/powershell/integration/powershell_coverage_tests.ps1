@@ -14,6 +14,7 @@ function Select-Value([bool]$Positive){
  }
  return 'negative'
 }
+function Select-Inline([bool]$Positive){ if($Positive){return 'positive'}else{return 'negative'} }
 '@
 WriteFixture 'never.ps1' @'
 function Never-Called {
@@ -22,7 +23,7 @@ function Never-Called {
 '@
 foreach($side in @('positive','negative')){
  $value=if($side -eq 'positive'){'$true'}else{'$false'}
- WriteFixture ($side+'.Tests.ps1') ("BeforeAll { . (Join-Path `$PSScriptRoot 'branch.ps1') }`nDescribe 'original source' { It 'selects value' { Select-Value $value | Should-Be '$side' } }")
+ WriteFixture ($side+'.Tests.ps1') ("BeforeAll { . (Join-Path `$PSScriptRoot 'branch.ps1') }`nDescribe 'original source' { It 'selects value' { Select-Value $value | Should-Be '$side'; Select-Inline $value | Should-Be '$side' } }")
 }
 $manifest=Join-Path $fixture 'manifest.json'
 $input=[ordered]@{SourceRoot=$fixture;Sources=@('branch.ps1','never.ps1');Tests=@('positive.Tests.ps1','negative.Tests.ps1')}
@@ -31,6 +32,7 @@ $out=Join-Path $fixture 'coverage'
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $manifest -OutputDirectory $out *> (Join-Path $fixture 'collector.log')
 Assert ($LASTEXITCODE -eq 0) ('PS5.1 子程序真收集成功，診斷 '+$fixture)
 [xml]$merged=Get-Content (Join-Path $out 'coverage.xml') -Raw
+Assert ($merged.coverage.GetAttribute('coverage-metric') -ceq 'complete-executable-lines-v1' -and $merged.coverage.GetAttribute('coverage-schema') -ceq '1') '輸出明確宣告完整執行行共同語義'
 $classes=@($merged.coverage.packages.package.classes.class)
 Assert (@($classes|Where-Object filename -ceq 'never.ps1').Count -eq 1) '完全未執行檔仍在分母'
 $never=@(($classes|Where-Object filename -ceq 'never.ps1').lines.line)
@@ -41,12 +43,15 @@ Assert (@($branch|Where-Object {[int]$_.number -eq 5 -and [int]$_.hits -gt 0}).C
 [xml]$first=Get-Content (Join-Path $out 'worker_0.xml') -Raw
 $firstBranch=@(($first.coverage.packages.package.classes.class|Where-Object filename -eq 'branch.ps1').lines.line)
 Assert (@($firstBranch|Where-Object {[int]$_.number -eq 5 -and [int]$_.hits -eq 0}).Count -eq 1) '首子程序未執行分支真顯示未命中'
+$firstCommands=(Get-Content (Join-Path $out 'worker_0.json') -Raw|ConvertFrom-Json).Commands
+Assert (@($firstCommands|Where-Object {$_.File -ceq 'branch.ps1' -and $_.Line -eq 7 -and -not $_.Hit}).Count -gt 0) '同一行首子程序確實存在未命中命令'
+Assert (@($branch|Where-Object {[int]$_.number -eq 7 -and [int]$_.hits -gt 0}).Count -eq 1) '跨程序先合併命令後同一行互補命中'
 $evidence=Get-Content (Join-Path $out 'evidence.json') -Raw|ConvertFrom-Json
 Assert ($evidence.Workers.Count -eq 2 -and @($evidence.Workers.ProcessId|Select-Object -Unique).Count -eq 2) '每套測試由獨立程序收集'
 Assert ($evidence.Sources.Count -eq 2 -and $evidence.PesterVersion -eq '6.0.0') '來源清單及固定工具版本保留'
-foreach($case in @('missing','empty','outside','failed_test')){
+foreach($case in @('missing','empty','outside','failed_test','empty_coverage')){
  $bad=[ordered]@{SourceRoot=$fixture;Sources=@('branch.ps1','never.ps1');Tests=@('positive.Tests.ps1')}
- switch($case){missing{$bad.Sources+=@('missing.ps1')} empty{$bad.Sources=@()} outside{$bad.Sources=@('../outside.ps1')} failed_test{WriteFixture 'failed.Tests.ps1' "Describe 'bad' { It 'fails' { 1 | Should-Be 2 } }";$bad.Tests=@('failed.Tests.ps1')}}
+ switch($case){missing{$bad.Sources+=@('missing.ps1')} empty{$bad.Sources=@()} outside{$bad.Sources=@('../outside.ps1')} failed_test{WriteFixture 'failed.Tests.ps1' "Describe 'bad' { It 'fails' { 1 | Should-Be 2 } }";$bad.Tests=@('failed.Tests.ps1')} empty_coverage{WriteFixture 'empty.ps1' '# No executable code';$bad.Sources=@('empty.ps1')}}
  $badPath=Join-Path $fixture ($case+'.json');[IO.File]::WriteAllText($badPath,($bad|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
  $ErrorActionPreference='Continue'
  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $badPath -OutputDirectory (Join-Path $fixture $case) *> (Join-Path $fixture ($case+'.log'))
