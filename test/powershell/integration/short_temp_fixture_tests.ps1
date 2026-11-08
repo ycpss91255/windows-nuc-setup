@@ -11,7 +11,7 @@ try{
  $short=@(& $cmd /d /v:off /c 'for %I in ("%WINDOWS_SETUP_SHORT_TEMP_FIXTURE%") do @echo %~sI')[0]
  if($LASTEXITCODE -ne 0 -or -not(Test-Path -LiteralPath $short -PathType Container)){throw 'Cannot resolve existing fixture directory.'}
  $env:TEMP=$short
- foreach($suite in @('unit/driver_release_assets_tests.ps1','integration/driver_release_staging_tests.ps1','unit/driver_cache_cleanup_tests.ps1','integration/init_runtime_tests.ps1')){
+ foreach($suite in @('unit/provisioning_context_gap_tests.ps1','unit/provisioning_runtime_gap_tests.ps1','unit/stage_runtime_gap_tests.ps1','unit/driver_release_assets_tests.ps1','integration/driver_release_staging_tests.ps1','unit/driver_cache_cleanup_tests.ps1','integration/init_runtime_tests.ps1')){
   $log=Join-Path $fixture ((Split-Path $suite -Leaf)+'.private.log')
   $ErrorActionPreference='Continue'
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root ('test/powershell/'+$suite)) *> $log
