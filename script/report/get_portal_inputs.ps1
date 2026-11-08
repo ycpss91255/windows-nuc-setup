@@ -17,7 +17,7 @@ foreach($line in $lines){
  if($snapshot.Count -eq 1 -and $manifest.Count -eq 1){
   $dir=Join-Path $out $release.tag_name;New-Item -ItemType Directory $dir|Out-Null
   $download=@('release','download',$release.tag_name,'--repo',$Repository,'--dir',$dir)
-  foreach($name in @('quality.json','quality-manifest.json','index.html','summary.md','junit.xml','unit.svg','integration.svg','system.svg','coverage.svg')){if($release.assets.name -ccontains $name){$download+=@('--pattern',$name)}}
+  foreach($name in @('quality.json','quality-manifest.json','index.html','summary.md','junit.xml','unit.svg','integration.svg','system.svg','coverage.svg','repo_coverage.json','coverage_inventory.json','coverage.xml')){if($release.assets.name -ccontains $name){$download+=@('--pattern',$name)}}
   & gh @download
   if($LASTEXITCODE -ne 0){throw 'Release 品質證據下載失敗。'}
   $row.SnapshotPath=Join-Path $dir 'quality.json';$row.ManifestPath=Join-Path $dir 'quality-manifest.json';$row.SnapshotDigest=$snapshot[0].digest;$row.ManifestDigest=$manifest[0].digest
