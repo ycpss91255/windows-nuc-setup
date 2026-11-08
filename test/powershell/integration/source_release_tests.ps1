@@ -12,6 +12,15 @@ function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{N
 function Refuse([scriptblock]$Action,[string]$Message){$caught=$false;try{& $Action|Out-Null}catch{$caught=$true};Assert $caught $Message}
 function FixtureGit([string[]]$Arguments){& git.exe -C $repo @Arguments|Out-Null;if($LASTEXITCODE -ne 0){throw '測試 Git 命令失敗。'}}
 function WriteFile([string]$Path,[string]$Text){[IO.File]::WriteAllText((Join-Path $repo $Path),$Text,[Text.UTF8Encoding]::new($false))}
+# Invoke the copied maintenance entry in a fresh PS5.1 process without PackageRoot.
+$defaultRepo=Join-Path $fixture '預設定位'
+New-Item -ItemType Directory -Path (Join-Path $defaultRepo 'script/release'),(Join-Path $defaultRepo 'doc/changelog') -Force|Out-Null
+Copy-Item -LiteralPath $prepare,(Join-Path $root 'script/release/release.ps1') -Destination (Join-Path $defaultRepo 'script/release')
+[IO.File]::WriteAllText((Join-Path $defaultRepo 'doc/changelog/changelog.md'),"## [Unreleased]`n`n### Fixed`n`n- fixture change`n")
+$priorPreference=$ErrorActionPreference
+try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $defaultRepo 'script/release/prepare_release.ps1') -Version v9.8.7-rc1 > (Join-Path $fixture 'default_prepare.log') 2>&1;$prepareExit=$LASTEXITCODE}finally{$ErrorActionPreference=$priorPreference}
+Assert ($prepareExit -eq 0) 'PS5.1 新程序省略 PackageRoot 可定位腳本所屬套件'
+Assert ((Get-Content (Join-Path $defaultRepo '.version') -Raw).Trim() -eq 'v9.8.7-rc1') '預設定位只更新暫存套件的版本'
 foreach($file in @('init.cmd','windows.cmd','readme.md')){WriteFile $file 'fixture'}
 $log="## [Unreleased]`n`n### Changed`n`n- 通用 Windows 設定。`n"
 WriteFile 'doc/changelog/changelog.md' $log
