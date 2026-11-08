@@ -68,41 +68,8 @@ Assert (-not(Test-Path (Join-Path $duplicatePortal 'comparisons')) -and (Test-Pa
 $preserved=Get-Content (Join-Path $duplicatePortal 'versions/v1.0.2/summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert ($preserved.Checks[0].Assertions.Count -eq 2) 'both measured assertions remain in immutable evidence'
 $checks[0].Assertions=$savedAssertions
-# Mock GitHub only: exercise the real draft/upload verification/publish ordering.
-$publish=Join-Path $root 'script/report/publish_quality_release.ps1'
-$notes=Join-Path $fixture 'notes.md';[IO.File]::WriteAllText($notes,'fixture notes')
-function gh {
- $words=@($args);$global:LASTEXITCODE=0
- if($words[0] -eq 'api' -and $words -contains '--paginate'){return}
- if($words[0] -eq 'release' -and $words[1] -eq 'create'){
-  $global:portalDraftRequested=$words -contains '--draft'
-  $global:portalReleaseTitle=$words[[Array]::IndexOf($words,'--title')+1]
-  $allowed=@('quality.json','quality-manifest.json','index.html','summary.md','junit.xml','unit.svg','integration.svg','system.svg','coverage.svg')
-  $global:portalMockAssets=@($words|Where-Object {[IO.Path]::GetFileName([string]$_) -in $allowed}|ForEach-Object {@{name=[IO.Path]::GetFileName($_);digest=('sha256:'+(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant())}})
-  return
- }
- if($words[0] -eq 'release' -and $words[1] -eq 'view'){
-  if($global:portalMockMode -eq 'bad-digest'){$global:portalMockAssets[0].digest='sha256:'+('0'*64)}
-  return (@{isDraft=$true;assets=$global:portalMockAssets}|ConvertTo-Json -Depth 5)
- }
- if($words[0] -eq 'release' -and $words[1] -eq 'edit'){$global:portalPublished++;return}
- if($words[0] -eq 'api' -and $words[1] -like '*/releases/tags/*'){
-  $immutable=if($global:portalMockMode -eq 'string-immutable'){'true'}else{$global:portalMockMode -ne 'mutable'}
-  $assets=if($global:portalMockMode -eq 'missing-asset'){@($global:portalMockAssets|Select-Object -Skip 1)}else{$global:portalMockAssets}
-  return (@{immutable=$immutable;draft=$false;tag_name='v1.0.1';assets=$assets;html_url='https://github.com/example/repo/releases/tag/v1.0.1'}|ConvertTo-Json -Depth 5)
- }
- if($words[0] -eq 'api' -and $words[1] -like '*/commits/*'){return $(if($global:portalMockMode -eq 'wrong-tag-sha'){'c'*40}else{'b'*40})}
- throw ('Unexpected mock GitHub call: '+($words -join ' '))
-}
-foreach($mode in @('success','bad-digest','mutable','string-immutable','missing-asset','wrong-tag-sha')){
- $global:portalMockMode=$mode;$global:portalPublished=0;$global:portalDraftRequested=$false
- $accepted=$true;try{& $publish -PublicDirectory $b.AssetDirectory -Version $b.Version -Commit $b.Commit -NotesPath $notes -Repository example/repo|Out-Null}catch{$accepted=$false}
- Assert ($accepted -eq ($mode -eq 'success')) ('release accepts only verified immutable publication: '+$mode)
- Assert ($global:portalReleaseTitle -ceq $b.Version) ('release title contains only the exact version: '+$mode)
- Assert $global:portalDraftRequested ('release uses draft before upload verification: '+$mode)
- Assert ($global:portalPublished -eq $(if($mode -eq 'bad-digest'){0}else{1})) ('bad attachment digest cannot reach publish: '+$mode)
-}
-Remove-Item Function:\gh
+# Immutable legacy artifacts remain readable, but the current publisher cannot downgrade.
+Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $b.AssetDirectory -Version $b.Version -Commit $b.Commit -NotesPath (Join-Path $b.AssetDirectory 'summary.md') -Repository example/repo} 'legacy發布降級拒絕；完整Schema2發布正反案例見repo_publication_tests'
 Write-Host ('ALL PASS: '+$count+' portal evidence and comparison assertions; local fixtures only.')
 
 # User-facing conclusions follow real main evidence; JSON keeps machine statuses.
