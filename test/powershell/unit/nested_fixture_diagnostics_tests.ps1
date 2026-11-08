@@ -28,3 +28,12 @@ $output=[IO.File]::ReadAllText($log)
 $passed=($code -eq 1 -and $output.Contains('child-case=1') -and $output.Contains('type=RuntimeException') -and $output.Contains('source=outside_source') -and -not $output.Contains('PRIVATE_DO_NOT_PUBLISH'))
 Write-Host ('@@ASSERT@@'+(@{Name='真正nested child失敗保留退出1並公開固定失敗序號，私有訊息不外洩';Passed=$passed}|ConvertTo-Json -Compress))
 if(-not $passed){throw 'Nested child failure needs safe diagnostics without publishing its private log.'}
+[IO.File]::WriteAllText($failed,@'
+Write-Host ('@@ASSERT@@'+(@{Name='PRIVATE_DO_NOT_PUBLISH';Passed=$false}|ConvertTo-Json -Compress))
+[void][IO.Directory]::CreateDirectory('')
+'@,[Text.UTF8Encoding]::new($true))
+try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $runner *> $log;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
+$output=[IO.File]::ReadAllText($log)
+$passed=($code -eq 1 -and $output.Contains('type=MethodInvocationException') -and $output.Contains('inner-type=ArgumentException') -and $output.Contains('inner-hresult=-2147024809') -and -not $output.Contains('PRIVATE_DO_NOT_PUBLISH'))
+Write-Host ('@@ASSERT@@'+(@{Name='真原生CreateDirectory包裝例外保留固定內層type與HResult，不公開訊息';Passed=$passed}|ConvertTo-Json -Compress))
+if(-not $passed){throw 'A native wrapper exception needs bounded inner type and HResult diagnostics.'}
