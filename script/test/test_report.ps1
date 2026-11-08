@@ -1,4 +1,5 @@
-﻿#Requires -Version 5.1
+﻿. (Join-Path $PSScriptRoot '../report/repo_coverage.ps1')
+#Requires -Version 5.1
 . (Join-Path $PSScriptRoot 'go_coverage.ps1')
 function Protect-ReportText([string]$Text){
  foreach($value in @($env:USERPROFILE,$env:TEMP,$env:TMP,$env:GITHUB_WORKSPACE)|Where-Object {$_}){$Text=$Text.Replace($value,'[local]')}
@@ -8,7 +9,7 @@ function Protect-ReportText([string]$Text){
 function Assert-TestReportSnapshot {
  param([Parameter(Mandatory=$true)]$Report,[switch]$Release)
  foreach($key in @('SchemaVersion','Version','Commit','RequestedLayer','MeasuredAt','SourceState','RefType','RefName','Environment','Checks','Success','Coverage','Changes','Totals','RunUrl')){if($key -notin $Report.PSObject.Properties.Name){throw ('報表缺少必要欄位：'+$key)}}
- if($Report.SchemaVersion -notin @(1,2) -or $Report.RequestedLayer -notin @('All','Unit','Integration') -or $Report.SourceState -notin @('Clean','Dirty','Unknown') -or $Report.RefType -notin @('Branch','Release') -or $Report.Coverage -ne 'NotMeasured'){throw '不支援的報表結構或範圍。'}
+ if($Report.SchemaVersion -notin @(1,2) -or $Report.RequestedLayer -notin @('All','Unit','Integration') -or $Report.SourceState -notin @('Clean','Dirty','Unknown') -or $Report.RefType -notin @('Branch','Release') -or $Report.Coverage -notin @('NotMeasured','Measured')){throw '不支援的報表結構或範圍。'}
  if($Report.SchemaVersion -eq 1){if($Report.ComparisonStatus -ne 'Unknown' -or $Report.FlakyStatus -ne 'Unknown'){throw '歷史報表結構不符。'}}
  elseif($Report.PSObject.Properties['ComparisonStatus'] -or $Report.PSObject.Properties['FlakyStatus']){throw '新報表不可包含已移除的比較占位。'}
  $allowedLayers=if($Report.SchemaVersion -eq 1){@('Static','Unit','Integration','System','System E2E')}else{@('Static','Unit','Integration')}
@@ -29,6 +30,7 @@ function Assert-TestReportSnapshot {
   foreach($assertion in @($check.Assertions)){if($assertion.Name -isnot [string] -or $assertion.Passed -isnot [bool]){throw '斷言資料不合法。'}}
   if($check.Status -eq 'Passed' -and $check.Layer -in @('Unit','Integration') -and (-not @($check.Assertions).Count -or @($check.Assertions|Where-Object {-not $_.Passed}).Count)){throw '通過的測試缺少完整成功斷言。'}
  }
+ if($Report.PSObject.Properties['RepoCoverage']){Assert-RepoCoverage $Report.RepoCoverage $Report;$expected=if($Report.RepoCoverage.Result.Complete){'Measured'}else{'NotMeasured'};if($Report.Coverage -cne $expected){throw '覆蓋率量測狀態不一致。'}}elseif($Report.Coverage -cne 'NotMeasured'){throw '缺少整體覆蓋率證據。'}
  if($Report.PSObject.Properties['GoCoverage']){Assert-GoCoverage -Coverage $Report.GoCoverage -Report $Report}
  $allAssertions=@($Report.Checks|ForEach-Object {$_.Assertions})
  $expected=@{SuitesExecuted=@($Report.Checks|Where-Object Executed).Count;AssertionsExecuted=$allAssertions.Count;AssertionsPassed=@($allAssertions|Where-Object Passed).Count;AssertionsFailed=@($allAssertions|Where-Object {-not $_.Passed}).Count;UnexecutedSuites=@($Report.Checks|Where-Object {-not $_.Executed}).Count}
@@ -40,7 +42,7 @@ function Assert-TestReportSnapshot {
  }
 }
 function Write-TestReports {
- param([Parameter(Mandatory=$true)][object[]]$Checks,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$Layer='All',[string]$Commit=$env:GITHUB_SHA,[string]$RunUrl,[ValidateSet('Clean','Dirty','Unknown')][string]$SourceState='Unknown',[string]$Version='Unknown',[string]$Environment='Unknown',[ValidateSet('Branch','Release')][string]$RefType='Branch',[string]$RefName='Unknown',[string]$MeasuredAt=([DateTime]::UtcNow.ToString('o')),[string[]]$Changes=@(),$GoCoverage,[ValidateSet(1,2)][int]$SchemaVersion=2)
+ param([Parameter(Mandatory=$true)][object[]]$Checks,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$Layer='All',[string]$Commit=$env:GITHUB_SHA,[string]$RunUrl,[ValidateSet('Clean','Dirty','Unknown')][string]$SourceState='Unknown',[string]$Version='Unknown',[string]$Environment='Unknown',[ValidateSet('Branch','Release')][string]$RefType='Branch',[string]$RefName='Unknown',[string]$MeasuredAt=([DateTime]::UtcNow.ToString('o')),[string[]]$Changes=@(),$GoCoverage,$RepoCoverage,[ValidateSet(1,2)][int]$SchemaVersion=2)
  $encoding=[Text.UTF8Encoding]::new($false)
  New-Item -ItemType Directory -Path $OutputDirectory -Force|Out-Null
  $safe=@(foreach($check in $Checks){
@@ -51,6 +53,7 @@ function Write-TestReports {
  $report=[ordered]@{SchemaVersion=$SchemaVersion;Version=(Protect-ReportText $Version);Environment=(Protect-ReportText $Environment);RefType=$RefType;RefName=(Protect-ReportText $RefName);MeasuredAt=$MeasuredAt;Changes=@($Changes|Select-Object -First 20|ForEach-Object {Protect-ReportText $_});Success=$ok;Scope='Static, unit and isolated integration tests';RequestedLayer=$Layer;SourceState=$SourceState;Commit=$(if($Commit -match '^[a-fA-F0-9]{40}$'){$Commit}else{'local-unversioned'});RunUrl=$(if($RunUrl -match '^https://github.com/[^/]+/[^/]+/actions/runs/[0-9]+$'){$RunUrl}else{''});GeneratedAt=$MeasuredAt;Coverage='NotMeasured';Checks=$safe}
  if($SchemaVersion -eq 1){$report.ComparisonStatus='Unknown';$report.FlakyStatus='Unknown'}
  if($null -ne $GoCoverage){$report.GoCoverage=$GoCoverage}
+ if($null -ne $RepoCoverage){$report.RepoCoverage=$RepoCoverage;if($RepoCoverage.Result.Complete){$report.Coverage='Measured'}}
  $allAssertions=@($safe|ForEach-Object {$_.Assertions})
  $report.Totals=[pscustomobject]@{SuitesExecuted=@($safe|Where-Object Executed).Count;AssertionsExecuted=$allAssertions.Count;AssertionsPassed=@($allAssertions|Where-Object Passed).Count;AssertionsFailed=@($allAssertions|Where-Object {-not $_.Passed}).Count;UnexecutedSuites=@($safe|Where-Object {-not $_.Executed}).Count}
  Assert-TestReportSnapshot -Report ([pscustomobject]$report)
@@ -63,7 +66,8 @@ function Write-TestReports {
  $refText=if($report.RefName -eq 'Unknown'){'本機執行'}else{$report.RefName}
  $md=@('# Windows 測試結果','',('**'+$conclusion+'**'),'',('版本：'+$versionText+' · '+$RefType+' / '+$refText),('提交：'+$report.Commit),('量測時間（UTC）：'+$MeasuredAt),('環境：'+$environmentText+' · '+$sourceText),'',('斷言：'+$report.Totals.AssertionsPassed+'/'+$report.Totals.AssertionsExecuted+'；失敗 '+$report.Totals.AssertionsFailed),'','| 層級 | 測試套件 | 狀態 | 通過／執行斷言 | 秒 |','| --- | --- | --- | --- | --- |')
  foreach($check in $display){$passed=@($check.Assertions|Where-Object Passed).Count;$md+='| '+$check.Layer+' | '+$check.Name.Replace('|','/')+' | '+$check.Status+' | '+$passed+'/'+$check.Assertions.Count+' | '+$check.DurationSeconds+' |'}
- $md+=@('','整體程式碼覆蓋率：尚未提供完整量測。')
+ $md+=@('',('整體程式碼覆蓋率：'+(Get-RepoCoverageSummary $RepoCoverage)))
+ $md+=@(Get-RepoCoverageLanguages $RepoCoverage)
  if($null -ne $GoCoverage){$md+=@('',('Go 程式敘述覆蓋率（分項）：'+(Get-GoCoveragePercentText $GoCoverage)+'；'+$GoCoverage.Covered+'/'+$GoCoverage.TotalStatements+' statements；全部自有 Go 工具含 CLI，不等於整體覆蓋率。'))}
  if($report.RunUrl){$md+=@('',('[GitHub Actions 執行紀錄]('+$report.RunUrl+')'))}
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'summary.md'),($md -join "`n"),$encoding)
@@ -74,7 +78,8 @@ function Write-TestReports {
  if($report.RunUrl){$body+=' · <a href="'+$report.RunUrl+'">GitHub Actions 執行紀錄</a>'};$body+='</p>'
  if($RefType -eq 'Release'){$body+='<p><a href="https://github.com/ycpss91255/windows_setup/releases/tag/'+$versionText+'">Release 下載與版本說明</a></p>'}
  elseif($report.Commit -match '^[a-fA-F0-9]{40}$'){$body+='<p><a href="https://github.com/ycpss91255/windows_setup/archive/'+$report.Commit+'.zip">下載本次提交原始碼</a>（依 README 準備必要資產）</p>'}
- $body+='<p><a href="summary.json">JSON 證據</a> · <a href="junit.xml">JUnit 結果</a> · <a href="summary.md">文字摘要</a></p><h2>整體覆蓋率</h2><p>尚未提供完整量測。</p>'
+ $body+='<p><a href="summary.json">JSON 證據</a> · <a href="junit.xml">JUnit 結果</a> · <a href="summary.md">文字摘要</a></p><h2>整體覆蓋率</h2><p>'+[Net.WebUtility]::HtmlEncode((Get-RepoCoverageSummary $RepoCoverage))+'</p>'
+ if($null -ne $RepoCoverage){$body+='<details><summary>語言分項</summary><ul>';foreach($line in @(Get-RepoCoverageLanguages $RepoCoverage)){$body+='<li>'+[Net.WebUtility]::HtmlEncode($line)+'</li>'};$body+='</ul><a href="repo_coverage.json">整體量測證據</a> · <a href="coverage_inventory.json">來源清單</a> · <a href="coverage.xml">逐行結果</a></details>'}
  if($null -ne $GoCoverage){
   $body+='<details><summary>分項量測明細</summary><p>Go 程式敘述覆蓋率：'+(Get-GoCoveragePercentText $GoCoverage)+' · '+$GoCoverage.Covered+'/'+$GoCoverage.TotalStatements+' statements；範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式，不等於整體覆蓋率。</p><p><a href="go_coverage.json">Go 量測資料</a> · <a href="go_coverage.out">原始 Go 覆蓋率</a></p></details>'
   Write-GoCoverageView -Coverage $GoCoverage -RefType $RefType -OutputDirectory $OutputDirectory
@@ -98,7 +103,7 @@ function Write-TestReports {
   $label=$badge+' '+$RefType.ToLowerInvariant();$color='#9f9f9f';$status='not measured'
   if($badge -in @('unit','integration')){$rows=@($safe|Where-Object {$_.Layer -eq $badge -and $_.Executed});$status=if(-not $rows.Count){'not run'}elseif(@($rows|Where-Object {-not $_.Passed}).Count){'failed'}else{'passed'};$color=if($status -eq 'passed'){'#4c1'}elseif($status -eq 'failed'){'#e05d44'}else{'#9f9f9f'}}
   if($badge -eq 'system'){$status='not run'}
-  if($badge -eq 'coverage'){$label=if($SchemaVersion -eq 1){'ps coverage'}else{'coverage'}}
+  if($badge -eq 'coverage'){$label=if($SchemaVersion -eq 1){'ps coverage'}else{'coverage'};if($null -ne $RepoCoverage -and $RepoCoverage.Result.Complete){$status=Get-RepoCoveragePercentText $RepoCoverage;$color='#007ec6'}}
   $scopeLabel=if($badge -eq 'coverage'){$label+' '+$RefType.ToLowerInvariant()}else{$label}
   $title=[Security.SecurityElement]::Escape($scopeLabel+': '+$status)
   $labelWidth=$label.Length*7+12;$valueWidth=$status.Length*7+12;$width=$labelWidth+$valueWidth
