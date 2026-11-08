@@ -44,6 +44,8 @@ func TestManagedCoverageCLI(t *testing.T) {
 		proof[key+"SHA256"] = hash(files[name])
 	}
 	proof["Shards"] = []any{map[string]string{"BinaryPath": "shard.coverage", "SHA256": hash(files["shard.coverage"]), "XmlPath": "shard.xml", "XmlSHA256": hash(xml)}}
+	catalog:=map[string]any{"SchemaVersion":1,"AssemblySHA256":hash(files["assembly.dll"]),"PDBSHA256":hash(files["assembly.pdb"]),"AssemblyMVID":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","Documents":[]any{map[string]string{"Path":"x.cs","SHA256":hash(source)}},"Methods":[]any{map[string]any{"Token":"0x06000001","HasBody":true,"HiddenPoints":0,"Points":[]any{map[string]any{"Path":"x.cs","StartLine":1,"StartColumn":31,"EndLine":1,"EndColumn":40,"Offset":0}}}}}
+	files["catalog.json"],_=json.Marshal(catalog);proof["CatalogPath"]="catalog.json";proof["CatalogSHA256"]=hash(files["catalog.json"])
 	data, _ := json.Marshal(proof)
 	files["evidence.json"] = data
 	for name, b := range files {
