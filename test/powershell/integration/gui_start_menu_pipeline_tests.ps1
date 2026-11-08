@@ -35,3 +35,11 @@ try{Read-SetupGuiContext -CodeRoot $paths.CodeRoot -CommonDataRoot $temp -Role S
 Assert ($failure.Contains('開始選單模式')) 'text masquerading as policy bool is rejected before worker import'
 [IO.File]::WriteAllText((Join-Path $paths.CodeRoot 'context.json'),$original)
 Assert (-not (Test-Path -LiteralPath (Join-Path $temp 'NUC8-Setup'))) 'Start never creates public fixed worker or result authority'
+$resultPath=Join-Path $paths.DataRoot 'Start-Verification.json';$saved=[IO.File]::ReadAllText($resultPath)
+foreach($status in @('PendingSignIn','LegacyPendingApply','Failed','Unknown')){
+ $bad=$saved|ConvertFrom-Json;$bad.Status=$status;$bad.Success=$true;[IO.File]::WriteAllText($resultPath,($bad|ConvertTo-Json -Depth 8));$failure=''
+ $stage=[pscustomobject]@{CodeRoot=$paths.CodeRoot;DataRoot=$paths.DataRoot;CommonDataRoot=$temp;Context=$context}
+ try{Read-SetupGuiResult -Stage $stage|Out-Null}catch{$failure=$_.Exception.Message}
+ Assert ($failure.Contains('開始選單結果')) ('same-run Start pending or invalid status cannot masquerade as Success=true: '+$status)
+}
+[IO.File]::WriteAllText($resultPath,$saved)
