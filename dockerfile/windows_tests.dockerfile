@@ -9,7 +9,8 @@ RUN C:/tools/install_go.ps1
 # The pinned Windows image has case-sensitive Docker metadata but Windows treats
 # Path case-insensitively. Do not expand ${PATH}: it can erase system tools.
 ENV PATH="C:\git\cmd;C:\go\bin;C:\Windows\System32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0" GIT_OPTIONAL_LOCKS="0" GOTOOLCHAIN="local" GOPROXY="off" GOSUMDB="off" GOFLAGS="-mod=vendor" CGO_ENABLED="0" GOWORK="off" GOENV="off"
-RUN $ErrorActionPreference='Stop'; foreach ($tool in @('powershell.exe','cmd.exe','git.exe','go.exe')) { Get-Command $tool -CommandType Application -ErrorAction Stop | Out-Null }; git.exe --version; if ($LASTEXITCODE -ne 0) { throw 'Git unavailable' }; go.exe version; if ($LASTEXITCODE -ne 0) { throw 'Go unavailable' }
+COPY script/test/ci_tasks.ps1 C:/tools/ci_tasks.ps1
+RUN $ErrorActionPreference='Stop'; . C:/tools/ci_tasks.ps1; Assert-CIRequiredTools
 USER ContainerUser
 WORKDIR C:/workspace
 CMD ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoLogo", "-NoProfile"]
