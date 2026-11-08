@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-param([string]$UserName=$env:USERNAME,[string]$AutoLogonPassword,[string]$DriverPackagePath,[string]$ExpectedUserSID,[string]$ConfirmedBoard,[string]$ConfirmationComputer)
+param([string]$UserName=$env:USERNAME,[string]$AutoLogonPassword,[string]$DriverPackagePath,[string]$ExpectedUserSID,[string]$ConfirmedBoard,[string]$ConfirmationComputer,[switch]$NonInteractive)
 $ErrorActionPreference='Stop'
 $currentSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 if($ExpectedUserSID -and $ExpectedUserSID -ne $currentSID){throw '提權後帳號已改變，請使用原帳號的管理員權限。'}
@@ -12,6 +12,7 @@ $principal=[Security.Principal.WindowsPrincipal]::new([Security.Principal.Window
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $command="& '"+$PSCommandPath.Replace("'","''")+"' -ExpectedUserSID '"+$currentSID+"' -DriverPackagePath '"+$DriverPackagePath.Replace("'","''")+"'"
  if($ConfirmedBoard){$command+=" -ConfirmedBoard '"+$ConfirmedBoard.Replace("'","''")+"' -ConfirmationComputer '"+$ConfirmationComputer.Replace("'","''")+"'"}
+ if($NonInteractive){$command+=' -NonInteractive'}
     Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)))
     exit
 }
@@ -21,6 +22,7 @@ $null=Invoke-InitWindowsCheckpoint -StageRoot (Join-Path $env:ProgramData 'windo
 if($hardware.IsNuc8 -and $DriverPackagePath){$hardware|Add-Member -NotePropertyName DriverSelection -NotePropertyValue (New-SetupDriverSelection -PackageRoot $script:NucPackageRoot -DriverPackagePath $DriverPackagePath) -Force}
 if($UserName -ine $env:USERNAME){throw '自動登入帳號必須與目前執行帳號相同。'}
 $log=Resolve-NucPath ('Setup-'+(Get-Date -Format yyyyMMdd-HHmmss)+'.log')
+. (Resolve-NucPath 'start_pins_policy_library.ps1')
 Start-Transcript -Path $log | Out-Null
 try {
     Write-Host '[1/19] 管理員免提示與開機自動登入' -ForegroundColor Cyan
@@ -29,7 +31,7 @@ try {
     & (Resolve-NucPath 'apply_autologon_settings.ps1') -UserName $UserName -AutoLogonPassword $AutoLogonPassword
     $AutoLogonPassword=$null
     $auto=Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
-    $stageErrors=@();$failedModules=@()
+    $stageErrors=@();$failedModules=@();$startResult=$null
     $stageIndex=1
     foreach($stage in @(
         @{Name='停用磁碟分頁檔';File='apply_pagefile_settings.ps1'},
@@ -57,18 +59,27 @@ try {
         @{Step=$stageIndex;Total=19;Stage=$stage.Name;UpdatedAt=(Get-Date).ToString('o')}|ConvertTo-Json|Set-Content (Resolve-NucPath 'Setup-Progress.json') -Encoding UTF8
         $decision=Get-SetupModuleDecision -Module $stage.File -Hardware $hardware
         if(-not $decision.Applicable){$skippedModules+=$decision;Write-Host ('[略過] '+$stage.Name+'：'+$decision.Reason) -ForegroundColor Yellow;continue}
-        try { if($stage.File -eq 'install_drivers.ps1'){& (Resolve-NucPath $stage.File) -NonInteractive -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}else{& (Resolve-NucPath $stage.File)} }
+        try { if($stage.File -eq 'install_drivers.ps1'){& (Resolve-NucPath $stage.File) -NonInteractive -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}elseif($stage.File -eq 'apply_start_menu_settings.ps1'){$startResult=& (Resolve-NucPath $stage.File) -NonInteractive}else{& (Resolve-NucPath $stage.File)} }
         catch { $failedModules+=$stage.File;$stageErrors+=($stage.Name+'：'+$_.Exception.Message);Write-Warning $stageErrors[-1] }
     }
     $problems=@(Get-PnpDevice -PresentOnly|Where-Object Status -ne 'OK')
     try{ & (Resolve-NucPath 'audit_nuc.ps1') }catch{ $stageErrors+=('最終檢查：'+$_.Exception.Message);Write-Warning $stageErrors[-1] }
-    $summary=[ordered]@{Success=($stageErrors.Count -eq 0 -and $problems.Count -eq 0);Computer=$env:COMPUTERNAME;CompletedAt=(Get-Date).ToString('o');AutoLogonUser=$auto.DefaultUserName;AutoLogonEnabled=($auto.AutoAdminLogon -eq '1');RequiresNextSignIn=$true;ProblemDeviceCount=$problems.Count;StageErrors=$stageErrors;FailedModules=$failedModules;HardwareProfile=$hardware;SkippedModules=$skippedModules;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;RebootRequired=((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'))}
+    $pendingModules=@(if($startResult -and -not $startResult.Success){[pscustomobject]@{Module='apply_start_menu_settings.ps1';Status=$startResult.Status}})
+    $summary=[ordered]@{Success=($stageErrors.Count -eq 0 -and $problems.Count -eq 0 -and $pendingModules.Count -eq 0);PendingModules=$pendingModules;Computer=$env:COMPUTERNAME;CompletedAt=(Get-Date).ToString('o');AutoLogonUser=$auto.DefaultUserName;AutoLogonEnabled=($auto.AutoAdminLogon -eq '1');RequiresNextSignIn=$true;ProblemDeviceCount=$problems.Count;StageErrors=$stageErrors;FailedModules=$failedModules;HardwareProfile=$hardware;SkippedModules=$skippedModules;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;RebootRequired=((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'))}
+    $summary|ConvertTo-Json -Depth 5|Set-Content (Resolve-NucPath 'Setup-Result.json') -Encoding UTF8
+    try{
+        $startResult=Complete-StartPinsPending -Result $startResult -StageErrors $stageErrors -ProblemCount $problems.Count -NonInteractive:$NonInteractive -Apply {param([switch]$ApplyPolicy) & (Resolve-NucPath 'apply_start_menu_settings.ps1') -ApplyPolicy:$ApplyPolicy}
+    }catch{$failedModules+='apply_start_menu_settings.ps1';$stageErrors+=('開始選單後置套用：'+$_.Exception.Message);Write-Warning $stageErrors[-1]}
+    $pendingModules=@(if($startResult -and -not $startResult.Success){[pscustomobject]@{Module='apply_start_menu_settings.ps1';Status=$startResult.Status}})
+    $summary.PendingModules=$pendingModules;$summary.StageErrors=$stageErrors;$summary.FailedModules=$failedModules
+    $summary.Success=($stageErrors.Count -eq 0 -and $problems.Count -eq 0 -and $pendingModules.Count -eq 0)
     $summary|ConvertTo-Json -Depth 5|Set-Content (Resolve-NucPath 'Setup-Result.json') -Encoding UTF8
     Write-Progress -Id 1 -Activity 'Windows 一鍵設定' -Completed
-    @{Step=19;Total=19;Stage='本輪執行結束';HasErrors=($stageErrors.Count -gt 0 -or $problems.Count -gt 0);UpdatedAt=(Get-Date).ToString('o')}|ConvertTo-Json|Set-Content (Resolve-NucPath 'Setup-Progress.json') -Encoding UTF8
+    @{Step=19;Total=19;Stage='本輪執行結束';PendingModules=$pendingModules;HasErrors=($stageErrors.Count -gt 0 -or $problems.Count -gt 0);UpdatedAt=(Get-Date).ToString('o')}|ConvertTo-Json|Set-Content (Resolve-NucPath 'Setup-Progress.json') -Encoding UTF8
 
     Write-Host ('目前異常裝置數：'+$problems.Count)
     if($stageErrors.Count -or $problems.Count){throw '部分步驟或裝置檢查未完成，已寫入 Setup-Result.json 與 Setup-Progress.json；請查看紀錄後重試。'}
+    elseif($pendingModules.Count){Write-Warning ('本輪仍有待處理項目：'+(($pendingModules|ForEach-Object {$_.Module+' / '+$_.Status}) -join '；'))}
     else{Write-Host '本輪一鍵設定完成。' -ForegroundColor Green}
     Write-Host '請手動重新開機，再執行 windows.cmd -AfterRestart 檢查及繼續更新。'
 } finally { $AutoLogonPassword=$null; Stop-Transcript | Out-Null }
