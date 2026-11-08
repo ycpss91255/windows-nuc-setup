@@ -71,7 +71,56 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  powershell-coverage:
+    name: PowerShell 全源量測分片 ${{ matrix.shard }}
+    runs-on: windows-2022
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: 取得同次原始碼與完整測試清單
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 準備固定 Go 維護工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 準備固定 managed 維護編譯器
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: '10.0.300'
+          cache: false
+      - name: 準備固定的 workflow 語義檢查器
+        run: |
+          . .\script\docker\install_managed_tools.ps1
+          $artifact = Get-ContainerWorkflowLintArtifact
+          $directory = Join-Path $env:RUNNER_TEMP 'actionlint-1.7.12'
+          Install-ContainerToolArtifact -Artifact $artifact -Destination $directory -ArchiveDirectory (Join-Path $env:RUNNER_TEMP 'actionlint-download')
+          "WINDOWS_SETUP_ACTIONLINT=$(Join-Path $directory 'actionlint.exe')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: 真實執行分配的 Pester suites 並保留全部來源分母
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          .\script\test\powershell_coverage_shard.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-public') -PrivateDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-private') -ShardIndex ([int]$env:SHARD_INDEX) -ShardCount 4 -Commit $env:GITHUB_SHA -RunUrl ("https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID") -RunAttempt ([int]$env:GITHUB_RUN_ATTEMPT)
+      - name: 僅保留已驗證的相對路徑分片證據七天
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: powershell-shard-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/powershell-shard-public/
+          retention-days: 7
+          if-no-files-found: error
+
   isolated-tests:
+    needs: [powershell-coverage]
     runs-on: windows-2022
     timeout-minutes: 90
     defaults:
@@ -129,9 +178,15 @@ jobs:
       - name: 量測 managed 原生程式的完整計數點
         run: |
           & .\script\test\managed_coverage.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'managed-coverage')
+      - name: 下載同次與同 attempt 的完整 PowerShell 四片
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: powershell-shard-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: ${{ runner.temp }}/powershell-shards
+          merge-multiple: false
       - name: 收集四語言整體覆蓋率並強制完整八成
         run: |
-          & .\script\test\run_repo_coverage.ps1 -SourceRoot $PWD.Path -PublicDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public') -GoCoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage') -ManagedEvidencePath (Join-Path $env:RUNNER_TEMP 'managed-coverage/evidence.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'repo-coverage')
+          & .\script\test\run_repo_coverage.ps1 -SourceRoot $PWD.Path -PublicDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public') -GoCoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage') -ManagedEvidencePath (Join-Path $env:RUNNER_TEMP 'managed-coverage/evidence.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'repo-coverage') -PowerShellShardDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shards') -RunAttempt ([int]$env:GITHUB_RUN_ATTEMPT)
       - name: 短期保留去識別整體證據七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -271,7 +326,7 @@ jobs:
   ci-rollup:
     name: ci-rollup
     if: always()
-    needs: [isolated-tests, requirements-gate, docker-tests, oobe_payload_inspection]
+    needs: [isolated-tests, requirements-gate, docker-tests, oobe_payload_inspection, powershell-coverage]
     runs-on: windows-2022
     timeout-minutes: 5
     steps:
@@ -286,9 +341,10 @@ jobs:
           REQUIREMENTS_RESULT: ${{ needs.requirements-gate.result }}
           DOCKER_RESULT: ${{ needs.docker-tests.result }}
           OOBE_PAYLOAD_RESULT: ${{ needs.oobe_payload_inspection.result }}
+          POWERSHELL_COVERAGE_RESULT: ${{ needs.powershell-coverage.result }}
         run: |
           . .\script\test\ci_tasks.ps1
-          Assert-CIResults @{Tests=$env:TEST_RESULT;Requirements=$env:REQUIREMENTS_RESULT;Docker=$env:DOCKER_RESULT;Payload=$env:OOBE_PAYLOAD_RESULT}
+          Assert-CIResults @{Tests=$env:TEST_RESULT;Requirements=$env:REQUIREMENTS_RESULT;Docker=$env:DOCKER_RESULT;Payload=$env:OOBE_PAYLOAD_RESULT;PowerShellCoverage=$env:POWERSHELL_COVERAGE_RESULT}
 
   release:
     name: 發布 GitHub 來源版本
