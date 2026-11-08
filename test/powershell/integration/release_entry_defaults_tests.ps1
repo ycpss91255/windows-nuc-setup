@@ -30,30 +30,37 @@ function gh {throw 'fixture forbids remote commands'}
 [IO.File]::WriteAllText((Join-Path $fixture 'script/report/portal.ps1'),'# fixture: no remote operations')
 [IO.File]::WriteAllText((Join-Path $fixture 'public/summary.json'),'{}')
 $priorExpected=$env:WINDOWS_SETUP_BINDING_EXPECTED;$priorPreference=$ErrorActionPreference
+$longFixture=(Get-ChildItem -LiteralPath (Split-Path $fixture -Parent) -Directory -Filter (Split-Path $fixture -Leaf)).FullName
+$fileSystem=New-Object -ComObject Scripting.FileSystemObject
+$shortFixture=$fileSystem.GetFolder($longFixture).ShortPath
+$aliases=@([pscustomobject]@{Name='long';Path=$longFixture})
+if($shortFixture -cne $longFixture){$aliases+=@([pscustomobject]@{Name='short';Path=$shortFixture})}
 $results=@()
 Push-Location (Join-Path $fixture 'unrelated')
 try{
+ foreach($alias in $aliases){
  foreach($entry in @('stage','publish')){
   foreach($mode in @('default','explicit')){
-   $env:WINDOWS_SETUP_BINDING_EXPECTED=Join-Path $fixture $(if($mode -eq 'default'){'script/release/driver_release_assets.json'}else{'custom metadata [literal].json'})
+   $env:WINDOWS_SETUP_BINDING_EXPECTED=Join-Path $alias.Path $(if($mode -eq 'default'){'script/release/driver_release_assets.json'}else{'custom metadata [literal].json'})
    if($entry -eq 'stage'){
-    $path=Join-Path $fixture 'script/release/stage_driver_release.ps1'
-    $arguments=@('-Version','v1.2.3','-Repository','fixture/repo','-AssetDirectory',(Join-Path $fixture 'public'))
+    $path=Join-Path $alias.Path 'script/release/stage_driver_release.ps1'
+    $arguments=@('-Version','v1.2.3','-Repository','fixture/repo','-AssetDirectory',(Join-Path $alias.Path 'public'))
     if($mode -eq 'explicit'){$arguments+=@('-MetadataPath',$env:WINDOWS_SETUP_BINDING_EXPECTED)}
    }else{
-    $path=Join-Path $fixture 'script/report/publish_quality_release.ps1'
-    $arguments=@('-Version','v1.2.3','-Repository','fixture/repo','-PublicDirectory',(Join-Path $fixture 'public'),'-Commit',('a'*40),'-NotesPath',(Join-Path $fixture 'notes.md'))
+    $path=Join-Path $alias.Path 'script/report/publish_quality_release.ps1'
+    $arguments=@('-Version','v1.2.3','-Repository','fixture/repo','-PublicDirectory',(Join-Path $alias.Path 'public'),'-Commit',('a'*40),'-NotesPath',(Join-Path $alias.Path 'notes.md'))
     if($mode -eq 'explicit'){$arguments+=@('-DriverAssetManifestPath',$env:WINDOWS_SETUP_BINDING_EXPECTED)}
    }
-   $log=Join-Path $fixture ($entry+'_'+$mode+'.private.log')
+   $log=Join-Path $fixture ($alias.Name+'_'+$entry+'_'+$mode+'.private.log')
    $ErrorActionPreference='Continue'
    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $path @arguments > $log 2>&1
    $exitCode=$LASTEXITCODE;$ErrorActionPreference='Stop'
    $matched=@(Get-Content -LiteralPath $log|Where-Object {$_ -ceq 'FIXTURE_METADATA_BINDING_MATCH'}).Count -eq 1
-   $result=[pscustomobject]@{Entry=$entry;Mode=$mode;ExitCode=$exitCode;Matched=$matched};$results+=@($result)
+   $result=[pscustomobject]@{Alias=$alias.Name;Entry=$entry;Mode=$mode;ExitCode=$exitCode;Matched=$matched};$results+=@($result)
    Write-Host ('@@BINDING@@'+($result|ConvertTo-Json -Compress))
   }
  }
+ }
 }finally{$ErrorActionPreference=$priorPreference;$env:WINDOWS_SETUP_BINDING_EXPECTED=$priorExpected;Pop-Location}
-foreach($result in $results){Assert ($result.ExitCode -eq 0 -and $result.Matched) ('native PS5.1 '+$result.Entry+' '+$result.Mode+' metadata binding does not depend on caller working directory')}
+foreach($result in $results){Assert ($result.ExitCode -eq 0 -and $result.Matched) ('native PS5.1 '+$result.Alias+' '+$result.Entry+' '+$result.Mode+' metadata binding does not depend on caller working directory')}
 $global:LASTEXITCODE=0
