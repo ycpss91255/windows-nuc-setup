@@ -56,8 +56,8 @@ func TestCLICommands(t *testing.T) {
 	t.Run("local_report_empty_run_url", func(t *testing.T) {
 		m := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
 		q := decode(t, m)
-		q.RunUrl = ""
-		save(m, q)
+		m = identityFixture(t, m, q.Commit, "")
+		q = decode(t, m)
 		if q.RepoCoverage != nil && q.RepoCoverage.RunUrl != q.RunUrl {
 			t.Fatal("local fixture aggregate evidence still belongs to the CI run")
 		}
@@ -133,14 +133,11 @@ func TestCLICommands(t *testing.T) {
 		command(goexe, "test", "-count=1", "-coverpkg=./script/test/...", "-coverprofile="+profile, "./...")
 		m := synthetic(t, files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR")), true, "Branch")
 		q := decode(t, m)
-		old := q.Commit
-		q.Commit = sha
-		q.RunUrl = "https://github.com/example/fixture/actions/runs/1"
-		save(m, q)
+		m = identityFixture(t, m, sha, "https://github.com/example/fixture/actions/runs/1")
+		q = decode(t, m)
 		if q.RepoCoverage != nil {
 			t.Fatal("new sample source inherited unrelated repository coverage")
 		}
-		m["summary.md"] = []byte(strings.ReplaceAll(string(m["summary.md"]), old, sha))
 		reportDir := t.TempDir()
 		for n, b := range m {
 			os.WriteFile(filepath.Join(reportDir, n), b, 0600)
