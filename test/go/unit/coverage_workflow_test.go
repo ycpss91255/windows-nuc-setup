@@ -32,7 +32,7 @@ func TestCIWholeCoverageHasProducerAndStrictConsumers(t *testing.T) {
 	}
 	text := string(b)
 	producer := coverageJob(text, "isolated-tests")
-	for _, required := range []string{"actions/setup-dotnet@","dotnet-version: '10.0.300'","DOTNET_INSTALL_DIR:","managed_coverage.ps1", "run_repo_coverage.ps1", "-GoCoverageDirectory", "-ManagedEvidencePath", "repo-coverage-evidence", "retention-days: 7"} {
+	for _, required := range []string{"actions/setup-dotnet@", "dotnet-version: '10.0.300'", "DOTNET_INSTALL_DIR:", "managed_coverage.ps1", "run_repo_coverage.ps1", "-GoCoverageDirectory", "-ManagedEvidencePath", "repo-coverage-evidence", "retention-days: 7"} {
 		if !strings.Contains(producer, required) {
 			t.Fatalf("producer missing %s", required)
 		}

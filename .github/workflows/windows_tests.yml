@@ -67,6 +67,16 @@ jobs:
         with:
           go-version: '1.27.3'
           cache: false
+      - name: 準備固定 managed 維護編譯器
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: '10.0.300'
+          cache: false
+      - name: 列出 runner 本機 SDK
+        run: |
+          dotnet --list-sdks
       - name: 執行 Windows PowerShell 5.1 隔離測試
         run: |
           & .\script\test\run_ci.ps1 -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results')
