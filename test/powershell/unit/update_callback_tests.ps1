@@ -10,7 +10,7 @@ Assert ($callback.GetType().GetMethod('Invoke').GetParameters().Count -eq 2) 'ca
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.ComTypes;
+using DISPPARAMS = System.Runtime.InteropServices.ComTypes.DISPPARAMS;
 public static class UpdateDispatchProbe {
  [UnmanagedFunctionPointer(CallingConvention.StdCall)]
  delegate int InvokeDelegate(IntPtr self, int id, ref Guid iid, uint lcid, ushort flags, ref DISPPARAMS args, IntPtr result, IntPtr exception, IntPtr argError);
