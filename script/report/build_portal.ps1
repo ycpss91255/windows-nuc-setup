@@ -19,7 +19,7 @@ foreach($entry in $catalog){
   try{$evidence=Test-PortalReleaseEvidence -Entry $entry -CoverageToolPath $CoverageToolPath}catch{$reason='品質證據未通過驗證：'+(Protect-ReportText $_.Exception.Message);$state='Invalid'}
  }
  if($evidence){
-  Write-SnapshotView $evidence.Snapshot $dir
+  Write-SnapshotView $evidence.Snapshot $dir -OmitGoProfileLink:(-not $evidence.HasGoProfile)
   foreach($file in $evidence.Manifest.Files){
    if($file.Name -eq 'index.html'){continue}
    $source=if($file.Name -eq 'summary.json'){$entry.SnapshotPath}else{Join-Path $entry.AssetDirectory $file.Name}

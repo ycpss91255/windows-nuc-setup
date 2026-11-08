@@ -44,7 +44,7 @@ Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_covera
 $producer=Join-Path $fixture 'producer';New-Item -ItemType Directory $producer|Out-Null
 $profile=Join-Path $producer 'go_coverage.out'
 [IO.File]::WriteAllText($profile,"mode: atomic`nwindows_setup/script/test/acceptance/report.go:1.1,1.2 8 1`nwindows_setup/script/test/acceptance/report.go:2.1,2.2 2 0`n",[Text.UTF8Encoding]::new($false))
-$coverage.Covered=8;$coverage.Percent=80;$coverage.ProfileSHA256=(Get-FileHash $profile -Algorithm SHA256).Hash.ToLowerInvariant()
+$coverage.Covered=8;$coverage.Percent=80;$coverage.Packages=@('windows_setup/script/test/acceptance');$coverage.ProfileSHA256=(Get-FileHash $profile -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText((Join-Path $producer 'go_coverage.json'),($coverage|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
 $arguments.OutputDirectory=Join-Path $fixture 'attach';$null=Write-TestReports @arguments
 $attach=Join-Path $root 'script/test/attach_go_coverage.ps1'

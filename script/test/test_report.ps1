@@ -42,7 +42,7 @@ function Assert-TestReportSnapshot {
  }
 }
 function Write-TestReports {
- param([Parameter(Mandatory=$true)][object[]]$Checks,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$Layer='All',[string]$Commit=$env:GITHUB_SHA,[string]$RunUrl,[ValidateSet('Clean','Dirty','Unknown')][string]$SourceState='Unknown',[string]$Version='Unknown',[string]$Environment='Unknown',[ValidateSet('Branch','Release')][string]$RefType='Branch',[string]$RefName='Unknown',[string]$MeasuredAt=([DateTime]::UtcNow.ToString('o')),[string[]]$Changes=@(),$GoCoverage,$RepoCoverage,[ValidateSet(1,2)][int]$SchemaVersion=2)
+ param([Parameter(Mandatory=$true)][object[]]$Checks,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$Layer='All',[string]$Commit=$env:GITHUB_SHA,[string]$RunUrl,[ValidateSet('Clean','Dirty','Unknown')][string]$SourceState='Unknown',[string]$Version='Unknown',[string]$Environment='Unknown',[ValidateSet('Branch','Release')][string]$RefType='Branch',[string]$RefName='Unknown',[string]$MeasuredAt=([DateTime]::UtcNow.ToString('o')),[string[]]$Changes=@(),$GoCoverage,$RepoCoverage,[ValidateSet(1,2)][int]$SchemaVersion=2,[switch]$OmitGoProfileLink)
  $encoding=[Text.UTF8Encoding]::new($false)
  New-Item -ItemType Directory -Path $OutputDirectory -Force|Out-Null
  $safe=@(foreach($check in $Checks){
@@ -81,7 +81,8 @@ function Write-TestReports {
  $body+='<p><a href="summary.json">JSON 證據</a> · <a href="junit.xml">JUnit 結果</a> · <a href="summary.md">文字摘要</a></p><h2>整體覆蓋率</h2><p>'+[Net.WebUtility]::HtmlEncode((Get-RepoCoverageSummary $RepoCoverage))+'</p>'
  if($null -ne $RepoCoverage){$body+='<details><summary>語言分項</summary><ul>';foreach($line in @(Get-RepoCoverageLanguages $RepoCoverage)){$body+='<li>'+[Net.WebUtility]::HtmlEncode($line)+'</li>'};$body+='</ul><a href="repo_coverage.json">整體量測證據</a> · <a href="coverage_inventory.json">來源清單</a> · <a href="coverage.xml">逐行結果</a></details>'}
  if($null -ne $GoCoverage){
-  $body+='<details><summary>分項量測明細</summary><p>Go 程式敘述覆蓋率：'+(Get-GoCoveragePercentText $GoCoverage)+' · '+$GoCoverage.Covered+'/'+$GoCoverage.TotalStatements+' statements；範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式，不等於整體覆蓋率。</p><p><a href="go_coverage.json">Go 量測資料</a> · <a href="go_coverage.out">原始 Go 覆蓋率</a></p></details>'
+  $profileLink=if($OmitGoProfileLink){''}else{' · <a href="go_coverage.out">原始 Go 覆蓋率</a>'}
+  $body+='<details><summary>分項量測明細</summary><p>Go 程式敘述覆蓋率：'+(Get-GoCoveragePercentText $GoCoverage)+' · '+$GoCoverage.Covered+'/'+$GoCoverage.TotalStatements+' statements；範圍為全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式，不等於整體覆蓋率。</p><p><a href="go_coverage.json">Go 量測資料</a>'+$profileLink+'</p></details>'
   Write-GoCoverageView -Coverage $GoCoverage -RefType $RefType -OutputDirectory $OutputDirectory
  }
  $body+='<h2>測試明細</h2>'
