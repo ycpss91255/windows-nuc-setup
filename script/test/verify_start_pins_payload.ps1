@@ -3,7 +3,8 @@ param([string]$PackagePath,[string]$EvidenceDirectory,[string]$BaselinePath)
 # CI-only inspection: no mounting, package installation, privilege adjustment, or reboot.
 # First extraction deliberately fails without a baseline reviewed from the real XML.
 . ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\modules\init\provisioning_asset_library.ps1')))
-. (Join-Path $PSScriptRoot 'verify_oobe_payload.ps1')
+# Forward current values: the imported script has a param block in this same scope.
+. (Join-Path $PSScriptRoot 'verify_oobe_payload.ps1') -PackagePath $PackagePath -EvidenceDirectory $EvidenceDirectory -BaselinePath $BaselinePath
 function Get-StartPinsPayloadPaths {
  return @('Multivariant/Multivariant.xml','Multivariant/0/customizations.xml','Multivariant/0/MasterDatastore.xml','Multivariant/0/Prov/RunTime.xml','Multivariant/0/Prov/RunTime/0__Policies_Start_ConfigureStartPins.provxml','CommonSettings/CommonSettings.xml','CommonSettings/1/AnswerFile.xml')
 }
