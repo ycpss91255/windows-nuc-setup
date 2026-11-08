@@ -13,10 +13,14 @@ function Invoke-SetupDisplaySettings {
   return [pscustomobject]$result
  }
  $values=[NUC8Display.Display]::Apply()
+ if($values[4] -eq 1){throw '顯示驅動要求手動重新開機，尚不能確認解析度已套用；本工具不會自行重新啟動。'}
+ if($values[4] -ne 0){throw ('顯示模式套用未成功，原生結果碼：'+$values[4])}
+ if($values[2] -ne 1920 -or $values[3] -ne 1080){throw '實際解析度讀回未符合 1920×1080，不能視為已套用。'}
  # Retain standard per-monitor scaling rather than global custom LogPixels scaling.
  New-ItemProperty $desktop -Name Win8DpiScaling -Value 0 -PropertyType DWord -Force|Out-Null
  Remove-ItemProperty $desktop -Name LogPixels -ErrorAction SilentlyContinue
  $nativeScales=@([NUC8Display.Display]::NativeScales($true))
- if(@($nativeScales|Where-Object {$_ -ne 100}).Count){throw '標準縮放尚未成功設定為 100%。'}
+ if(-not $nativeScales.Count -or @($nativeScales|Where-Object {$_ -ne 100}).Count){throw '標準縮放尚未成功設定為 100%。'}
+ if((Get-ItemProperty $desktop -ErrorAction Stop).Win8DpiScaling -ne 0){throw '自訂縮放尚未停用，不能視為已套用標準 100% 縮放。'}
  return [pscustomobject][ordered]@{Success=$true;PreviousWidth=$values[0];PreviousHeight=$values[1];Width=$values[2];Height=$values[3];DisplayChangeResult=$values[4];LegacySystemDPI=$values[5];RequestedScalePercent=100;NativeScalePercent=$nativeScales;CustomScalingEnabled=$false;LegacyAppsMayRequireNextSignIn=$true;AppliedAt=(Get-Date).ToString('o')}
 }
