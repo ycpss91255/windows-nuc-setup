@@ -9,7 +9,7 @@ $library=Join-Path $root 'modules/terminal/terminal_hotkey_library.ps1'
 $context=Get-SetupTerminalContext
 Assert ($context.UserHome -ceq $env:USERPROFILE -and $context.Folder -ceq (Join-Path $env:LOCALAPPDATA 'NUC8-Setup\TerminalHotkey') -and $context.IdentityName -and $context.UserSID) 'default context reads current Windows identity and dynamic profile without changing it'
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('terminal_mock_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
-$module=Join-Path $root 'modules/terminal';$folder=Join-Path $temp 'local data/TerminalHotkey';$startup=Join-Path $temp 'startup link.lnk';$report=Join-Path $temp 'result.json';$listener=Join-Path $folder 'terminal_hotkey_listener.ps1';$log=Join-Path $folder 'status.log'
+$module=Join-Path $root 'modules/terminal';$folder=Join-Path $temp 'local data/TerminalHotkey';$startup=Join-Path $temp 'not yet created/startup link.lnk';$report=Join-Path $temp 'result.json';$listener=Join-Path $folder 'terminal_hotkey_listener.ps1';$log=Join-Path $folder 'status.log'
 function Get-SetupTerminalContext {[pscustomobject]@{Folder=$folder;Startup=$startup;IdentityName='fixture-user';UserSID='fixture-sid';UserHome=(Join-Path $temp 'home');PowerShell='fixture powershell.exe';ReportPath=$report}}
 $script:registered=0;$script:started=0;$script:saved=0;$script:taskState='Ready';$script:missingTerminal=$false;$script:processes=@();$script:writeRegistration=$true
 function Get-Command {param($Name,$ErrorAction) if($Name -ne 'wt.exe'){throw 'unexpected command lookup'};if(-not $script:missingTerminal){[pscustomobject]@{Source='fixture wt.exe'}}}
