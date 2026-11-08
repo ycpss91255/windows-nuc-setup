@@ -1,4 +1,5 @@
 ﻿{
+  "terminal_hotkey_library.ps1": "modules/terminal/terminal_hotkey_library.ps1",
   "start_pins_policy_library.ps1": "modules/start_menu/start_pins_policy_library.ps1",
   "start_pins_asset_library.ps1": "modules/start_menu/start_pins_asset_library.ps1",
   "one_drive_library.ps1": "modules/debloat/one_drive_library.ps1",

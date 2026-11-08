@@ -6,6 +6,8 @@ function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name
 function Reject([scriptblock]$Action,[string]$Expected,[string]$Name){$failure=$null;try{& $Action|Out-Null}catch{$failure=$_};Assert ($null -ne $failure -and $failure.Exception -isnot [Management.Automation.ParameterBindingException] -and $failure.Exception.Message.Contains($Expected)) ($Name+'; actual='+$failure.Exception.Message)}
 $library=Join-Path $root 'modules/terminal/terminal_hotkey_library.ps1'
 . $library
+$context=Get-SetupTerminalContext
+Assert ($context.UserHome -ceq $env:USERPROFILE -and $context.Folder -ceq (Join-Path $env:LOCALAPPDATA 'NUC8-Setup\TerminalHotkey') -and $context.IdentityName -and $context.UserSID) 'default context reads current Windows identity and dynamic profile without changing it'
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('terminal_mock_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
 $module=Join-Path $root 'modules/terminal';$folder=Join-Path $temp 'local data/TerminalHotkey';$startup=Join-Path $temp 'startup link.lnk';$report=Join-Path $temp 'result.json';$listener=Join-Path $folder 'terminal_hotkey_listener.ps1';$log=Join-Path $folder 'status.log'
 function Get-SetupTerminalContext {[pscustomobject]@{Folder=$folder;Startup=$startup;IdentityName='fixture-user';UserSID='fixture-sid';UserHome=(Join-Path $temp 'home');PowerShell='fixture powershell.exe';ReportPath=$report}}
@@ -32,6 +34,12 @@ Assert ($script:registered -eq 1 -and $script:started -eq 1) 'running terminal l
 $before=$script:saved;Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly
 Assert ($script:saved -eq $before -and $script:registered -eq 1) 'VerifyOnly does not alter shortcut or tasks'
 [IO.File]::WriteAllText($log,'REGISTERED: stale'+[Environment]::NewLine+'MESSAGE LOOP FAILED: 5');Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly} '未成功註冊' 'native listener failure cannot pass verification'
+[IO.File]::WriteAllText($log,'REGISTERED: fixture');$script:processes=@();Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly} '未成功註冊' 'registration log alone cannot pass without desktop process'
+$script:processes=@([pscustomobject]@{ProcessId=123;SessionId=1;CommandLine=$listener});Remove-Item -LiteralPath $startup -Force
+Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly} '未成功註冊' 'missing startup shortcut fails verification'
+$script:taskState=$null;$script:writeRegistration=$false;Remove-Item -LiteralPath $log -Force
+Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module} '未成功註冊' 'new listener without status never reports successful registration'
+Assert ($script:registered -eq 2 -and $script:started -eq 2) 'missing task is created once even when listener verification fails'
 $script:ownsMutex=$false;$script:released=0;$script:disposed=0;$script:nativeRuns=0;$script:nativeFailure=$false
 function New-SetupTerminalMutex {$m=[pscustomobject]@{};$m|Add-Member ScriptMethod WaitOne {param($Timeout) $script:ownsMutex};$m|Add-Member ScriptMethod ReleaseMutex {$script:released++};$m|Add-Member ScriptMethod Dispose {$script:disposed++};return $m}
 function Invoke-SetupTerminalNative {param($ModuleRoot,$Terminal,$LogPath,$UserHome) $script:nativeRuns++;if($script:nativeFailure){throw 'native fixture failure'}}
