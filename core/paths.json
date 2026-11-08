@@ -117,6 +117,7 @@
   "remove_setup_residue.cmd": "modules/cleanup/remove_setup_residue.cmd",
   "configure_nuc.ps1": "core/configure_nuc.ps1",
   "run_module.ps1": "core/run_module.ps1",
+  "prerequisites_library.ps1": "core/prerequisites_library.ps1",
   "test_setup_prerequisites.ps1": "core/test_setup_prerequisites.ps1",
   "verify_after_restart.ps1": "core/verify_after_restart.ps1",
   "verify_only.ps1": "core/verify_only.ps1",

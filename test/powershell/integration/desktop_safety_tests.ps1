@@ -29,14 +29,15 @@ foreach($case in @(
  if($packageRoot){Assert (([IO.File]::ReadAllText((Join-Path $packageRoot 'keep.txt'))) -eq 'keep') ('package contents retained: '+$case.Name)}
 }
 # Exercise the actual main preflight guard with only folder-location inputs substituted.
-$preflight=[IO.File]::ReadAllText((Join-Path $root 'core/test_setup_prerequisites.ps1'))
+$preflight=[IO.File]::ReadAllText((Join-Path $root 'core/prerequisites_library.ps1'))
 $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseInput($preflight,[ref]$tokens,[ref]$errors)
 $guard=$ast.Find({param($a)$a -is [Management.Automation.Language.ForEachStatementAst] -and $a.Variable.VariablePath.UserPath -eq 'desktop'},$true)
 if($guard){$guardText=$guard.Extent.Text.Replace("@([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))",'$fixtureDesktopRoots')}
 else{$guardText=($preflight -split "`r?`n"|Where-Object {$_ -match '^ Assert-DesktopSourceLocation'}) -join "`n";$guardText=$guardText.Replace("@([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))",'$fixtureDesktopRoots')}
+Assert (-not [string]::IsNullOrWhiteSpace($guardText)) 'actual complete preflight still contains the desktop source guard'
 $helper=Join-Path $root 'modules/desktop/desktop_safety.ps1';if(Test-Path $helper){. $helper}
 foreach($location in @($desktop,(Join-Path $desktop '中文 子目錄'),$common,$desktop.ToUpperInvariant())){
- $script:NucPackageRoot=$location;$refused=$false
+ $script:NucPackageRoot=$location;$SourceRoot=$location;$refused=$false
  try{. ([scriptblock]::Create($guardText))}catch{$refused=$true}
  Assert $refused ('actual main preflight rejects desktop equality and descendants: '+$location)
 }
