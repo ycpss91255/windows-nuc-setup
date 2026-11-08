@@ -7,6 +7,11 @@ $verifier=Join-Path $root 'script/test/verify_start_pins_payload.ps1'
 Assert (Test-Path -LiteralPath $verifier -PathType Leaf) 'Start pins package has a dedicated native payload verifier'
 . $verifier
 Assert (@(Get-StartPinsPayloadPaths).Count -eq 7 -and @((Get-StartPinsPayloadPaths)|Where-Object {$_ -match 'HideOobe'}).Count -eq 0) 'Start package whitelist is independent of unchanged OOBE settings'
+$reviewedPath=Join-Path $root 'modules/start_menu/assets/payload_baseline.json'
+Assert (Test-Path -LiteralPath $reviewedPath -PathType Leaf) 'shipped Start package has an independently reviewed real-payload baseline'
+$reviewed=[IO.File]::ReadAllText($reviewedPath)|ConvertFrom-Json
+Assert ($reviewed.SchemaVersion -eq 1 -and $reviewed.OnlySetting -ceq 'Policies/Start/ConfigureStartPins={"pinnedList":[]}' -and $reviewed.PackageSHA256 -ceq (Get-FileHash -LiteralPath (Join-Path $root 'modules/start_menu/assets/empty_start.ppkg')).Hash) 'Start baseline binds exact shipped package and sole approved setting'
+Assert (@($reviewed.Files).Count -eq 7 -and @($reviewed.Files.Path|Select-Object -Unique).Count -eq 7 -and (($reviewed.Files.Path|Sort-Object) -join '|') -ceq ((Get-StartPinsPayloadPaths|Sort-Object) -join '|') -and @($reviewed.Files|Where-Object {$_.SHA256 -cnotmatch '^[A-F0-9]{64}$'}).Count -eq 0) 'Start baseline binds all seven unique native-observed XML files'
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('start_payload_test_'+[guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Path $temp|Out-Null
 $package=Join-Path $temp 'synthetic.ppkg';[IO.File]::WriteAllText($package,'synthetic test fixture')
 function Read-StartPinsWimPayload {param($PackagePath,$Destination)
