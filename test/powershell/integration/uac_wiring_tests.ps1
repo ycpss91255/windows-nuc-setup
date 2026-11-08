@@ -17,7 +17,7 @@ Assert ($script:received.StatePath -eq (Join-Path $env:ProgramData 'NUC8-Setup/U
 Invoke-CurrentUserUac -VerifyOnly -VerificationRunId current
 Assert ($script:received.VerifyOnly -and $script:received.VerificationRunId -eq 'current') '本輪驗證ID傳遞'
 $tokens=$null;$errors=$null
-$config=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/configure_nuc.ps1'),[ref]$tokens,[ref]$errors)
+$config=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/configuration_library.ps1'),[ref]$tokens,[ref]$errors)
 $calls=@($config.FindAll({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Resolve-NucPath' -and $n.Extent.Text.Contains('apply_uac_settings.ps1')},$true))
 Assert ($calls.Count -eq 1) '正式Windows流程呼叫UAC一次'
 $verify=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/verification_library.ps1'),[ref]$tokens,[ref]$errors)

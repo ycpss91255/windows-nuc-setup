@@ -8,8 +8,7 @@ New-Item -ItemType Directory $fixture|Out-Null
 . (Join-Path $root 'core/verification.ps1')
 # Exercise the real orchestration body with filesystem-only module doubles.
 # Privilege/preflight are excluded; no production system-setting module is loaded.
-$config=[IO.File]::ReadAllText((Join-Path $root 'core/configure_nuc.ps1'))
-$body=$config.Substring($config.IndexOf('$log=Resolve-NucPath'))
+$body=". '"+(Join-Path $root 'core/configuration_library.ps1').Replace("'","''")+"'`nInvoke-SetupConfiguration -Hardware `$hardware -UserName `$UserName -AutoLogonPassword `$AutoLogonPassword"
 $prefix=@'
 $ErrorActionPreference='Stop'
 $caseRoot=$PSScriptRoot
