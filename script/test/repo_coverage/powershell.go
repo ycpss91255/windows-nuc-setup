@@ -170,6 +170,11 @@ func validPowerShellEngine(engine, version, hash string) bool {
 		return false
 	}
 	parts := strings.Split(version, ".")
+	for _, part := range parts {
+		if _, err := strconv.ParseUint(part, 10, 31); err != nil {
+			return false
+		}
+	}
 	major, _ := strconv.Atoi(parts[0])
 	minor, _ := strconv.Atoi(parts[1])
 	return engine == "powershell" && major == 5 && minor == 1 || engine == "pwsh" && major == 7 && minor >= 4
