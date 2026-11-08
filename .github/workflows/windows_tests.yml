@@ -143,6 +143,25 @@ jobs:
             ${{ runner.temp }}/repo-coverage/coverage/coverage.xml
           retention-days: 7
           if-no-files-found: error
+      - name: 彙整失敗仍匯出安全 PowerShell 原始證據
+        if: always()
+        run: |
+          $tool = Join-Path $env:RUNNER_TEMP 'repo-coverage/repo_coverage_tool.exe'
+          $input = Join-Path $env:RUNNER_TEMP 'repo-coverage/powershell'
+          if ((Test-Path -LiteralPath $tool -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $input 'evidence.json') -PathType Leaf)) {
+            . .\script\test\ci_tasks.ps1
+            Invoke-CINative -File $tool -Arguments @('export-powershell','--source-root',$PWD.Path,'--evidence-dir',$input,'--output-dir',(Join-Path $env:RUNNER_TEMP 'powershell-raw-public'))
+          } else {
+            Write-Host '尚無完成的 PowerShell 原始證據可匯出。'
+          }
+      - name: 僅保留安全 PowerShell 原始證據七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: powershell-raw-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/powershell-raw-public/
+          retention-days: 7
+          if-no-files-found: ignore
       - name: 保留獨立 Go 覆蓋率證據七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
