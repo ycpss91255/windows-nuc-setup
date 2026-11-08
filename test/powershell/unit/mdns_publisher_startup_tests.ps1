@@ -44,13 +44,13 @@ Assert ($r.Success -and $before -ceq $after -and $script:registers -eq 1 -and $s
 $r=Invoke-SetupMdnsPublisher -SourceRoot $root
 Assert ($r.Success -and $script:registers -eq 1 -and $script:stops -eq 0) '相同程式與正確公告心跳的Apply冪等，不打斷服務'
 $original=Get-Content -LiteralPath $paths.Status -Raw -Encoding UTF8
-foreach($case in @('stale','wrong_name','wrong_dns_pid','not_registered','bad_remote_claim','missing_process','wrong_process_owner','wrong_task_action')){
- $status=$original|ConvertFrom-Json;$oldArg=$script:task.Actions[0].Arguments
- switch($case){stale{$status.CheckedAt=[datetime]::UtcNow.AddMinutes(-2).ToString('o')} wrong_name{$status.ComputerName='OTHER-PC'} wrong_dns_pid{$status.DnsClientProcessId=99} not_registered{$status.Registered=$false} bad_remote_claim{$status.RemoteVerified=$true} missing_process{$script:processPresent=$false} wrong_process_owner{$script:ownerSid='S-1-5-21-1-2-3-1001'} wrong_task_action{$script:task.Actions[0].Arguments+=' -Command unsafe'}}
+foreach($case in @('wrong_plans','wrong_working_directory','stale','wrong_name','wrong_dns_pid','not_registered','bad_remote_claim','missing_process','wrong_process_owner','wrong_task_action')){
+ $status=$original|ConvertFrom-Json;$oldArg=$script:task.Actions[0].Arguments;$oldDirectory=$script:task.Actions[0].WorkingDirectory
+ switch($case){wrong_plans{$status.Plans[0].Port=2222} wrong_working_directory{$script:task.Actions[0].WorkingDirectory='C:\unsafe'} stale{$status.CheckedAt=[datetime]::UtcNow.AddMinutes(-2).ToString('o')} wrong_name{$status.ComputerName='OTHER-PC'} wrong_dns_pid{$status.DnsClientProcessId=99} not_registered{$status.Registered=$false} bad_remote_claim{$status.RemoteVerified=$true} missing_process{$script:processPresent=$false} wrong_process_owner{$script:ownerSid='S-1-5-21-1-2-3-1001'} wrong_task_action{$script:task.Actions[0].Arguments+=' -Command unsafe'}}
  Write-SetupMdnsAtomicJson $paths.Status $status;$ready=$false
  try{$ready=(Invoke-SetupMdnsPublisher -SourceRoot $root -VerifyOnly).Success}catch{}
  Assert (-not $ready -and $script:registers -eq 1 -and $script:stops -eq 0) ('錯誤或未知來源不得因本機解析或Task存在假PASS '+$case)
- $script:task.Actions[0].Arguments=$oldArg;$script:processPresent=$true;$script:ownerSid='S-1-5-18'
+ $script:task.Actions[0].Arguments=$oldArg;$script:task.Actions[0].WorkingDirectory=$oldDirectory;$script:processPresent=$true;$script:ownerSid='S-1-5-18'
 }
 [IO.File]::WriteAllText($paths.Status,$original,[Text.UTF8Encoding]::new($true))
 $foreign=$script:task;$script:task.Principal.UserId='S-1-5-21-1-2-3-1001';$failed=$false
