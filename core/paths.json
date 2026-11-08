@@ -1,6 +1,4 @@
-﻿{
 {
-  "debloat_library.ps1": "modules/debloat/debloat_library.ps1",
   "gui_stage_library.ps1": "core/gui_stage_library.ps1",
   "gui_worker.ps1": "core/gui_worker.ps1",
   "explorer_settings_library.ps1": "modules/explorer/explorer_settings_library.ps1",
@@ -26,7 +24,6 @@
   "apply_uac_settings.cmd": "modules/uac/apply_uac_settings.cmd",
   "Apply-UACSettings.ps1": "modules/uac/apply_uac_settings.ps1",
   "Apply-UACSettings.cmd": "modules/uac/apply_uac_settings.cmd",
-
   "after_restart_library.ps1": "core/after_restart_library.ps1",
   "configuration_library.ps1": "core/configuration_library.ps1",
   "verification_library.ps1": "core/verification_library.ps1",
@@ -200,5 +197,6 @@
   "Install-WindowsUpdates.cmd": "modules/updates/install_windows_updates.cmd",
   "Install-WindowsUpdates.ps1": "modules/updates/install_windows_updates.ps1",
   "Show-Update-Status.cmd": "modules/updates/show_update_status.cmd",
-  "Show-Update-Status.ps1": "modules/updates/show_update_status.ps1"
+  "Show-Update-Status.ps1": "modules/updates/show_update_status.ps1",
+  "debloat_library.ps1": "modules/debloat/debloat_library.ps1"
 }
