@@ -80,5 +80,14 @@ try{
  $result=Get-Content (Resolve-NucPath 'Verification-Result.json') -Raw|ConvertFrom-Json
  Assert ($result.Passed -and $result.SkippedCount -eq 3) '通用英文電腦明確略過NUC驅動AMD與中文座標'
  Assert (@($result.Checks|Where-Object {$_.Status -eq 'Skipped' -and $null -eq $_.Passed}).Count -eq 3) '略過不可冒充Passed'
+ foreach($publisherMode in @('False','StringTrue','WrongName','WrongStatus','BadRunId','EmptyRunId','RemoteTrue','Duplicate','Missing','Throw')){
+  $global:AggregateFixtureMode='Pass';$global:MdnsVerificationFixture=$publisherMode;$beforeCalls=$global:MdnsVerificationCalls
+  Reject {Invoke-SetupVerification -Hardware $generic -VerificationRunId ([guid]::NewGuid().ToString())} ('fresh mDNS aggregate refuses '+$publisherMode)
+  $result=Get-Content (Resolve-NucPath 'Verification-Result.json') -Raw|ConvertFrom-Json
+  $check=@($result.Checks|Where-Object Name -eq 'mDNS 持續公告')
+  Assert ($check.Count -eq 1 -and -not $check[0].Passed -and $global:MdnsVerificationCalls -eq ($beforeCalls+1)) ('bad mDNS cannot reuse a prior successful result: '+$publisherMode)
+  Assert (@($result.Checks|Where-Object {$_.Status -eq 'Failed' -and $_.Name -ne 'mDNS 持續公告'}).Count -eq 0) ('mDNS negative case fails for intended publisher boundary: '+$publisherMode)
+ }
+ $global:MdnsVerificationFixture='Pass'
 }finally{$env:ProgramData=$previousProgramData;Remove-Variable AggregateFixtureMode -Scope Global -ErrorAction SilentlyContinue}
 Write-Host 'ALL PASS: verification aggregator source tests; OS boundaries mocked'
