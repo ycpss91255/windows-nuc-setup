@@ -91,6 +91,9 @@ function Invoke-InitSshContinuation {
   & $SshScriptPath
   $service=Get-CimInstance -ClassName Win32_Service -Filter "Name='sshd'" -ErrorAction Stop
   if(-not $service -or $service.State -ne 'Running' -or $service.StartMode -ne 'Auto'){throw 'SSH 服務尚未以自動方式啟動。'}
+  . (Join-Path (Split-Path $SshScriptPath -Parent) 'ssh_firewall.ps1')
+  $firewall=Get-SetupSSHFirewallStatus
+  if(-not $firewall.Passed){throw 'SSH 防火牆驗證尚未通過。'}
  }catch{
   $State.LastErrorCode='SshSetupFailed'
   Save-InitProvisioningState -State $State -StatePath $StatePath
