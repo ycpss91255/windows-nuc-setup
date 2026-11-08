@@ -78,8 +78,9 @@ function New-SetupGuiProtectedDirectory {
 }
 function Get-SetupGuiStageFiles {
  param([string]$Role)
- if($Role -cne 'Explorer'){throw 'GUI worker角色尚未核准。'}
- return @('core/gui_stage_library.ps1','core/gui_worker.ps1','modules/explorer/explorer_settings_library.ps1','modules/explorer/native/explorer.cs')
+ if($Role -cnotin @('Explorer','Display','Theme')){throw 'GUI worker角色尚未核准。'}
+ $leaf=$Role.ToLowerInvariant()
+ return @('core/gui_stage_library.ps1','core/gui_worker.ps1',('modules/'+$leaf+'/'+$leaf+'_settings_library.ps1'),('modules/'+$leaf+'/native/'+$leaf+'.cs'))
 }
 function Get-SetupGuiRunPaths {
  param([string]$CommonDataRoot,[string]$Role,[string]$RunId)
@@ -173,8 +174,8 @@ function Assert-SetupGuiWorkerScope {
 function Get-SetupGuiResultName {
  param($Context)
  $null=Get-SetupGuiStageFiles $Context.Role
- if($Context.VerifyOnly){return 'Explorer-Verification.json'}
- return 'Explorer-Result.json'
+ if($Context.VerifyOnly){return ($Context.Role+'-Verification.json')}
+ return ($Context.Role+'-Result.json')
 }
 function Write-SetupGuiResult {
  param([string]$DataRoot,$Context,[Collections.IDictionary]$Result)
@@ -275,9 +276,10 @@ function Invoke-SetupGuiWorker {
  try{
   $lease=Open-SetupGuiExecutionLock -Paths $paths
   # Role and all executable file hashes were validated before importing this fixed library.
-  $module=Join-Path $CodeRoot 'modules/explorer'
-  . (Join-Path $module 'explorer_settings_library.ps1')
-  $result=Invoke-SetupExplorerSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly
+  $module=Join-Path $CodeRoot ('modules/'+$Role.ToLowerInvariant())
+  $library=switch -CaseSensitive ($Role){Explorer{'explorer_settings_library.ps1'} Display{'display_settings_library.ps1'} Theme{'theme_settings_library.ps1'} default{throw 'GUI worker角色尚未核准。'}}
+  . (Join-Path $module $library)
+  $result=switch -CaseSensitive ($Role){Explorer{Invoke-SetupExplorerSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Display{Invoke-SetupDisplaySettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Theme{Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly}}
   if($result.Success -isnot [bool]){throw 'GUI worker葉節點未提供有效成功狀態。'}
   $details=[ordered]@{};foreach($property in $result.PSObject.Properties){$details[$property.Name]=$property.Value}
   Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result $details
