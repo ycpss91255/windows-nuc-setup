@@ -6,7 +6,7 @@ function Reject([scriptblock]$Action,[string]$Name){$failed=$false;try{& $Action
 $library=Join-Path $root 'modules/init/init_entry_library.ps1'
 Assert (Test-Path -LiteralPath $library) 'Init全部路線由原始具名來源執行且保留入口路徑'
 . $library
-$fixture=Join-Path $env:TEMP ('init_runtime_'+[guid]::NewGuid().ToString('N'));$module=Join-Path $fixture 'source/modules/init';[void][IO.Directory]::CreateDirectory($module)
+$fixture=[IO.Path]::GetFullPath((Join-Path $env:TEMP ('init_runtime_'+[guid]::NewGuid().ToString('N'))));$module=Join-Path $fixture 'source/modules/init';[void][IO.Directory]::CreateDirectory($module)
 Copy-Item -LiteralPath (Join-Path $root 'modules/init/oobe_library.ps1') -Destination $module
 [IO.File]::WriteAllText((Join-Path $module 'cleanup_oobe.ps1'),'$global:initCleanupCalls++')
 $entry=Join-Path $module "入口 ' 中文.ps1";[IO.File]::WriteAllText($entry,'param($ExpectedUserSID,$SshScriptPath);[pscustomobject]@{SID=$ExpectedUserSID;SSH=$SshScriptPath}')
