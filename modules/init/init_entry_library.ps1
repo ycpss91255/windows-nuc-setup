@@ -30,10 +30,12 @@ function Get-SetupInitPreparationFacts {
   $registered=[Environment]::ExpandEnvironmentVariables([string]$profile.ProfileImagePath)
   $nativeProfile=[Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile,[Environment+SpecialFolderOption]::DoNotVerify)
   $profileMatches=($registered -and $nativeProfile -and [IO.Path]::GetFullPath($registered).TrimEnd('\') -ieq [IO.Path]::GetFullPath($nativeProfile).TrimEnd('\'))
-  $oobe=@(Get-CimInstance Win32_Process -Filter "Name='msoobe.exe' OR Name='CloudExperienceHostBroker.exe' OR Name='CloudExperienceHostApp.exe' OR Name='oobenetworkconnectionflow.exe'" -ErrorAction Stop|Where-Object SessionId -eq $Identity.SessionId).Count -gt 0
+  $processes=@(Get-CimInstance Win32_Process -Filter "Name='msoobe.exe' OR Name='CloudExperienceHostBroker.exe' OR Name='CloudExperienceHostApp.exe' OR Name='oobenetworkconnectionflow.exe' OR Name='setup.exe' OR Name='setuphost.exe' OR Name='setupprep.exe' OR Name='sysprep.exe'" -ErrorAction Stop|Where-Object SessionId -eq $Identity.SessionId)
+  $oobe=@($processes|Where-Object {$_.Name -in @('msoobe.exe','CloudExperienceHostBroker.exe','CloudExperienceHostApp.exe','oobenetworkconnectionflow.exe')}).Count -gt 0
+  $setupBusy=@($processes|Where-Object {$_.Name -in @('setup.exe','setuphost.exe','setupprep.exe','sysprep.exe')}).Count -gt 0
   $localBuiltin=$false
-  if($Identity.Sid -match '-500$'){$user=Get-LocalUser -SID $Identity.UserSID -ErrorAction Stop;$localBuiltin=($user.Enabled -eq $true -and [string]$user.SID -eq $Identity.Sid)}
-  return @{ReadSucceeded=$true;Build=[int]$os.BuildNumber;ProductType=[int]$os.ProductType;IsWinPE=[bool](Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT' -ErrorAction Stop);OobeApiSucceeded=$completion.Succeeded;OobeComplete=$completion.Complete;SetupInProgress=$setup.SystemSetupInProgress;OobeInProgress=$setup.OOBEInProgress;OobeProcessInSession=$oobe;ProfileMatches=[bool]$profileMatches;LocalBuiltin=[bool]$localBuiltin}
+  if($Identity.Sid -match '-500$'){$user=Get-LocalUser -SID $Identity.UserSID -ErrorAction Stop;$localBuiltin=([string]$user.SID -eq $Identity.Sid)}
+  return @{ReadSucceeded=$true;Build=[int]$os.BuildNumber;ProductType=[int]$os.ProductType;IsWinPE=[bool](Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT' -ErrorAction Stop);OobeApiSucceeded=$completion.Succeeded;OobeComplete=$completion.Complete;SetupInProgress=$setup.SystemSetupInProgress;OobeInProgress=$setup.OOBEInProgress;OobeProcessInSession=$oobe;SetupProcessInSession=$setupBusy;ProfileMatches=[bool]$profileMatches;LocalBuiltin=[bool]$localBuiltin}
  }catch{return @{ReadSucceeded=$false}}
 }
 function Invoke-SetupInit {
@@ -80,7 +82,7 @@ if($existingAnswer.Count){throw ('已有 Windows answer file 或快取設定，�
 $stage=Join-Path $env:ProgramData 'NUC-Init'
 Assert-InitPlainPath $stage
 if(Test-Path -LiteralPath $stage){throw ('已有 Init 暫存資料，請先查看 '+$stage+'，不要重複產生帳號設定。')}
-Write-Host '已確認目前符合新帳號與 OOBE 的受控準備條件；不以 ImageState 或帳號名稱宣稱完整辨識 Windows 稽核模式。'
+Write-Host '已自動確認可準備新帳號與 Windows 初始設定。'
 if((Read-Host '是否準備新本機帳號與 OOBE？將建立受保護的 answer file 並執行 Sysprep /oobe /quit，不自動重開；同意請輸入 YES') -cne 'YES'){throw '未同意帳號與 OOBE 準備，本次未更改設定。'}
 $existingNames=@((Get-LocalUser).Name)
 $name=Read-Host '新的本機管理員帳號（最多 20 字；不可使用現有帳號或 Windows 保留符號）'

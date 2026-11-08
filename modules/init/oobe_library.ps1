@@ -2,17 +2,16 @@
 function Get-InitRoute {
  param([string]$Sid,[string]$ImageState,[bool]$IsAdministrator,[bool]$DesktopOwned,$ModeFacts)
  if($Sid -eq 'S-1-5-18'){return 'OobeProvisioning'}
- if(-not $IsAdministrator){return 'ElevationRequired'}
  if($null -ne $ModeFacts){
   if($ModeFacts.ReadSucceeded -isnot [bool] -or -not $ModeFacts.ReadSucceeded){return 'RejectUnknownSetupState'}
-  foreach($flag in @('IsWinPE','OobeApiSucceeded','OobeComplete','OobeProcessInSession','ProfileMatches','LocalBuiltin')){if($ModeFacts.$flag -isnot [bool]){return 'RejectUnknownSetupState'}}
-  foreach($flag in @('SetupInProgress','OobeInProgress')){if(($ModeFacts.$flag -isnot [int] -and $ModeFacts.$flag -isnot [uint32]) -or $ModeFacts.$flag -notin @(0,1)){return 'RejectUnknownSetupState'}}
-  if($ModeFacts.Build -lt 22621 -or $ModeFacts.ProductType -ne 1 -or $ModeFacts.IsWinPE -or -not $ModeFacts.OobeApiSucceeded -or $ModeFacts.SetupInProgress -ne 0 -or $ModeFacts.OobeInProgress -ne 0 -or $ModeFacts.OobeProcessInSession -or -not $ModeFacts.ProfileMatches -or -not $DesktopOwned){return 'RejectUnknownSetupState'}
-  if($ImageState -eq 'IMAGE_STATE_COMPLETE' -and $ModeFacts.OobeComplete -and $Sid -notmatch '-500$'){return 'DesktopReady'}
+  foreach($flag in @('IsWinPE','OobeApiSucceeded','OobeComplete','OobeProcessInSession','SetupProcessInSession','ProfileMatches','LocalBuiltin')){if($ModeFacts.$flag -isnot [bool]){return 'RejectUnknownSetupState'}}
+  if($ModeFacts.Build -lt 22621 -or $ModeFacts.ProductType -ne 1 -or $ModeFacts.IsWinPE -or -not $ModeFacts.OobeApiSucceeded -or $ModeFacts.SetupProcessInSession -or $ModeFacts.OobeProcessInSession -or -not $ModeFacts.ProfileMatches -or -not $DesktopOwned){return 'RejectUnknownSetupState'}
+  if($ImageState -eq 'IMAGE_STATE_COMPLETE' -and $ModeFacts.OobeComplete -and $Sid -notmatch '-500$'){if(-not $IsAdministrator){return 'ElevationRequired'};return 'DesktopReady'}
   # Operational eligibility only: no public IsAuditMode contract is inferred here.
-  if($Sid -match '-500$' -and $ModeFacts.LocalBuiltin -and -not $ModeFacts.OobeComplete -and $ImageState -in @('IMAGE_STATE_UNDEPLOYABLE','IMAGE_STATE_GENERALIZE_RESEAL_TO_AUDIT','IMAGE_STATE_SPECIALIZE_RESEAL_TO_AUDIT','IMAGE_STATE_GENERALIZE_RESEAL_TO_OOBE','IMAGE_STATE_SPECIALIZE_RESEAL_TO_OOBE')){return 'PrepareOobe'}
+  if($IsAdministrator -and $Sid -match '-500$' -and $ModeFacts.LocalBuiltin -and -not $ModeFacts.OobeComplete -and $ImageState -in @('IMAGE_STATE_UNDEPLOYABLE','IMAGE_STATE_GENERALIZE_RESEAL_TO_AUDIT','IMAGE_STATE_SPECIALIZE_RESEAL_TO_AUDIT','IMAGE_STATE_GENERALIZE_RESEAL_TO_OOBE','IMAGE_STATE_SPECIALIZE_RESEAL_TO_OOBE')){return 'PrepareOobe'}
   return 'RejectUnknownSetupState'
  }
+ if(-not $IsAdministrator){return 'ElevationRequired'}
  if($Sid -match '-500$'){
   return 'RejectBuiltinAdministrator'
  }
