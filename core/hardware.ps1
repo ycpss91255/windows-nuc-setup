@@ -127,11 +127,18 @@ function Test-SetupDriverPayload {
  }
  $manifest=Get-Content -LiteralPath (Join-Path $driverRoot 'manifest.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json
   $manifest=@(Get-SetupDriverManifestEntries -Manifest $manifest)
+ $validationIndex=0
  foreach($entry in $manifest){
+  $validationIndex++
   if($entry.File -notmatch '^[^\\/:]+\.zip$' -or $entry.File -match '^\.\.' -or $entry.SHA256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'NUC 驅動清單格式不合法。'}
   $path=Join-Path $driverRoot $entry.File
   if(-not(Test-Path -LiteralPath $path -PathType Leaf)){throw ('缺少驅動：'+$entry.File)}
-  if((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $entry.SHA256){throw ('驅動 SHA256 不符：'+$entry.File)}
+  Write-Host ('[驅動包驗證 '+$validationIndex+'/'+$manifest.Count+'] 正在計算 SHA256：'+$entry.File+'；大型檔案可能需要較久，請稍候。') -ForegroundColor Cyan
+  $hashStarted=[Diagnostics.Stopwatch]::StartNew()
+  try{$actualHash=Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop}catch{throw ('驅動包讀取失敗：'+$entry.File+'；'+$_.Exception.Message)}
+  if($actualHash.Hash -ne $entry.SHA256){throw ('驅動 SHA256 不符：'+$entry.File)}
+  $hashStarted.Stop()
+  Write-Host ('[驅動包驗證 '+$validationIndex+'/'+$manifest.Count+'] SHA256 已通過：'+$entry.File+'；耗時 '+$hashStarted.Elapsed.TotalSeconds.ToString('F1')+' 秒。') -ForegroundColor Green
  }
  [pscustomobject]@{Status='Passed';Count=$manifest.Count;Reason='NUC 驅動雜湊通過'}
 }
