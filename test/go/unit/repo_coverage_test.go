@@ -48,7 +48,7 @@ func TestRepoPowerShellCoverageReplaysRawCommandUnion(t *testing.T) {
 	if err != nil || !r.Files[name][2] || len(catalog) != 1 || len(catalog[0].Lines) != 1 {
 		t.Fatalf("raw complementary commands not merged: %+v %+v %v", r, catalog, err)
 	}
-	for _, kind := range []string{"wrong_package", "wrong_version", "wrong_xml", "missing_worker", "wrong_hash", "wrong_catalog", "duplicate_span", "missing_span", "engine_mismatch", "engine_hash", "engine_version", "unknown_engine", "unknown_field"} {
+	for _, kind := range []string{"wrong_package", "wrong_version", "wrong_xml", "missing_worker", "wrong_hash", "wrong_catalog", "duplicate_span", "missing_span", "engine_mismatch", "engine_hash", "engine_version", "unknown_engine", "unknown_field", "invalid_engine_version"} {
 		t.Run(kind, func(t *testing.T) {
 			copyData := map[string][]byte{}
 			for k, v := range data {
@@ -71,6 +71,16 @@ func TestRepoPowerShellCoverageReplaysRawCommandUnion(t *testing.T) {
 				case "unknown_field":
 					w["Surprise"] = true
 				}
+				copyData["worker_1.json"], _ = json.Marshal(w)
+			case "invalid_engine_version":
+				var d map[string]any
+				json.Unmarshal(bad, &d)
+				descriptors := d["Workers"].([]any)
+				descriptors[1].(map[string]any)["EngineVersion"] = "7.99999999999999999999999"
+				bad, _ = json.Marshal(d)
+				var w map[string]any
+				json.Unmarshal(copyData["worker_1.json"], &w)
+				w["EngineVersion"] = "7.99999999999999999999999"
 				copyData["worker_1.json"], _ = json.Marshal(w)
 			case "wrong_package":
 				bad = []byte(strings.ReplaceAll(string(bad), packageHash, strings.Repeat("A", 86)+"=="))
