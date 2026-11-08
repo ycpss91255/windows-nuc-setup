@@ -1,4 +1,4 @@
-﻿# windows_setup
+# windows_setup
 
 [![Windows CI](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml/badge.svg)](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
 
@@ -520,7 +520,7 @@ Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安�
 ### 主機名稱與區域網路
 
 - 第 4 階段與獨立 SSH 模組會顯示目前系統的 `主機名稱.local`、實際 IPv4／IPv6、帳號與可直接複製的連線命令，不固定電腦名稱或使用者。既有 LAN Ping 模組的 `-VerifyOnly` 也會顯示同一份唯讀名稱觀測。
-- 在**另一臺同網段電腦**，先複製畫面的 `ping -4 '主機名稱.local'`，再試 `ssh -l '帳號' '主機名稱.local'`；IPv6 可另用畫面的 `ping -6`。若名稱解析失敗，先複製畫面的 IP 備援命令。多個 IP 會完整列出，單一備援範例優先選一般 IPv4。
+- 在**另一臺同網段電腦的 PowerShell**，先複製畫面的 `ping -4 '主機名稱.local'`，再試 `ssh -l '帳號' '主機名稱.local'`；IPv6 可另用畫面的 `ping -6`。若名稱解析失敗，先複製畫面的 IP 備援命令。多個 IP 會完整列出，單一備援範例優先選一般 IPv4。
 - IPv6 `fe80::` 是 link-local；畫面保留本機的 `%介面索引`，從另一臺直連時，scope 必須改用**用戶端**該網段的索引，可在該臺執行 `Get-NetIPInterface -AddressFamily IPv6 -ConnectionState Connected` 查看；不能直接沿用伺服器的索引。優先使用名稱或 IPv4 備援可避免手動選 scope。
 - 此觀測只讀取 DNS Client、兩處 `EnableMDNS`、UDP 5353 與本機系統 A／AAAA 解析是否符合作用中的本機 IP。未設定值代表系統預設；管理原則值 0 依 Windows 官方 ADML 代表使用本機設定。讀取失敗會另外標示未知，不會覆寫政策、開防火牆孔、安裝 Bonjour、改 hosts、改名稱或關閉 IPv6。沒有 5353 端點可能是按需啟用；本機解析吻合也不代表另一臺已可連線。
 - `.local` 通常限同網段；訪客網路、AP 隔離或跨 VLAN 可能阻擋 multicast。本工具的名稱觀測失敗不會阻斷既有 Ping／SSH IP 存取。原生解析使用 `Resolve-DnsName -NoHostsFile`，未使用會排除 multicast 的 `-DnsOnly`；參見 [Microsoft 的名稱解析說明](https://techcommunity.microsoft.com/blog/networkingblog/resolve-dnsname-vs-nslookup-in-windows/4483858)及 [mDNS 管理說明](https://techcommunity.microsoft.com/blog/networkingblog/mdns-in-the-enterprise/3275777)。
