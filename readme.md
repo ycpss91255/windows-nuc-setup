@@ -27,8 +27,7 @@ for %d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do @if exist "%d:\wi
 
 2. 使用找到的完整路徑，例如顯示 `E:\windows_setup\init.cmd` 時輸入 `call "E:\windows_setup\init.cmd"`。E: 只是例子；若列出多份，請選你剛準備的完整工具包。
 3. 依中文提示輸入新本機帳號、密碼與確認密碼。設定包套用前會明確詢問是否繼續，因 Windows 可能立即重新啟動；輸入 `YES` 才繼續。取消會保留帳號與無密碼續跑紀錄。
-4. 登入剛建立的正式帳號，按 `Win+R` 輸入 `%ProgramData%\windows_setup_init.cmd`，允許同一帳號的管理員權限，安裝 SSH。此步不需要 USB；缺少網路／元件來源時，連網後用同一入口重試。
-5. 等顯示「Init 完成」及中文 SSH 連線資訊，再執行下面的 Windows 設定流程。
+4. 登入剛建立的正式帳號，接上網路，直接從完整工具包執行 `windows.cmd`，依下面的 Windows 設定流程繼續；不需要第二次執行 Init。Windows 入口先確認帳號與 OOBE 紀錄，第 4 階段才安裝 SSH。
 #### 可選路線：已用 Ctrl+Shift+F3 進入 Administrator 桌面
 
 `Shift+F10` 直接執行 Init 的路線仍可使用。如果你已按 `Ctrl+Shift+F3`，Windows 會重新啟動進入稽核模式的 Administrator 桌面，接著依序操作：
@@ -37,17 +36,16 @@ for %d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do @if exist "%d:\wi
 2. 從 USB 的完整 `windows_setup` 資料夾執行 `init.cmd`。依提示輸入 `AUDIT` 確認，再輸入要建立的正式本機帳號、密碼及確認密碼。
 3. **只有看到「帳號設定已準備完成」才手動重新啟動。** 可使用開始選單的「重新啟動」，或在 CMD 輸入 `shutdown /r /t 0`。如果顯示錯誤或沒有成功文字，先處理錯誤，不把視窗結束當成成功，也不要直接執行 `windows.cmd`。
 4. 重開後完成剩餘 Windows 初始設定，登入剛準備的新正式本機帳號。稽核模式的 Administrator 只是準備帳號的暫時身分，不是後續套用設定的目標帳號。
-5. 在新正式帳號桌面，接上網路，再從 USB 執行 `init.cmd` 安裝 SSH，允許同一帳號的管理員權限。等畫面顯示「Init 完成」及中文 SSH 連線資訊。
-6. 接著執行同一份 USB 工具包的 `windows.cmd`，依下方「接著套用設定」繼續。
+5. 在新正式帳號桌面接上網路，直接執行同一份 USB 工具包的 `windows.cmd`，依下方「接著套用設定」繼續。SSH 由 Windows 第 4 階段安裝，不需要第二次執行 Init。
 
 ### B．已經進入正式帳號的 Windows 桌面
 
 1. 接上網路，按 `Windows+E` →「本機／此電腦」→ USB → `windows_setup`。
-2. 雙擊 `init.cmd` 安裝 SSH，沿用目前帳號，不重建帳號或密碼。
+2. 直接雙擊 `windows.cmd`，沿用目前帳號；不需要先執行 Init。SSH 包含在 Windows 第 4 階段。
 
 ### 接著套用設定
 
-1. Init 完成後，雙擊同資料夾的 `windows.cmd`。依提示允許權限、輸入目前帳號密碼；不裝驅動時直接 Enter 略過選包。
+1. 登入正式帳號後，雙擊完整工具包的 `windows.cmd`。依提示允許權限、輸入目前帳號密碼；不裝驅動時直接 Enter 略過選包。
 2. 等整輪結束、查看結果後再手動重開機。從 USB 開啟 `windows_setup\core`，雙擊 `verify_after_restart.cmd` 續跑與驗收。
 3. 處理畫面列出的失敗，再雙擊 `verify_only.cmd` 檢查，最後依[目視確認](#6-最後目視確認)核對桌面、工具列及顯示。
 
@@ -85,7 +83,7 @@ for %d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do @if exist "%d:\wi
 
 Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不納入 Git，從原始碼取得後須依 [來源包準備說明](#從原始碼準備完整工具包) 補齊再檢查。第三方來源及授權見 [第三方來源與授權](doc/third_party.md)。公開來源的網路 Sites 預設為空集合；請在本機維護個人規則。
 
-本工具依上方前提自動選用 Generic 或 NUC8 設定檔，Windows 模組亦提供獨立入口。依目前階段先執行 Init，再執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
+本工具依上方前提自動選用 Generic 或 NUC8 設定檔，Windows 模組亦提供獨立入口。初始設定先執行 Init，登入正式帳號後直接執行 Windows；已有正式帳號可直接執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
 
 本機維護的 `windows_setup` 可整份複製到 USB；腳本依自己所在位置解析主程式，不綁定 Downloads、USB 磁碟代號或使用者名稱。驅動獨立放在 `windows_driver_packages/nuc8`，主程式不含驅動封存檔。每次換機使用前要確認 USB 是最新完整副本；舊 USB 不會自動同步本機修改。
 
@@ -156,7 +154,7 @@ dir E:\
 
 1. 按 `Windows+E` 開啟檔案總管，左側選「本機／此電腦」，依名稱與容量找到 USB 並雙擊。
 2. 打開 USB 裡的 `windows_setup`（若放在其他資料夾，就逐層打開），確認看得到 `init.cmd`、`windows.cmd`、`core`、`modules`。
-3. 雙擊 `init.cmd` 即可。若檔案總管隱藏副檔名，可能只顯示 `init`；可在「檢視 → 顯示 → 副檔名」勾選後再辨認，不必先更改此設定才能執行。
+3. 稽核桌面雙擊 `init.cmd`；正式帳號桌面直接雙擊 `windows.cmd`。若檔案總管隱藏副檔名，可能只顯示 `init` 或 `windows`；可在「檢視 → 顯示 → 副檔名」勾選後再辨認，不必先更改此設定才能執行。
 4. 需要參數或想用命令呼叫時，在**這個資料夾的位址欄**點一下（或按 `Alt+D`），輸入 `cmd` 後按 Enter。開啟的 CMD 已位於工具包資料夾，先輸入 `dir init.cmd windows.cmd` 確認。
 
 依目前階段只執行對應的一行，**不要將下面整段一次貼上**。入口會啟動 PowerShell 並在結束後保留視窗；只有本輪確實結束、畫面已有結果時，若看到 `PS` 提示字元，輸入 `exit` 返回原 CMD。尚在執行時不要輸入 exit 或關閉視窗。
@@ -165,7 +163,7 @@ dir E:\
 call init.cmd
 ```
 
-稽核桌面會處理建帳號；正式帳號桌面會處理 SSH。正式帳號的 Init 成功後，先依上面說明輸入 `exit` 離開保留的 PowerShell、回到原 CMD，再執行下一行；也可重新從工具包位址欄開一個 CMD：
+上面的 Init 只在初始設定／稽核桌面準備帳號。登入正式帳號後，直接執行下面的 Windows 入口；不需再執行 Init：
 
 ```cmd
 call windows.cmd
@@ -189,7 +187,7 @@ call windows.cmd -VerifyOnly
 
 ## 先看目前在哪個階段
 
-兩個入口各有用途：`init.cmd` 處理初始帳號與 SSH；`windows.cmd` 處理正式帳號登入後的驅動、更新、清理與偏好。不要在 OOBE 或稽核用 Administrator 桌面執行 windows.cmd。
+兩個入口各有用途：`init.cmd` 處理初始帳號與 OOBE；`windows.cmd` 處理正式帳號登入後的 SSH、驅動、更新、清理與偏好。不要在 OOBE 或稽核用 Administrator 桌面執行 windows.cmd。
 
 ### 情境 A：全新安裝，仍在初始設定／連接 Wi-Fi 畫面
 
@@ -197,22 +195,24 @@ call windows.cmd -VerifyOnly
 
 設定包只包含 `HideOobe=True`，不含帳密或 Microsoft 工具。先建立並讀回確認正式管理員帳號，才會詢問是否套用；Windows 可能因套用設定包重新啟動，因此必須先輸入 `YES` 同意。腳本不會在 SYSTEM 下執行 Sysprep。
 
-續跑檔案放在 `%ProgramData%\windows_setup_init`，只允許 SYSTEM 與管理員讀寫；同層的 `windows_setup_init.cmd` 供一般使用者唯讀啟動提權。正式登入後用此入口繼續；會核對同一臺機器、目標 SID、家目錄與桌面，再真正安裝 OpenSSH Server。USB 可拔除，帳密不保存在設定包或續跑 JSON。中途取消或缺網時保留狀態，可用同一入口重試；若帳號已建立但寫入所有權紀錄失敗，會保留帳號並停止，請先查看錯誤，不會猜測接管同名帳號。
+續跑檔案放在 `%ProgramData%\windows_setup_init`，只允許 SYSTEM 與管理員讀寫；同層的 `windows_setup_init.cmd` 是取消／中斷時的恢復入口，供一般使用者唯讀啟動提權。正常登入後直接執行完整工具包的 `windows.cmd`：它在設定前核對同一臺機器、目標 SID、家目錄、正式桌面及已安裝設定包，再記錄帳號確認。此紀錄不代表 SSH 已完成，SSH 由第 4 階段處理。帳密不保存在設定包或續跑 JSON；若帳號已建立但寫入所有權紀錄失敗，會保留帳號並停止，不會猜測接管同名帳號。
 
-Init 成功後才從完整工具包執行 `windows.cmd`。Windows 更新等流程結束後依提示手動重新開機，使用 `windows.cmd -AfterRestart` 續跑，再用 `windows.cmd -VerifyOnly` 檢查。
+舊版 `SshPending`／`Complete` 紀錄通過相同核對後，會先保留受保護的 `state_before_account_confirmation.json`，再轉為 `AccountConfirmed`；不刪除舊執行檔案，也不把舊狀態當成目前 SSH 驗證結果。
+
+Windows 更新等流程結束後依提示手動重新開機，使用 `windows.cmd -AfterRestart` 續跑，再用 `windows.cmd -VerifyOnly` 檢查。
+
 ### 情境 B：已有正式本機帳號，從 Windows 桌面開始
 
 此情境保留現有帳號，不重新建立帳號。USB 與本機的完整工具包都可使用，不必先移到 Downloads。
 
 1. 登入要套用設定的本機管理員帳號，確認記得現有密碼；先取走桌面要保留的檔案，接上網路並保持電源穩定。
 2. 準備完整工具包：可以直接開啟 USB 的 `windows_setup`，或開啟自行完整複製到本機可寫入、非桌面位置的副本。依上方「已進入稽核或正式桌面」的步驟找到資料夾，再從位址欄開啟 CMD。
-3. 執行 `init.cmd`，允許目前帳號提權。這個階段不會重新建立帳號或改密碼；會安裝／啟用 OpenSSH Server、設定區域網路防火牆，並建立目前使用者的 SSH／hosts 框架。離線且缺少 SSH 元件時會明確失敗，接網後再執行 Init。
-4. Init 成功後執行 `windows.cmd`，依提示輸入目前帳號的現有密碼供自動登入使用。需要 NUC 驅動才選擇獨立包，否則按 Enter 略過。等待整輪 19 個模組完成，不要中途關機。
-5. 整輪結束後手動重新開機，以同一帳號登入，再開啟原本使用的同一份完整工具包；USB 請重新確認本次磁碟代號。
-6. 在工具包目錄執行 `.\windows.cmd -AfterRestart`。若仍要求重開，等本輪結束後手動重開，再從同一份工具包續跑。
-7. 處理所有失敗後執行 `.\windows.cmd -VerifyOnly`，再逐項完成下方「最後目視確認」。有錯誤時查看 `reports` 及畫面，不將舊結果當成本輪成功。
+3. 直接執行 `windows.cmd`，允許目前帳號提權，依提示輸入現有密碼供自動登入使用。需要 NUC 驅動才選擇獨立包，否則按 Enter 略過。等待整輪 19 個模組完成，不要中途關機。第 4 階段會安裝／啟用 OpenSSH Server、設定區域網路防火牆及目前使用者的 SSH／hosts 框架；缺網路或元件時會記錄失敗，連網後再重跑 Windows 或獨立 SSH 模組。
+4. 整輪結束後手動重新開機，以同一帳號登入，再開啟同一份完整工具包；USB 請重新確認本次磁碟代號。
+5. 在工具包目錄執行 `.\windows.cmd -AfterRestart`。若仍要求重開，等本輪結束後手動重開，再從同一份工具包續跑。
+6. 處理所有失敗後執行 `.\windows.cmd -VerifyOnly`，再逐項完成下方「最後目視確認」。有錯誤時查看 `reports` 及畫面，不將舊結果當成本輪成功。
 
-兩種情境都由目前正式使用者與腳本位置解析路徑，不要求固定帳號、磁碟代號或家目錄；請勿使用另一位管理員的帳密代替目前使用者提權。SSH 可重複執行，Windows 第 04 模組也會再次確認。
+兩種情境都由目前正式使用者與腳本位置解析路徑，不要求固定帳號、磁碟代號或家目錄；請勿使用另一位管理員的帳密代替目前使用者提權。SSH 由 Windows 第 04 模組執行，也可單獨使用 `modules\ssh\apply_ssh_settings.cmd`。
 
 以下是正式帳號桌面的後續流程。已完成上方 Init 的使用者，不必再建立帳號；直接確認前提並從步驟 2 繼續。
 
@@ -230,7 +230,7 @@ Init 成功後才從完整工具包執行 `windows.cmd`。Windows 更新等流�
 
 ```text
 windows_setup\
-├─ init.cmd                    初始帳號／SSH
+├─ init.cmd                    初始帳號／OOBE
 ├─ windows.cmd                 正式帳號桌面設定
 ├─ readme.md                   本文件
 ├─ core\                      主流程、驗證與路徑表
