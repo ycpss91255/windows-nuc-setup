@@ -56,7 +56,7 @@ function Assert-LocalDriverReleaseAsset {
 }
 function New-DeterministicDriverArchive {
  param([string]$PackageDirectory,[string]$OutputPath)
- $source=(Resolve-Path -LiteralPath $PackageDirectory).Path.TrimEnd('\','/');$output=[IO.Path]::GetFullPath($OutputPath)
+ $source=[IO.Path]::GetFullPath((Resolve-Path -LiteralPath $PackageDirectory).Path).TrimEnd('\','/');$output=[IO.Path]::GetFullPath($OutputPath)
  if($output.StartsWith($source+'\',[StringComparison]::OrdinalIgnoreCase) -or (Test-Path -LiteralPath $output)){throw 'Archive output must be new and outside package.'}
  $items=@(Get-ChildItem -LiteralPath $source -Recurse -Force)
  if((Get-Item -LiteralPath $source).Attributes -band [IO.FileAttributes]::ReparsePoint -or @($items|Where-Object {$_.Attributes -band [IO.FileAttributes]::ReparsePoint}).Count){throw 'Driver package cannot contain reparse points.'}
