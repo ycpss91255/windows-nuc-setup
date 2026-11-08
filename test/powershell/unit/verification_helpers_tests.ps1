@@ -59,6 +59,9 @@ try{
  foreach($desktopMode in @('HiddenDesktop','SystemDesktop')){
   $global:AggregateFixtureMode=$desktopMode
   if($desktopMode -eq 'HiddenDesktop'){Reject {Invoke-SetupVerification -Hardware $hardware -DriverPackagePath $fixture -VerificationRunId ([guid]::NewGuid().ToString())} 'aggregation refuses visible hidden-only ordinary desktop file'}else{Invoke-SetupVerification -Hardware $hardware -DriverPackagePath $fixture -VerificationRunId ([guid]::NewGuid().ToString())|Out-Null;Assert $true 'aggregation preserves hidden system desktop.ini'}
+  $desktopResult=Get-Content (Resolve-NucPath 'Verification-Result.json') -Raw|ConvertFrom-Json
+  $desktopDriver=@($desktopResult.Checks|Where-Object Name -eq '已選驅動官方目標')
+  Assert ($desktopDriver.Count -eq 1 -and $desktopDriver[0].Status -eq 'Passed') ('桌面專屬案例不應誤造驅動失敗 '+$desktopMode)
  }
  $global:AggregateFixtureMode='Pass'
  $generic=Get-SetupHardwareProfile -BoardProduct 'Other PC' -UICulture en-US
