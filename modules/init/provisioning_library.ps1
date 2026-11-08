@@ -121,6 +121,16 @@ function Invoke-InitSshContinuation {
  $State.Phase='Complete';$State.LastErrorCode=''
  Save-InitProvisioningState -State $State -StatePath $StatePath
  Write-Host 'Init 完成：正式帳號與 SSH 已確認。' -ForegroundColor Green
+ foreach($line in @(Get-InitConnectionInfo -UserName $State.TargetUserName -ComputerName $Context.ComputerName)){Write-Host $line}
+}
+function Get-InitConnectionInfo {
+ param([string]$UserName,[string]$ComputerName)
+ '電腦名稱：'+$ComputerName
+ 'SSH 登入帳號：'+$UserName+'；使用此帳號既有密碼，這裡不顯示密碼。'
+ try{
+  $addresses=@(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop|Where-Object {$_.AddressState -eq 'Preferred' -and $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*'}|Select-Object -ExpandProperty IPAddress -Unique)
+  if($addresses.Count){foreach($ip in $addresses){'IPv4：'+$ip+'；同網段連線：ssh "'+$UserName+'@'+$ip+'"'}}else{'目前沒有可用 IPv4；接上區域網路後重跑入口查看。'}
+ }catch{'目前無法讀取 IPv4；請查看 Windows 網路設定。'}
 }
 function Invoke-InitProvisioningApply {
  param($State,[string]$StatePath,[string]$AssetRoot,[scriptblock]$Confirm)
