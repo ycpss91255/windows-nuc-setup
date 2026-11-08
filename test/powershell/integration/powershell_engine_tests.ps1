@@ -9,7 +9,7 @@ $fixture=Join-Path ([IO.Path]::GetTempPath()) ('ps engines 中文 '+[guid]::NewG
 foreach($major in @(5,7)){$choice=if($major -eq 5){'$true'}else{'$false'};$expected=if($major -eq 5){'yes'}else{'no'};$test="BeforeAll { . (Join-Path `$PSScriptRoot 'branch.ps1') }; Describe 'engine $major' { It 'uses requested engine' { `$PSVersionTable.PSVersion.Major | Should-Be $major; Pick $choice | Should-Be '$expected' } }";[IO.File]::WriteAllText((Join-Path $fixture ($major.ToString()+'.Tests.ps1')),$test,[Text.UTF8Encoding]::new($true))}
 $manifest=@{SourceRoot=$fixture;Sources=@('branch.ps1','never.ps1');Tests=@('5.Tests.ps1','7.Tests.ps1');TestEngines=@{'7.Tests.ps1'='pwsh'}}
 $manifestPath=Join-Path $fixture 'manifest.json';$manifest|ConvertTo-Json -Depth 4|Set-Content $manifestPath -Encoding UTF8
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $manifestPath -OutputDirectory (Join-Path $fixture 'good') *> (Join-Path $fixture 'good.log')
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $manifestPath -OutputDirectory (Join-Path $fixture 'good') -ThrottleLimit 2 *> (Join-Path $fixture 'good.log')
 Assert ($LASTEXITCODE -eq 0) ('依suite選擇5.1與pwsh真子程序 '+$fixture)
 $e=Get-Content (Join-Path $fixture 'good/evidence.json') -Raw|ConvertFrom-Json
 Assert ($e.Workers.Count -eq 2 -and $e.Workers[0].EngineVersion -like '5.1.*' -and [version]$e.Workers[1].EngineVersion -ge [version]'7.4') '兩個worker記錄實際引擎版本'

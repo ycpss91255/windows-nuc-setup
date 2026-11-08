@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$ManifestPath,[Parameter(Mandatory=$true)][string]$OutputDirectory,[int]$WorkerIndex=-1,[string]$PesterModule,[string]$PwshPath)
+param([Parameter(Mandatory=$true)][string]$ManifestPath,[Parameter(Mandatory=$true)][string]$OutputDirectory,[int]$WorkerIndex=-1,[string]$PesterModule,[string]$PwshPath,[ValidateRange(1,2)][int]$ThrottleLimit=1)
 $ErrorActionPreference='Stop'
 $version='6.0.0'
 # SHA512 from the official Gallery version metadata, not from a local binary.
@@ -97,18 +97,38 @@ if(@($engines.Values|Where-Object {$_ -eq 'pwsh'}).Count){
  $launchers.pwsh=$PwshPath
 }
 $workers=@();$merged=@{};$expectedKeys=$null
-for($i=0;$i -lt $tests.Count;$i++){
- $requestedEngine=Get-TestEngine $i;$launcher=$launchers[$requestedEngine]
- $launcherHash=(Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash.ToLowerInvariant()
- & $launcher -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -ManifestPath $ManifestPath -OutputDirectory $output -WorkerIndex $i -PesterModule $module
- if($LASTEXITCODE -ne 0){throw ('PowerShell 覆蓋率子程序失敗：'+$i)}
+function Quote-CollectorArgument([string]$Value){
+ return '"'+[regex]::Replace([regex]::Replace($Value,'(\\*)"','$1$1\"'),'(\\+)$','$1$1')+'"'
+}
+for($offset=0;$offset -lt $tests.Count;$offset+=$ThrottleLimit){
+ $batch=@()
+ try{
+  for($index=$offset;$index -lt [Math]::Min($offset+$ThrottleLimit,$tests.Count);$index++){
+   $engine=Get-TestEngine $index;$launcher=$launchers[$engine]
+   $launcherHash=(Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash.ToLowerInvariant()
+   $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-ManifestPath',$ManifestPath,'-OutputDirectory',$output,'-WorkerIndex',$index.ToString(),'-PesterModule',$module)
+   $argumentLine=(@($arguments|ForEach-Object {Quote-CollectorArgument ([string]$_)}) -join ' ')
+   $process=Start-Process -FilePath $launcher -ArgumentList $argumentLine -WorkingDirectory $source -WindowStyle Hidden -RedirectStandardOutput (Join-Path $output ('worker_'+$index+'.private.stdout.log')) -RedirectStandardError (Join-Path $output ('worker_'+$index+'.private.stderr.log')) -PassThru
+   $batch+=@([pscustomobject]@{Index=$index;Engine=$engine;LauncherHash=$launcherHash;Process=$process})
+   $null=$process.Handle
+  }
+  foreach($running in $batch){
+   $i=$running.Index;$requestedEngine=$running.Engine;$launcherHash=$running.LauncherHash
+   $running.Process.WaitForExit()
+   $nativeExit=$running.Process.ExitCode
+   if($null -eq $nativeExit -or $nativeExit -ne 0){throw ('PowerShell coverage worker failed: index='+$i+' exit='+$nativeExit)}
  $worker=Get-Content -LiteralPath (Join-Path $output ('worker_'+$i+'.json')) -Raw -Encoding UTF8|ConvertFrom-Json
- if($worker.Engine -cne $requestedEngine -or $worker.EngineSHA256 -cne $launcherHash -or -not(Test-EngineVersion $requestedEngine $worker.EngineVersion)){throw '子程序引擎版本或執行檔雜湊不一致。'}
+ if($worker.ProcessId -ne $running.Process.Id -or $worker.Engine -cne $requestedEngine -or $worker.EngineSHA256 -cne $launcherHash -or -not(Test-EngineVersion $requestedEngine $worker.EngineVersion)){throw '子程序引擎版本或執行檔雜湊不一致。'}
  if(($worker.Sources|ConvertTo-Json -Compress) -cne ($hashes|ConvertTo-Json -Compress)){throw '子程序來源雜湊不一致。'}
  $keys=@(foreach($row in $worker.Commands){$key=$row.File+':'+$row.Line+':'+$row.Column+':'+$row.EndLine+':'+$row.EndColumn;if(-not $merged.ContainsKey($key)){$merged[$key]=$row}else{$merged[$key].Hit=$merged[$key].Hit -or $row.Hit};$key})
  [Array]::Sort($keys,[StringComparer]::Ordinal)
  if($null -eq $expectedKeys){$expectedKeys=$keys}elseif(($keys -join "`n") -cne ($expectedKeys -join "`n")){throw '子程序命令分母不一致。'}
  $workers+=@([pscustomobject]@{Index=$i;ProcessId=$worker.ProcessId;Engine=$worker.Engine;EngineVersion=$worker.EngineVersion;EngineSHA256=$worker.EngineSHA256;Evidence=('worker_'+$i+'.json')})
+   Write-Host ('PowerShell worker completed: '+($i+1)+'/'+$tests.Count)
+  }
+ }finally{
+  foreach($running in $batch){try{if(-not $running.Process.HasExited){$running.Process.Kill();$running.Process.WaitForExit()}}finally{$running.Process.Dispose()}}
+ }
 }
 foreach($item in $hashes){if((Get-FileHash -LiteralPath (Join-Path $source $item.File)).Hash.ToLowerInvariant() -cne $item.SHA256){throw '量測期間來源變更。'}}
 $xml=[xml]'<?xml version="1.0" encoding="utf-8"?><coverage version="1" lines-covered="0" lines-valid="0" line-rate="0"><sources><source>.</source></sources><packages><package name="PowerShell"><classes /></package></packages></coverage>'
@@ -131,3 +151,5 @@ $xml.coverage.SetAttribute('lines-covered',$covered.ToString());$xml.coverage.Se
 Write-Json (Join-Path $output 'evidence.json') ([ordered]@{SchemaVersion=1;PesterVersion=$version;PackageSHA512=$packageHash;Sources=$hashes;Workers=$workers;Metric='FullyCoveredCommandStartLines';Covered=$covered;Total=$total})
 $xml.Save((Join-Path $output 'coverage.xml'))
 Write-Host ('PowerShell 原檔可執行行覆蓋率：'+$covered+'/'+$total+'；僅此清單範圍，不是整個儲存庫。')
+
+$global:LASTEXITCODE=0
