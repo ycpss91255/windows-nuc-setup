@@ -33,7 +33,7 @@ public static class ManagedNativeTests {
  static void MdnsCases(){
   var ad=new WindowsSetup.MdnsPublisher.Advertisement{HostName="fixture.local",ServiceName="fixture._ssh._tcp.local",InterfaceIndex=7,IPv4="192.0.2.9",IPv6="2001:db8::9",Port=22};
   foreach(string mode in new[]{"sync","async","error","timeout","late_cancel","deregister_error"}){
-   int registrations=0,deregistrations=0,cancels=0,originalFreed=0,copiesFreed=0;WindowsSetup.MdnsPublisher.Completion saved=null;bool retry=false;
+   int registrations=0,deregistrations=0,cancels=0,originalFreed=0,copiesFreed=0;WindowsSetup.MdnsPublisher.Completion saved=null;bool retry=false,freedDuringCancel=false;
    var api=new WindowsSetup.MdnsPublisher.NativeApi();
    api.Construct=delegate(WindowsSetup.MdnsPublisher.Advertisement row){Assert(row.HostName==ad.HostName && row.ServiceName==ad.ServiceName && row.InterfaceIndex==7 && row.IPv4==ad.IPv4 && row.IPv6==ad.IPv6 && row.Port==22,"native mDNS publisher receives exact host and address rows");return (IntPtr)11;};
    api.Read=delegate(IntPtr instance){return ad;};
@@ -46,9 +46,10 @@ public static class ManagedNativeTests {
     else{deregistrations++;Assert(cancel==IntPtr.Zero,"deregister requires null cancellation handle");saved(mode=="deregister_error" && !retry?5u:0u,IntPtr.Zero,(IntPtr)13);}
     return 9506;
    };
-   api.Cancel=delegate(IntPtr cancel){cancels++;if(mode=="timeout")saved(995,IntPtr.Zero,IntPtr.Zero);return 0;};
+   api.Cancel=delegate(IntPtr cancel){cancels++;if(mode=="timeout"){saved(995,IntPtr.Zero,IntPtr.Zero);freedDuringCancel=originalFreed!=0;}return 0;};
    WindowsSetup.MdnsPublisher.Registration lease=null;bool failed=false;
    try{lease=WindowsSetup.MdnsPublisher.Begin(ad,api,100);}catch(InvalidOperationException){failed=true;}catch(TimeoutException){failed=true;}
+   Assert(!freedDuringCancel,"native Cancel call must return before original instance/request/cancel memory is freed");
    if(mode=="error" || mode=="timeout" || mode=="late_cancel"){
     Assert(failed && lease==null,"native error or timeout cannot claim registration from local resolution");
     if(mode=="late_cancel"){Assert(originalFreed==0 && cancels==1,"timeout retains native memory until cancelled callback completes");saved(995,IntPtr.Zero,IntPtr.Zero);}
