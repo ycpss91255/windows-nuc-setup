@@ -20,7 +20,7 @@ function Assert-SetupUpdateProtectedPath {param($Path,[switch]$Directory) if(-no
 function Get-SetupMdnsPublisherFacts {return $script:facts}
 function Get-ScheduledTask {param($TaskName,$TaskPath,$ErrorAction) if($TaskName -ne 'WindowsSetup-mDNS-Publisher' -or $TaskPath -cne '\'){throw 'unapproved task query'};if($script:task){return $script:task}}
 function Register-ScheduledTask {param($TaskName,$TaskPath,$Description,$Action,$Principal,$Settings,$Trigger,[switch]$Force,$ErrorAction) if($script:task -and -not $Force){throw 'cannot overwrite existing task'};$script:registers++;$script:task=[pscustomobject]@{TaskName=$TaskName;TaskPath=$TaskPath;Description=$Description;Actions=@($Action);Principal=$Principal;Settings=$Settings;Triggers=@($Trigger);State='Ready'}}
-function Unregister-ScheduledTask {$script:nativeForbiddenCalls++;throw 'Native task deletion forbidden'} 
+function Unregister-ScheduledTask {$script:nativeForbiddenCalls++;throw 'Native task deletion forbidden'}
 function Stop-ScheduledTask {param($TaskName,$TaskPath,$ErrorAction) $script:stops++;$script:task.State='Ready'}
 function Start-ScheduledTask {
  param($TaskName,$TaskPath,$ErrorAction)
