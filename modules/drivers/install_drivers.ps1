@@ -12,7 +12,16 @@ if(-not $PackageOnly){
  $request=Select-SetupDriverRequest -PackageRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))) -DriverPackagePath $DriverPackagePath -PathSpecified:$PSBoundParameters.ContainsKey('DriverPackagePath') -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer -Interactive:((Test-SetupInteractiveHost) -and -not $NonInteractive -and -not $VerifyOnly)
  $DriverPackagePath=$request.DriverPackagePath;$ConfirmedBoard=$request.ConfirmedBoard;$ConfirmationComputer=$request.ConfirmationComputer
 }
-$hardware=if($PackageOnly){Get-SetupHardwareProfile -BoardProduct 'NUC8i7HVB' -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}else{Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}
+if($PackageOnly){
+ $identity=Get-Content -LiteralPath (Join-Path $DriverPackagePath 'package.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json
+ $board='NUC8i7HVB'
+ if($identity.SchemaVersion -eq 2){
+  $profile=Get-SetupDriverProfile -ProfileId $identity.ProfileId
+  if(-not $profile){throw '獨立包指定的機型不在可信設定檔清單。'}
+  $board=$profile.SupportedBoards[0]
+ }
+ $hardware=Get-SetupHardwareProfile -BoardProduct $board -DriverPackagePath $DriverPackagePath
+}else{$hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}
 $decision=Get-SetupModuleDecision -Module 'install_drivers.ps1' -Hardware $hardware
 if(-not $decision.Applicable){Write-Host ('[略過] '+$decision.Reason);$decision;return}
 $payload=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $DriverPackagePath
