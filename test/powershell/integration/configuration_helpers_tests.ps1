@@ -37,6 +37,7 @@ try{
   Assert (-not ([IO.File]::ReadAllText((Join-Path $fixture 'Setup-Result.json')).Contains('fixture-secret'))) ('摘要不含密碼 '+$mode)
   if($mode -in @('module_failure','device_failure','audit_failure')){Assert ($caught -like '部分步驟或裝置檢查未完成*') ('失敗保留真例外 '+$mode)}else{Assert (-not $caught) ('成功不誤拋 '+$mode)}
   if($mode -eq 'skip'){Assert ($r.SkippedModules.Count -eq 1 -and -not $global:configurationFixture.Calls.Contains('install_drivers.ps1')) '不適用模組不執行'}else{Assert ($global:configurationFixture.Driver.Path -eq 'fixture drivers' -and $global:configurationFixture.Driver.Board -eq 'NUC8i7HVB' -and $global:configurationFixture.Driver.NonInteractive) '驅動參數完整傳遞'}
+  if($mode -eq 'success'){$calls=@($global:configurationFixture.Calls);Assert ($calls.IndexOf('install_windows_updates.ps1') -lt $calls.IndexOf('install_drivers.ps1') -and $calls.IndexOf('install_drivers.ps1') -lt $calls.IndexOf('apply_amd_privacy_settings.ps1') -and $calls.IndexOf('install_drivers.ps1') -lt $calls.IndexOf('apply_display_settings.ps1') -and $calls.IndexOf('install_drivers.ps1') -lt $calls.IndexOf('apply_theme_settings.ps1') -and $calls[4] -eq 'apply_ssh_settings.ps1') '真主流程 SSH第四階段且更新先於驅動與畫面設定'}
   $progress=Get-Content -LiteralPath (Join-Path $fixture 'Setup-Progress.json') -Raw|ConvertFrom-Json
   Assert ($progress.Step -eq 19 -and $progress.Total -eq 19) '19 階段進度保存'
  }
