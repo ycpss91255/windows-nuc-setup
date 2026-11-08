@@ -25,4 +25,7 @@ Invoke-CurrentUserPrivacy -ReportPath $out -VerifyOnly -VerificationRunId fixtur
 Assert ($script:received.Edition -eq 'ProfessionalWorkstation' -and $script:received.ProductType -eq 1) '目前系統版本由只讀邊界動態取得'
 Assert ($script:received.SID -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) '使用當前帳號SID'
 Assert ($script:received.Report -eq $out -and $script:received.Verify -and $script:received.Run -eq 'fixture') 'VerifyOnly及結果位置正確傳遞'
+$verify=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/verify_only.ps1'),[ref]$tokens,[ref]$errors)
+$fresh=@($verify.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Invoke-FreshVerification' -and $node.Extent.Text.Contains('apply_privacy_settings.ps1') -and $node.Extent.Text.Contains('VerifyOnly')},$true))
+Assert ($fresh.Count -eq 1) '總驗收使用本輪Privacy結果及VerifyOnly，不接受舊結果'
 Write-Host 'ALL PASS: privacy routing tests; no host changes'
