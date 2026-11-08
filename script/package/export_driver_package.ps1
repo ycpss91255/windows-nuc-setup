@@ -14,6 +14,9 @@ Copy-Item -LiteralPath (Join-Path $source 'manifest.json') -Destination $output
 @{SchemaVersion=1;HardwareProfile='NUC8';Architecture='x64';SupportedBoards=@('NUC8i7HVB','NUC8i7HNB')}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $output 'package.json') -Encoding UTF8
 Copy-Item -LiteralPath (Join-Path $packageRoot 'core/hardware.ps1') -Destination (Join-Path $output 'core')
 Copy-Item -LiteralPath (Join-Path $packageRoot 'modules\drivers\install_drivers.ps1') -Destination (Join-Path $output 'modules\drivers')
+foreach($helper in @('driver_archive_library.ps1','driver_plan_library.ps1','driver_installation_library.ps1')){Copy-Item -LiteralPath (Join-Path $packageRoot ('modules/drivers/'+$helper)) -Destination (Join-Path $output 'modules/drivers')}
+[void][IO.Directory]::CreateDirectory((Join-Path $output 'modules/updates'))
+Copy-Item -LiteralPath (Join-Path $packageRoot 'modules/updates/update_stage_library.ps1') -Destination (Join-Path $output 'modules/updates')
 $cmd='@echo off'+"`r`n"+'powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0modules\drivers\install_drivers.ps1" -DriverPackagePath "%~dp0." %*'+"`r`n"
 [IO.File]::WriteAllText((Join-Path $output 'install.cmd'),$cmd,[Text.Encoding]::ASCII)
 $readme=@"
