@@ -66,6 +66,26 @@ public static class ManagedNativeTests {
   Assert(unregistered==4,"startup log failure still unregisters the acquired hotkey");
   var start=NucTerminalHotkey.CreateStartInfo("terminal fixture.exe","home with spaces");Assert(start.UseShellExecute && start.FileName=="terminal fixture.exe" && start.WorkingDirectory=="home with spaces","production launch options preserve dynamic paths without starting a process");
  }
+ static void DisplayCases(){
+  var api=new NUC8Display.Display.NativeApi();int changes=0,freed=0,gets=0,sets=0;bool missing=false;
+  api.Aware=delegate{return true;};api.Dpi=delegate{return 96;};
+  api.Enumerate=delegate(string name,int index,ref NUC8Display.Mode mode){Assert(mode.dmSize==220,"display initializes native mode size");if(missing)return false;if(index<0){mode.dmPelsWidth=changes>0?1920U:1280U;mode.dmPelsHeight=changes>0?1080U:720U;return true;}if(index>1)return false;mode.dmPelsWidth=index==1?1920U:1280U;mode.dmPelsHeight=index==1?1080U:720U;return true;};
+  api.Change=delegate(ref NUC8Display.Mode mode,uint flags){Assert(mode.dmFields==0x180000 && mode.dmPelsWidth==1920 && mode.dmPelsHeight==1080,"display only changes requested dimensions");if(flags==1)changes++;return 0;};
+  api.Allocate=Marshal.AllocHGlobal;api.Free=delegate(IntPtr p){freed++;Marshal.FreeHGlobal(p);};
+  api.Buffer=delegate(uint flags,out uint paths,out uint modes){Assert(flags==2,"display queries active paths only");paths=2;modes=1;return 0;};
+  api.Query=delegate(uint flags,ref uint paths,IntPtr pathData,ref uint modes,IntPtr modeData,IntPtr topology){for(int n=0;n<2;n++){Marshal.WriteInt32(pathData,n*72,11);Marshal.WriteInt32(pathData,n*72+4,12);Marshal.WriteInt32(pathData,n*72+8,13);}return 0;};
+  api.Get=delegate(IntPtr packet){Assert(Marshal.ReadInt32(packet)==-3 && Marshal.ReadInt32(packet,4)==32 && Marshal.ReadInt32(packet,8)==11,"DPI query uses native packet header");Marshal.WriteInt32(packet,20,-2);Marshal.WriteInt32(packet,24,sets>0?-2:0);gets++;return 0;};
+  api.Set=delegate(IntPtr packet){Assert(Marshal.ReadInt32(packet)==-4 && Marshal.ReadInt32(packet,4)==24 && Marshal.ReadInt32(packet,20)==-2,"DPI preset uses minimum native relative step");sets++;return 0;};
+  var read=NUC8Display.Display.Read(api);Assert(read[0]==1280 && read[1]==720 && read[2]==144 && freed==4 && gets==1,"display reads and deduplicates physical source without applying");
+  var scales=NUC8Display.Display.NativeScales(true,api);Assert(scales.Length==1 && scales[0]==100 && sets==1 && gets==3 && freed==8,"native DPI applies and verifies preset then frees buffers");
+  var changed=NUC8Display.Display.Apply(api);Assert(changed[0]==1280 && changed[1]==720 && changed[2]==1920 && changed[3]==1080 && changes==1 && changed[5]==96,"display tests applies and reads back through fake native boundary");
+  missing=true;Throws(delegate{NUC8Display.Display.Read(api);},"unavailable display read rejected",typeof(Exception));Throws(delegate{NUC8Display.Display.Apply(api);},"unavailable display apply rejected",typeof(Exception));missing=false;
+  api.Change=delegate(ref NUC8Display.Mode mode,uint flags){return flags==2?-1:0;};Throws(delegate{NUC8Display.Display.Apply(api);},"failed native test prevents applying mode",typeof(Exception));
+  api.Change=delegate(ref NUC8Display.Mode mode,uint flags){return flags==2?0:-2;};Throws(delegate{NUC8Display.Display.Apply(api);},"failed native change rejected",typeof(Exception));
+  api.Buffer=delegate(uint flags,out uint paths,out uint modes){paths=0;modes=0;return 7;};Throws(delegate{NUC8Display.Display.NativeScales(false,api);},"failed DPI size query rejected",typeof(Exception));
+  api.Buffer=delegate(uint flags,out uint paths,out uint modes){paths=1;modes=1;return 0;};api.Query=delegate(uint flags,ref uint paths,IntPtr pathData,ref uint modes,IntPtr modeData,IntPtr topology){return 8;};int before=freed;Throws(delegate{NUC8Display.Display.NativeScales(false,api);},"failed DPI path query rejected",typeof(Exception));Assert(freed==before+2,"failed DPI path query frees both buffers");
+  int allocations=0;api.Allocate=delegate(int size){if(++allocations==2)throw new InvalidOperationException("allocation fixture");return Marshal.AllocHGlobal(size);};before=freed;Throws(delegate{NUC8Display.Display.NativeScales(false,api);},"second native allocation failure propagates");Assert(freed==before+1,"first buffer freed when second allocation fails");
+ }
  public static void Main(string[] args){
   Assert(typeof(NUC8Icons.Desktop).GetMethod("Capture")!=null,"desktop capture API is available");
   Assert(typeof(NUC8Theme).GetMethod("TaskbarColor")!=null,"theme API is available");
@@ -82,7 +102,7 @@ public static class ManagedNativeTests {
    Assert(Marshal.ReadInt32(packet,0)==-3 && Marshal.ReadInt32(packet,4)==32,"display packet type and size are written");
    Assert(Marshal.ReadInt32(packet,8)==19 && Marshal.ReadInt32(packet,12)==23 && Marshal.ReadInt32(packet,16)==29,"display packet carries exact adapter identity");
   }finally{Marshal.FreeHGlobal(packet);Marshal.FreeHGlobal(path);}
-  ExplorerCases();ThemeCases();HotkeyCases();
+  ExplorerCases();ThemeCases();HotkeyCases();DisplayCases();
   Console.WriteLine("ALL PASS: "+assertions+" managed source assertions; no native OS functions invoked");
  }
 }
