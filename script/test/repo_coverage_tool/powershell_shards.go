@@ -27,6 +27,13 @@ type shardCollectionManifest struct {
 	Sources, Tests []string
 	TestEngines    map[string]string
 	Wrapper        string
+	ShardContext   *shardCollectionContext `json:",omitempty"`
+}
+
+type shardCollectionContext struct {
+	Commit, RunUrl                     string
+	RunAttempt, ShardIndex, ShardCount int
+	GlobalIndices                      []int
 }
 
 func parseShardOptions(name string, args []string, out io.Writer) (shardCLIOptions, error) {
@@ -276,12 +283,13 @@ func powershellShardPlan(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	m := shardCollectionManifest{SourceRoot: root, Sources: []string{}, Tests: []string{}, TestEngines: map[string]string{}, Wrapper: catalog.Wrapper.File}
+	m := shardCollectionManifest{SourceRoot: root, Sources: []string{}, Tests: []string{}, TestEngines: map[string]string{}, Wrapper: catalog.Wrapper.File, ShardContext: &shardCollectionContext{Commit: o.commit, RunUrl: o.runURL, RunAttempt: o.attempt, ShardIndex: o.index, ShardCount: o.count, GlobalIndices: []int{}}}
 	for _, s := range catalog.Sources {
 		m.Sources = append(m.Sources, s.File)
 	}
 	for i, test := range catalog.Tests {
 		if i%o.count == o.index {
+			m.ShardContext.GlobalIndices = append(m.ShardContext.GlobalIndices, i)
 			m.Tests = append(m.Tests, test.File)
 			if test.Engine != "powershell" {
 				m.TestEngines[test.File] = test.Engine
@@ -354,6 +362,17 @@ func powershellShardPack(args []string, out io.Writer) error {
 		b, e := read(name)
 		if e != nil {
 			return e
+		}
+		var native struct {
+			ProcessId int
+			Context   *rc.PowerShellWorkerContext
+		}
+		if err = json.Unmarshal(b, &native); err != nil {
+			return err
+		}
+		expectedContext := rc.PowerShellWorkerContext{Commit: o.commit, RunUrl: o.runURL, RunAttempt: o.attempt, ShardIndex: o.index, ShardCount: o.count, GlobalIndex: global, ProcessId: native.ProcessId, TestFile: test.File, TestSHA256: test.SHA256, WrapperFile: catalog.Wrapper.File, WrapperSHA256: catalog.Wrapper.SHA256}
+		if native.Context == nil || *native.Context != expectedContext {
+			return fmt.Errorf("native worker context does not match actual selected suite and workflow")
 		}
 		manifest.Workers = append(manifest.Workers, rc.PowerShellShardWorker{GlobalIndex: global, TestFile: test.File, TestSHA256: test.SHA256, Evidence: name, SHA256: fmt.Sprintf("%x", sha256.Sum256(b))})
 		local++

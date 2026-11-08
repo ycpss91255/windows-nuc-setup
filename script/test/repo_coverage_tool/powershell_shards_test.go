@@ -64,16 +64,11 @@ func TestPowerShellShardPlanPreservesCanonicalScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var plan struct {
-		SourceRoot     string
-		Sources, Tests []string
-		Wrapper        string
-		TestEngines    map[string]string
-	}
+	var plan shardCollectionManifest
 	if err = json.Unmarshal(b, &plan); err != nil {
 		t.Fatal(err)
 	}
-	if plan.SourceRoot != root || len(plan.Sources) != 1 || len(plan.Tests) != 1 || plan.Tests[0] != "test/powershell/unit/side_1_tests.ps1" || plan.Wrapper != "test/powershell/coverage/safe_suite.ps1" {
+	if plan.SourceRoot != root || len(plan.Sources) != 1 || len(plan.Tests) != 1 || plan.Tests[0] != "test/powershell/unit/side_1_tests.ps1" || plan.Wrapper != "test/powershell/coverage/safe_suite.ps1" || plan.ShardContext == nil || plan.ShardContext.Commit != sha || plan.ShardContext.RunAttempt != 1 || len(plan.ShardContext.GlobalIndices) != 1 || plan.ShardContext.GlobalIndices[0] != 1 {
 		t.Fatalf("scope changed: %#v", plan)
 	}
 	if err := powershellShardPlan(args, &bytes.Buffer{}); err == nil {
@@ -198,12 +193,38 @@ func writeShardCLIProof(t *testing.T, root, dir string, pid int, hit bool) {
 	}
 }
 
+func bindShardCLIProof(t *testing.T, root, dir, commit string, index, count, attempt int) {
+	t.Helper()
+	path := filepath.Join(dir, "worker_0.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var worker map[string]any
+	if err = json.Unmarshal(b, &worker); err != nil {
+		t.Fatal(err)
+	}
+	test := fmt.Sprintf("test/powershell/unit/side_%d_tests.ps1", index)
+	testBytes, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(test)))
+	wrapper := "test/powershell/coverage/safe_suite.ps1"
+	wrapperBytes, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(wrapper)))
+	worker["Context"] = map[string]any{"Commit": commit, "RunUrl": "https://github.com/example/repo/actions/runs/123", "RunAttempt": attempt, "ShardIndex": index, "ShardCount": count, "GlobalIndex": index, "ProcessId": worker["ProcessId"], "TestFile": test, "TestSHA256": fmt.Sprintf("%x", sha256.Sum256(testBytes)), "WrapperFile": wrapper, "WrapperSHA256": fmt.Sprintf("%x", sha256.Sum256(wrapperBytes))}
+	b, err = json.Marshal(worker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPowerShellShardPackAndMergePreserveNativeFields(t *testing.T) {
 	root, manifest, sha := shardCLIFixture(t)
 	parts := t.TempDir()
 	for index := 0; index < 2; index++ {
 		dir := filepath.Join(parts, fmt.Sprintf("part_%d", index))
 		writeShardCLIProof(t, root, dir, 123+index, index == 1)
+		bindShardCLIProof(t, root, dir, sha, index, 2, 1)
 		args := append(shardCLIArgs(root, manifest, sha), "--shard-index", fmt.Sprint(index), "--evidence-dir", dir)
 		if err := powershellShardPack(args, &bytes.Buffer{}); err != nil {
 			t.Fatal(err)
@@ -243,6 +264,11 @@ func TestPowerShellShardPackAndMergeRejectBadInputs(t *testing.T) {
 		t.Run("pack_"+kind, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "proof")
 			writeShardCLIProof(t, root, dir, 123, true)
+			count := 2
+			if kind == "missing_suite" {
+				count = 1
+			}
+			bindShardCLIProof(t, root, dir, sha, 0, count, 1)
 			args := append(append([]string{}, base...), "--shard-index", "0", "--evidence-dir", dir)
 			switch kind {
 			case "missing":
@@ -268,6 +294,7 @@ func TestPowerShellShardPackAndMergeRejectBadInputs(t *testing.T) {
 			for i := 0; i < 2; i++ {
 				dir := filepath.Join(parts, fmt.Sprint(i))
 				writeShardCLIProof(t, root, dir, 123+i, true)
+				bindShardCLIProof(t, root, dir, sha, i, 2, 1)
 				if err := powershellShardPack(append(append([]string{}, base...), "--shard-index", fmt.Sprint(i), "--evidence-dir", dir), &bytes.Buffer{}); err != nil {
 					t.Fatal(err)
 				}
@@ -349,6 +376,7 @@ func TestPowerShellShardInstrumentedCommands(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		dir := filepath.Join(parts, fmt.Sprint(i))
 		writeShardCLIProof(t, source, dir, 700+i, i == 1)
+		bindShardCLIProof(t, source, dir, sha, i, 2, 1)
 		args := append([]string{"powershell-shard-pack"}, append(append([]string{}, common...), "--shard-index", fmt.Sprint(i), "--evidence-dir", dir)...)
 		invoke(true, args...)
 		invoke(false, args...)
@@ -368,5 +396,45 @@ func TestPowerShellShardPackRejectsUnboundNativeContext(t *testing.T) {
 	args := append(shardCLIArgs(root, manifest, sha), "--shard-index", "0", "--evidence-dir", dir)
 	if err := powershellShardPack(args, &bytes.Buffer{}); err == nil {
 		t.Fatal("native worker without actual case/run context must not be relabelled into a current shard")
+	}
+}
+
+func TestPowerShellShardPackCannotRelabelActualNativeContext(t *testing.T) {
+	for _, field := range []string{"attempt", "case", "pid", "wrapper", "run", "commit"} {
+		t.Run(field, func(t *testing.T) {
+			root, manifest, sha := shardCLIFixture(t)
+			dir := filepath.Join(t.TempDir(), "proof")
+			writeShardCLIProof(t, root, dir, 123, true)
+			bindShardCLIProof(t, root, dir, sha, 0, 2, 1)
+			path := filepath.Join(dir, "worker_0.json")
+			b, _ := os.ReadFile(path)
+			var native map[string]any
+			_ = json.Unmarshal(b, &native)
+			context := native["Context"].(map[string]any)
+			switch field {
+			case "attempt":
+				context["RunAttempt"] = 2
+			case "case":
+				context["GlobalIndex"] = 1
+				context["TestFile"] = "test/powershell/unit/side_1_tests.ps1"
+			case "pid":
+				context["ProcessId"] = 999
+			case "wrapper":
+				context["WrapperSHA256"] = strings.Repeat("f", 64)
+			case "run":
+				context["RunUrl"] = "https://github.com/example/repo/actions/runs/124"
+			case "commit":
+				context["Commit"] = strings.Repeat("f", 40)
+			}
+			b, _ = json.Marshal(native)
+			_ = os.WriteFile(path, b, 0600)
+			err := powershellShardPack(append(shardCLIArgs(root, manifest, sha), "--shard-index", "0", "--evidence-dir", dir), &bytes.Buffer{})
+			if err == nil {
+				t.Fatalf("actual native %s context was silently relabelled", field)
+			}
+			if _, e := os.Stat(filepath.Join(dir, "shard.json")); e == nil {
+				t.Fatal("invalid native context created successful shard envelope")
+			}
+		})
 	}
 }
