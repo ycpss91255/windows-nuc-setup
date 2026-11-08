@@ -78,6 +78,7 @@ function New-SetupGuiProtectedDirectory {
 }
 function Get-SetupGuiStageFiles {
  param([string]$Role)
+ if($Role -ceq 'Desktop'){return @('core/gui_stage_library.ps1','core/gui_worker.ps1','modules/desktop/desktop_settings_library.ps1','modules/desktop/desktop_safety.ps1')}
  if($Role -cnotin @('Explorer','Display','Theme')){throw 'GUI worker角色尚未核准。'}
  $leaf=$Role.ToLowerInvariant()
  return @('core/gui_stage_library.ps1','core/gui_worker.ps1',('modules/'+$leaf+'/'+$leaf+'_settings_library.ps1'),('modules/'+$leaf+'/native/'+$leaf+'.cs'))
@@ -139,6 +140,7 @@ function New-SetupGuiStage {
    $files+=@([pscustomobject]@{Name=$name;SHA256=$expected.ToLowerInvariant()})
   }
   $context=[pscustomobject][ordered]@{Schema=1;Role=$Role;RunId=(Split-Path $paths.RunRoot -Leaf);Computer=$Computer;CallerSID=$UserSid;CallerSession=$CallerSession;UserSID=$UserSid;DesktopSession=$DesktopSession;VerifyOnly=[bool]$VerifyOnly;Files=$files}
+  if($Role -ceq 'Desktop'){$context|Add-Member SourcePackageRoot ([IO.Path]::GetFullPath($SourceRoot))}
   Write-SetupGuiAtomicJson -Path (Join-Path $paths.CodeRoot 'context.json') -Value $context
   $verified=Read-SetupGuiContext -CodeRoot $paths.CodeRoot -CommonDataRoot $CommonDataRoot -Role $Role -RunId $context.RunId
   [pscustomobject]@{CodeRoot=$paths.CodeRoot;DataRoot=$paths.DataRoot;CommonDataRoot=$CommonDataRoot;Lock=$lock;Context=$verified}
@@ -157,6 +159,7 @@ function Read-SetupGuiContext {
  $context=Get-Content -LiteralPath $path -Raw -Encoding UTF8|ConvertFrom-Json
  if($context.Schema -ne 1 -or $context.Role -cne $Role -or $context.RunId -cne $RunId -or $context.CallerSID -cne $context.UserSID -or $context.VerifyOnly -isnot [bool] -or $context.CallerSession -isnot [int] -or $context.DesktopSession -isnot [int]){throw 'GUI worker context身分或格式不符。'}
  Assert-SetupGuiCaller -UserSid $context.UserSID -CallerSession $context.CallerSession -DesktopSession $context.DesktopSession -Computer $context.Computer
+ if($Role -ceq 'Desktop'){if([string]::IsNullOrWhiteSpace($context.SourcePackageRoot) -or [IO.Path]::GetFullPath($context.SourcePackageRoot) -cne $context.SourcePackageRoot){throw 'GUI worker原始套件來源格式不符。'};Assert-SetupGuiPlainPath $context.SourcePackageRoot}
  $expected=@(Get-SetupGuiStageFiles $Role|Sort-Object)
  if(@($context.Files).Count -ne $expected.Count -or (@($context.Files|ForEach-Object Name|Sort-Object) -join '|') -cne ($expected -join '|')){throw 'GUI worker context來源清單不符。'}
  foreach($file in $context.Files){
@@ -260,7 +263,7 @@ function Invoke-SetupGuiRole {
  }finally{$stage.Lock.Dispose()}
 }
 function Invoke-SetupGuiFreshVerification {
- param([Parameter(Mandatory=$true)][string]$PackageRoot,[Parameter(Mandatory=$true)][ValidateSet('Display','Theme')][string]$Role)
+ param([Parameter(Mandatory=$true)][string]$PackageRoot,[Parameter(Mandatory=$true)][ValidateSet('Display','Theme','Desktop')][string]$Role)
  $scope=Get-SetupGuiIdentity
  $run=[guid]::NewGuid().ToString('D')
  $result=Invoke-SetupGuiRole -PackageRoot $PackageRoot -Role $Role -VerifyOnly -VerificationRunId $run
@@ -275,6 +278,9 @@ function Open-SetupGuiExecutionLock {
  try{$lease=[IO.File]::Open($path,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}catch{throw 'GUI worker角色已有執行程序，未執行任何UI設定。'}
  try{Assert-SetupGuiProtectedPath $path;return $lease}catch{$lease.Dispose();throw}
 }
+function Get-SetupDesktopRoots {
+ @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))|Select-Object -Unique
+}
 function Invoke-SetupGuiWorker {
  param([Parameter(Mandatory=$true)][string]$CodeRoot,[string]$Role,[string]$RunId)
  $ErrorActionPreference='Stop'
@@ -287,9 +293,9 @@ function Invoke-SetupGuiWorker {
   $lease=Open-SetupGuiExecutionLock -Paths $paths
   # Role and all executable file hashes were validated before importing this fixed library.
   $module=Join-Path $CodeRoot ('modules/'+$Role.ToLowerInvariant())
-  $library=switch -CaseSensitive ($Role){Explorer{'explorer_settings_library.ps1'} Display{'display_settings_library.ps1'} Theme{'theme_settings_library.ps1'} default{throw 'GUI worker角色尚未核准。'}}
+  $library=switch -CaseSensitive ($Role){Explorer{'explorer_settings_library.ps1'} Display{'display_settings_library.ps1'} Theme{'theme_settings_library.ps1'} Desktop{'desktop_settings_library.ps1'} default{throw 'GUI worker角色尚未核准。'}}
   . (Join-Path $module $library)
-  $result=switch -CaseSensitive ($Role){Explorer{Invoke-SetupExplorerSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Display{Invoke-SetupDisplaySettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Theme{Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly}}
+  $result=switch -CaseSensitive ($Role){Explorer{Invoke-SetupExplorerSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Display{Invoke-SetupDisplaySettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Theme{Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Desktop{Invoke-SetupDesktopSettings -ModuleRoot $module -SourcePackageRoot $context.SourcePackageRoot -DesktopRoots @(Get-SetupDesktopRoots) -VerifyOnly:$context.VerifyOnly}}
   if($result.Success -isnot [bool]){throw 'GUI worker葉節點未提供有效成功狀態。'}
   $details=[ordered]@{};foreach($property in $result.PSObject.Properties){$details[$property.Name]=$property.Value}
   Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result $details
