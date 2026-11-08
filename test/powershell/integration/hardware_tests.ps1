@@ -58,7 +58,7 @@ foreach($entry in @('init.cmd','windows.cmd','readme.md')){Copy-Item -LiteralPat
 # PackageOnly must remain a source check on Server: never query/install native provisioning.
 function Get-ProvisioningPackage {throw 'PackageOnly must not invoke client provisioning APIs'}
 function Install-ProvisioningPackage {throw 'PackageOnly must not install provisioning assets'}
-foreach($relative in @('modules/init/provisioning_library.ps1','modules/init/provisioning_asset_library.ps1','modules/init/provisioning_launcher_library.ps1','modules/init/assets/hide_oobe.ppkg','modules/init/assets/hide_oobe.xml','modules/init/assets/provenance.json')){
+foreach($relative in @('modules/ssh/hosts_sync_library.ps1','modules/init/provisioning_library.ps1','modules/init/provisioning_asset_library.ps1','modules/init/provisioning_launcher_library.ps1','modules/init/assets/hide_oobe.ppkg','modules/init/assets/hide_oobe.xml','modules/init/assets/provenance.json')){
  $path=Join-Path $genericPackage $relative;$backup=$path+'.fixture-backup'
  [IO.File]::Move($path,$backup)
  $rejected=$false
