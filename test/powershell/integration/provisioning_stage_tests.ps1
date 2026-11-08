@@ -25,4 +25,8 @@ $launcher=[IO.File]::ReadAllText((Join-Path $stage 'resume_init.cmd'))
 Assert ($launcher.Contains('%~dp0') -and -not $launcher.Contains($source)) 'resume launcher uses its own location, never original USB'
 $rejected=$false;try{New-InitProvisioningStage $source $stage}catch{$rejected=$true}
 Assert $rejected 'existing stage is not overwritten'
+$failed=Join-Path $temp 'failed_stage'
+function Copy-Item {param($LiteralPath,$Destination,$ErrorAction) throw 'synthetic copy failure'}
+$rejected=$false;try{New-InitProvisioningStage $source $failed}catch{$rejected=$true}
+Assert ($rejected -and -not(Test-Path $failed)) 'failed staging never occupies final resume location without state'
 Write-Host ('ALL PASS: '+$script:count+' TEMP staging assertions; dummy files only')
