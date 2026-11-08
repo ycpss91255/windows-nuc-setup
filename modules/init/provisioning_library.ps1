@@ -313,11 +313,19 @@ function Invoke-InitProvisioningEntry {
  $asset=Assert-InitProvisioningAsset -AssetRoot (Join-Path $StageRoot 'runtime/modules/init/assets')
  $state=Read-InitProvisioningState $statePath $context.MachineGuid $asset.PackageSHA256
  if($context.Sid -ne $state.TargetSid){throw '目前帳號不是本輪建立的目標 SID，停止續跑。'}
- if($state.Phase -eq 'ApplyPending'){
-  $installed=@(Get-ProvisioningPackage -AllInstalledPackages -ErrorAction Stop|Where-Object {$_.IsInstalled -and $_.PackageID -eq $state.PackageId -and $_.Version -eq $state.PackageVersion -and $_.PackageName -eq 'windows_setup_hide_oobe'})
-  if($installed.Count -ne 1){throw '初始設定包尚未確認完成；保留續跑紀錄，不假報初始化成功。'}
-  $state.Phase='AwaitingLogon';Save-InitProvisioningState $state $statePath
- }
- Invoke-InitSshContinuation $state $statePath $context (Join-Path $StageRoot 'runtime/modules/ssh/apply_ssh_settings.ps1')
+ Confirm-InitAccountCheckpoint $state $statePath $context $asset.PackageSHA256
+ return $true
+}
+function Invoke-InitWindowsCheckpoint {
+ param([string]$StageRoot)
+ $context=Get-InitProvisioningContext
+ if(-not $context.IsAdministrator -or $context.Sid -eq 'S-1-5-18'){throw 'Windows 帳號確認需正式使用者的管理員權限。'}
+ if(-not(Test-Path -LiteralPath $StageRoot)){return $false}
+ Assert-InitProtectedDirectory $StageRoot
+ $statePath=Join-Path $StageRoot 'state.json'
+ if(-not(Test-Path -LiteralPath $statePath -PathType Leaf)){throw '已有 Init 暫存但缺少狀態，停止以免略過未完成初始化。'}
+ $asset=Assert-InitProvisioningAsset -AssetRoot (Join-Path $StageRoot 'runtime/modules/init/assets')
+ $state=Read-InitProvisioningState $statePath $context.MachineGuid $asset.PackageSHA256
+ Confirm-InitAccountCheckpoint $state $statePath $context $asset.PackageSHA256
  return $true
 }
