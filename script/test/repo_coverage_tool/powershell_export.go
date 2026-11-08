@@ -33,6 +33,9 @@ func exportPowerShell(args []string, out io.Writer) error {
 			return fmt.Errorf("invalid evidence directory")
 		}
 		relative, err := filepath.Rel(absolute, output)
+		if err != nil && !strings.EqualFold(filepath.VolumeName(absolute), filepath.VolumeName(output)) {
+			continue // Different absolute volumes cannot place output inside this input.
+		}
 		if err != nil || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 			return fmt.Errorf("raw output must be outside source and input")
 		}
