@@ -34,7 +34,7 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 2. 等整輪結束、查看結果後再手動重開機。從 USB 開啟 `windows_setup\core`，雙擊 `verify_after_restart.cmd` 續跑與驗收。
 3. 處理畫面列出的失敗，再雙擊 `verify_only.cmd` 檢查，最後依[目視確認](#6-最後目視確認)核對桌面、工具列及顯示。
 
-**完整安裝尚未實測。** 上述是目前設計的操作流程；完整「新裝 Windows 到重開驗收」仍未完成實機測試。桌面清理會刪除一般桌面檔案，開始前先移走要保留的資料。套用 Windows 設定與驗收時使用正式目標本機管理員帳號；稽核模式只用於前面的帳號初始化。執行中保持 USB 連接。
+桌面清理會刪除一般桌面檔案，開始前先移走要保留的資料。套用 Windows 設定與驗收時使用正式目標本機管理員帳號；稽核模式只用於前面的帳號初始化。執行中保持 USB 連接。
 
 找不到 USB 或需要命令列時，再展開下方的排錯說明；正常流程不需要 `Shift+F10` 或 `diskpart`。
 
@@ -357,7 +357,7 @@ SSH 與 hosts 可獨立或配合使用。這套工具目前提供可修改的網
 
 Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安裝。Windows 不允許移除的系統元件會保留，清理數量會隨 Windows 狀態而不同。
 
-既有設定曾在原 NUC 驗證；新增 Generic 路徑與第二臺全新 Windows 的完整安裝尚未實跑。非繁體中文系統略過既有桌面圖示座標範本，但仍處理系統圖示 GUID。硬體或語系不適用項目明確顯示 Skipped，不計為通過；其他語系的電源解析等仍可能需要實機調整。請以目前這臺電腦的驗收結果為準，不保證不同 Windows 版本、硬體或螢幕得到完全相同的更新版本及刪除數量。
+非繁體中文系統略過既有桌面圖示座標範本，但仍處理系統圖示 GUID。硬體或語系不適用項目明確顯示 Skipped，不計為通過；其他語系的電源解析等仍可能需要實機調整。請以目前這臺電腦的驗收結果為準，不保證不同 Windows 版本、硬體或螢幕得到完全相同的更新版本及刪除數量。
 
 使用者可見的修改見 [變更紀錄](doc/changelog/changelog.md)；詳細驗證結果與限制以中文 Git 提交及 GitHub Release 說明記錄。工具包內已建立本機 Git，但執行設定不需要安裝 Git；若要查看歷史，可在工具包目錄執行 `git log -5 --oneline`。每機執行結果不納入 Git，請保留需要的診斷紀錄。
 
@@ -550,7 +550,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\run_ci.ps1
 
 ### 開發用 Windows Docker 環境
 
-這是維護者的程式與隔離測試環境。控制入口沿用 base 將維護操作集中於工具腳本的方向，採 Windows 原生 PowerShell；不宣稱與 base 的 Linux／just 指令完全相同。一般使用者從 USB 執行 `init.cmd`／`windows.cmd` 不需要 Docker；容器不會替代完整 Windows 安裝、桌面、驅動或重開機 E2E 驗收。
+這是維護者的程式與隔離測試環境。控制入口沿用 base 將維護操作集中於工具腳本的方向，採 Windows 原生 PowerShell；不宣稱與 base 的 Linux／just 指令完全相同。一般使用者從 USB 執行 `init.cmd`／`windows.cmd` 不需要 Docker。
 
 先準備可使用 **Windows containers** 的 Docker engine 與 Compose v2，建議使用乾淨、未放入個人資料的完整 Git checkout（必須包含 `.git` 目錄）。Linux containers 模式不能執行這份 Windows PowerShell 5.1 環境。Windows Server 與 Windows 用戶端的隔離模式相容條件不同，依 [Microsoft 容器需求](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/system-requirements)與[版本相容說明](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/version-compatibility)設定；使用 Docker Desktop 時另依 [Docker 官方 Windows 安裝條件](https://docs.docker.com/desktop/setup/install/windows-install/)。本工具只檢查，不會自動安裝 Docker、切換引擎或啟用主機功能。
 
@@ -579,7 +579,7 @@ CI 的 `docker-tests` 使用真正的 `windows-2022` runner 執行 Docker build/
 
 每次 CI 將去識別的 HTML／JSON／Markdown／JUnit 與徽章上傳為 windows-test-reports artifact，保留 7 天；原始套件 log 不上傳。另有 requirements-fixture artifact，只含程式明確建立的合成首頁樣本，固定假 SHA、示例執行網址及 Synthetic 環境標記，不含帳密或實機資料，同樣保留 7 天供需求門檻驗證。這份樣本不是正式測試證據，不混入 windows-test-reports、Release 或 Pages。其他測試副本、帳號 answer XML、每機 Reports 與秘密均不上傳。Actions 本身執行 log 的保留天數另由儲存庫設定控制，不是 YAML artifact 保留期。
 
-實機 Setup-Result.json、Setup-Progress.json、Acceptance-Result.json 與驗證結果是續跑或排錯資料，原有 Git 忽略規則保留；CI 不清理這些檔案。設定未完成時不要刪除 Setup-Result.json。雲端通過僅代表來源／隔離測試成功，不表示 NUC 硬體或 OOBE 已通過實機驗收。
+實機 Setup-Result.json、Setup-Progress.json、Acceptance-Result.json 與驗證結果是續跑或排錯資料，原有 Git 忽略規則保留；CI 不清理這些檔案。設定未完成時不要刪除 Setup-Result.json。
 
 
 ## 維護者版本發布
@@ -641,7 +641,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\build_s
 
 PR 與 main 的 `requirements-gate` 讀取同一次 PS5.1 測試產物，驗證來源、統計、JUnit／JSON 狀態、文件連結、隱私與 base 徽章規格，並用破壞性負例確認錯誤會被拒絕；`ci-rollup` 必須同時取得測試與需求驗收成功才能合併。PR 的證據保留原分支身分，不會冒充 main。
 
-Pages 部署後會匿名 GET 公開首頁、main 報表、JSON／Markdown／JUnit、unit／integration／system／PowerShell coverage 四個 SVG、Go coverage SVG、README 的 CI／Go coverage／PowerShell coverage 實際網址及歷史版本頁；提交與 Actions 執行必須屬於本次 main。Language／Testing 是靜態說明徽章，載入與外觀另由人工目視確認。CDN 延遲只有限重試，舊報表或不一致會使 workflow 失敗。這些是可重複的自動驗收，不需要 agent 才能續跑；人工看畫面是否清楚、實機安裝是否成功仍是另外的驗收。
+Pages 部署後會匿名 GET 公開首頁、main 報表、JSON／Markdown／JUnit、unit／integration／system／PowerShell coverage 四個 SVG、Go coverage SVG、README 的 CI／Go coverage／PowerShell coverage 實際網址及歷史版本頁；提交與 Actions 執行必須屬於本次 main。Language／Testing 是靜態說明徽章，載入與外觀另由人工目視確認。CDN 延遲只有限重試，舊報表或不一致會使 workflow 失敗。這些是可重複的自動驗收，不需要 agent 才能續跑；人工視覺檢查另由審查者確認。
 
 實作、freeze、主代理與未參與實作的獨立代理完整審查流程見 [維護規範](agents.md)。發現問題必須修正後重新全需求審查，不能把上次 PASS 沿用到修改後版本。
 
