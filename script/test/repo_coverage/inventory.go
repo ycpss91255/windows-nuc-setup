@@ -1,6 +1,7 @@
 package repo_coverage
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io/fs"
 	"os"
@@ -158,7 +159,11 @@ func ScanInventory(root string) (Inventory, error) {
 			return nil
 		}
 		if language, ok := languageExtensions[ext]; ok {
-			inv.Sources = append(inv.Sources, Source{rel, language})
+			data, e := os.ReadFile(full)
+			if e != nil {
+				return e
+			}
+			inv.Sources = append(inv.Sources, Source{Path: rel, Language: language, SHA256: fmt.Sprintf("%x", sha256.Sum256(data))})
 			if language == "powershell" {
 				data, e := os.ReadFile(full)
 				if e != nil {

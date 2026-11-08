@@ -106,7 +106,7 @@ func TestRepoCoverageUnionAndCompleteScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope := []rc.Source{{Path: "core/setup.ps1", Language: "powershell"}, {Path: "core/types.ps1", Language: "powershell"}, {Path: "script/check.go", Language: "go"}}
+	scope := []rc.Source{{Path: "core/setup.ps1", Language: "powershell", ExpectedLines: []int{2, 7}}, {Path: "core/types.ps1", Language: "powershell", ExpectedLines: []int{}}, {Path: "script/check.go", Language: "go", ExpectedLines: []int{3}}}
 	result, err := rc.Merge(scope, one, two)
 	if err != nil {
 		t.Fatal(err)
@@ -170,7 +170,7 @@ func TestRepoCoverageRejectsUntrustworthyInventory(t *testing.T) {
 	if _, err := rc.Merge([]rc.Source{{Path: "x.go", Language: "go"}}, rc.Report{SchemaVersion: rc.SchemaVersion, Metric: rc.Metric, Files: map[string]map[int]bool{"x.go": {0: true}}}); err == nil {
 		t.Fatal("invalid direct line evidence accepted")
 	}
-	result, err := rc.Merge([]rc.Source{{Path: "types.go", Language: "go"}}, rc.Report{SchemaVersion: rc.SchemaVersion, Metric: rc.Metric, Files: map[string]map[int]bool{"types.go": {}}})
+	result, err := rc.Merge([]rc.Source{{Path: "types.go", Language: "go", ExpectedLines: []int{}}}, rc.Report{SchemaVersion: rc.SchemaVersion, Metric: rc.Metric, Files: map[string]map[int]bool{"types.go": {}}})
 	if err != nil || !result.Complete || result.Percent != nil || result.Executable != 0 {
 		t.Fatalf("empty executable scope must not manufacture 100%%: %+v %v", result, err)
 	}
@@ -180,21 +180,35 @@ func TestRepoCoverageRejectsUntrustworthyInventory(t *testing.T) {
 }
 
 func TestRepoCoverageCannotHideExecutableCatalog(t *testing.T) {
-	scope:=[]rc.Source{{Path:"a.go",Language:"go",SHA256:strings.Repeat("a",64),ExpectedLines:[]int{2}}, {Path:"b.ps1",Language:"powershell",SHA256:strings.Repeat("b",64),ExpectedLines:[]int{3,4}}}
-	report:=rc.Report{SchemaVersion:rc.SchemaVersion,Metric:rc.Metric,Files:map[string]map[int]bool{"a.go":{2:true},"b.ps1":{}}}
-	if _,err:=rc.Merge(scope,report);err==nil {t.Fatal("empty class concealed known executable source")}
-	report.Files["b.ps1"]=map[int]bool{3:true}
-	if _,err:=rc.Merge(scope,report);err==nil {t.Fatal("part of denominator omitted")}
-	report.Files["b.ps1"]=map[int]bool{3:true,4:false,9:true}
-	if _,err:=rc.Merge(scope,report);err==nil {t.Fatal("foreign line inflated numerator")}
-	report.Files["b.ps1"]=map[int]bool{3:true,4:false}
-	r,err:=rc.Merge(scope,report)
-	if err!=nil||!r.Complete||r.Executable!=3||r.Covered!=2{t.Fatalf("valid exact catalog refused: %+v %v",r,err)}
-	scope[1].ExpectedLines=nil
-	r,err=rc.Merge(scope,report)
-	if err!=nil||r.Complete||r.Percent!=nil {t.Fatalf("unanalyzed source became complete: %+v %v",r,err)}
-	inv:=rc.Inventory{Sources:scope}
-	if _,err:=rc.BindCatalogs(inv,[]rc.Catalog{{Path:"b.ps1",SHA256:strings.Repeat("c",64),Lines:[]int{3,4}}});err==nil{t.Fatal("stale catalog hash accepted")}
-	bound,err:=rc.BindCatalogs(inv,[]rc.Catalog{{Path:"b.ps1",SHA256:strings.Repeat("b",64),Lines:[]int{3,4}}})
-	if err!=nil||len(bound.Sources[1].ExpectedLines)!=2{t.Fatalf("catalog could not bind: %+v %v",bound,err)}
+	scope := []rc.Source{{Path: "a.go", Language: "go", SHA256: strings.Repeat("a", 64), ExpectedLines: []int{2}}, {Path: "b.ps1", Language: "powershell", SHA256: strings.Repeat("b", 64), ExpectedLines: []int{3, 4}}}
+	report := rc.Report{SchemaVersion: rc.SchemaVersion, Metric: rc.Metric, Files: map[string]map[int]bool{"a.go": {2: true}, "b.ps1": {}}}
+	if _, err := rc.Merge(scope, report); err == nil {
+		t.Fatal("empty class concealed known executable source")
+	}
+	report.Files["b.ps1"] = map[int]bool{3: true}
+	if _, err := rc.Merge(scope, report); err == nil {
+		t.Fatal("part of denominator omitted")
+	}
+	report.Files["b.ps1"] = map[int]bool{3: true, 4: false, 9: true}
+	if _, err := rc.Merge(scope, report); err == nil {
+		t.Fatal("foreign line inflated numerator")
+	}
+	report.Files["b.ps1"] = map[int]bool{3: true, 4: false}
+	r, err := rc.Merge(scope, report)
+	if err != nil || !r.Complete || r.Executable != 3 || r.Covered != 2 {
+		t.Fatalf("valid exact catalog refused: %+v %v", r, err)
+	}
+	scope[1].ExpectedLines = nil
+	r, err = rc.Merge(scope, report)
+	if err != nil || r.Complete || r.Percent != nil {
+		t.Fatalf("unanalyzed source became complete: %+v %v", r, err)
+	}
+	inv := rc.Inventory{Sources: scope}
+	if _, err := rc.BindCatalogs(inv, []rc.Catalog{{Path: "b.ps1", SHA256: strings.Repeat("c", 64), Lines: []int{3, 4}}}); err == nil {
+		t.Fatal("stale catalog hash accepted")
+	}
+	bound, err := rc.BindCatalogs(inv, []rc.Catalog{{Path: "b.ps1", SHA256: strings.Repeat("b", 64), Lines: []int{3, 4}}})
+	if err != nil || len(bound.Sources[1].ExpectedLines) != 2 {
+		t.Fatalf("catalog could not bind: %+v %v", bound, err)
+	}
 }

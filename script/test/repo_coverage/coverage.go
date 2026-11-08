@@ -12,7 +12,12 @@ import (
 const Metric = "complete-executable-lines-v1"
 const SchemaVersion = 1
 
-type Source struct{ Path, Language string }
+type Source struct {
+	Path, Language, SHA256 string
+	// nil means analysis is missing; a non-nil empty list means a trusted
+	// language analyzer found no executable lines in this exact source digest.
+	ExpectedLines []int
+}
 type Report struct {
 	SchemaVersion int
 	Metric        string
@@ -58,6 +63,7 @@ func Merge(sources []Source, reports ...Report) (Result, error) {
 		return r, fmt.Errorf("source inventory is empty")
 	}
 	scope := map[string]string{}
+	catalogs := map[string][]int{}
 	casePaths := map[string]string{}
 	for _, source := range sources {
 		name, err := RelativePath(source.Path)
@@ -73,6 +79,7 @@ func Merge(sources []Source, reports ...Report) (Result, error) {
 		}
 		casePaths[fold] = name
 		scope[name] = source.Language
+		catalogs[name] = source.ExpectedLines
 	}
 	merged := map[string]map[int]bool{}
 	for _, report := range reports {
@@ -101,10 +108,25 @@ func Merge(sources []Source, reports ...Report) (Result, error) {
 	}
 	for name, language := range scope {
 		lines, present := merged[name]
-		if !present {
+		if !present || catalogs[name] == nil {
 			r.Missing = append(r.Missing, name)
 			r.Complete = false
 			continue
+		}
+		expected := map[int]bool{}
+		for _, line := range catalogs[name] {
+			if line <= 0 || expected[line] {
+				return r, fmt.Errorf("invalid or duplicate catalog line: %s:%d", name, line)
+			}
+			expected[line] = true
+		}
+		if len(expected) != len(lines) {
+			return r, fmt.Errorf("coverage does not match executable catalog: %s", name)
+		}
+		for line := range lines {
+			if !expected[line] {
+				return r, fmt.Errorf("coverage line outside executable catalog: %s:%d", name, line)
+			}
 		}
 		c := r.Languages[language]
 		for _, hit := range lines {
