@@ -45,3 +45,21 @@ Assert ($null -ne $layoutGuard) 'direct layout Save contains an executable ident
 $ExpectedUserSID='original';$sid='different';$currentSID=$sid;$refused=$false
 try{. ([scriptblock]::Create($layoutGuard.Extent.Text))}catch{$refused=$true}
 Assert $refused 'direct layout Save rejects a changed elevation account before saving'
+# Preserve the difference between an omitted path (interactive selection) and explicit empty (skip).
+$source=[IO.File]::ReadAllText((Join-Path $root 'core/run_module.ps1'))
+$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors)
+$call=$ast.FindAll({param($a) $a -is [Management.Automation.Language.CommandAst] -and $a.Extent.Text -match '^& \$path .*Driver|^& \$path @driverArguments'},$true)|Select-Object -Last 1
+[IO.File]::WriteAllText($entry,'param($Module,$ExpectedUserSID,$DriverPackagePath,$ConfirmedBoard,$ConfirmationComputer,[switch]$NonInteractive);[pscustomobject]@{HasPath=$PSBoundParameters.ContainsKey("DriverPackagePath");Path=$DriverPackagePath}',[Text.UTF8Encoding]::new($true))
+$path=$entry;$ConfirmedBoard='';$ConfirmationComputer='';$NonInteractive=$false;$DriverPackagePath=''
+foreach($provided in @($false,$true)){
+ $bound=@{};if($provided){$bound.DriverPackagePath=''}
+ $setup=$ast.FindAll({param($a) ($a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -eq '$driverArguments') -or ($a -is [Management.Automation.Language.IfStatementAst] -and $a.Extent.Text -match 'driverArguments.DriverPackagePath')},$true)
+ foreach($statement in $setup){. ([scriptblock]::Create($statement.Extent.Text.Replace('$PSBoundParameters','$bound')))}
+ $result=& ([scriptblock]::Create($call.Extent.Text))
+ Assert ($result.HasPath -eq $provided) ('standalone direct preserves explicit path presence: '+$provided)
+ $elevation=$ast.Find({param($a) $a -is [Management.Automation.Language.IfStatementAst] -and $a.Clauses[0].Item1.Extent.Text -eq '-not $isAdmin'},$true)
+ & ([scriptblock]::Create($elevation.Clauses[0].Item2.Extent.Text.TrimStart('{').TrimEnd('}').Replace('$PSCommandPath','$entry').Replace('$PSBoundParameters','$bound')))
+ $decoded=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($script:captured -split '-EncodedCommand ')[1]))
+ $result=& ([scriptblock]::Create($decoded))
+ Assert ($result.HasPath -eq $provided) ('standalone elevation preserves explicit empty versus omitted: '+$provided)
+}
