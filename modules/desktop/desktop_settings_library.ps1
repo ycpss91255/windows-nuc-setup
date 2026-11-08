@@ -14,11 +14,12 @@
  }
 
 function Invoke-SetupDesktopSettings {
- param([Parameter(Mandatory=$true)][string]$ModuleRoot,[Parameter(Mandatory=$true)][string]$SourcePackageRoot,[Parameter(Mandatory=$true)][string[]]$DesktopRoots)
+ param([Parameter(Mandatory=$true)][string]$ModuleRoot,[Parameter(Mandatory=$true)][string]$SourcePackageRoot,[Parameter(Mandatory=$true)][string[]]$DesktopRoots,[switch]$VerifyOnly)
  . (Join-Path $ModuleRoot 'desktop_safety.ps1')
  Assert-DesktopSourceLocation -SourceRoot $SourcePackageRoot -DesktopRoots $DesktopRoots
  $roots=@($DesktopRoots|Select-Object -Unique)
  $deleted=New-Object Collections.Generic.List[string]
+ if(-not $VerifyOnly){
  Write-Host '清理桌面：其他一般檔案、資料夾與捷徑將直接刪除，不保留備份。' -ForegroundColor Yellow
  foreach($desktop in $roots){
   if([string]::IsNullOrWhiteSpace($desktop)){throw '無法辨識桌面路徑。'}
@@ -45,6 +46,7 @@ function Invoke-SetupDesktopSettings {
  New-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\explorer\Advanced' -Name HideIcons -Value 0 -PropertyType DWord -Force|Out-Null
  if(-not ('NUC8DesktopRefresh' -as [type])){Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class NUC8DesktopRefresh{[DllImport("shell32.dll")]public static extern void SHChangeNotify(int e,uint f,IntPtr a,IntPtr b);}'}
  [NUC8DesktopRefresh]::SHChangeNotify(0x08000000,0,[IntPtr]::Zero,[IntPtr]::Zero)
+ }
  $remaining=@(foreach($desktop in $roots){Get-ChildItem -LiteralPath $desktop -Force|Where-Object {-not ($_.Attributes -band [IO.FileAttributes]::System)}|Select-Object -ExpandProperty FullName})
  $result=[ordered]@{Success=($remaining.Count -eq 0);DesktopRoots=$roots;DeletedItems=@($deleted.ToArray());RemainingFiles=$remaining;SystemIcons=@('控制台','本機','網路','資源回收筒');AppliedAt=(Get-Date).ToString('o')}
  return [pscustomobject]$result
