@@ -15,12 +15,13 @@ $oldData=$env:ProgramData;$oldWindows=$env:WINDIR;$fakeWindows=Join-Path $fixtur
 function ResetCase {
  $env:ProgramData=Join-Path $fixture ([guid]::NewGuid().ToString('N'));$env:WINDIR=$fakeWindows
  $script:native=[pscustomobject]@{Sid='S-1-5-21-1-2-3-1001';UserSID='S-1-5-21-1-2-3-1001';IsAdministrator=$true;SessionId=44;Is64Bit=$true;Architecture='AMD64'}
- $script:image='IMAGE_STATE_COMPLETE';$script:desktop=$true;$script:handled=$false;$script:sMode=0;$script:registryAnswer='';$script:runningSysprep=$false;$script:processExit=0;$script:copyFailure=$false;$script:userEnabled=$true;$script:queue=New-Object 'Collections.Generic.Queue[object]';$script:starts=@();$global:initCleanupCalls=0
+ $script:ownerExit=0;$script:image='IMAGE_STATE_COMPLETE';$script:desktop=$true;$script:handled=$false;$script:sMode=0;$script:registryAnswer='';$script:runningSysprep=$false;$script:processExit=0;$script:copyFailure=$false;$script:userEnabled=$true;$script:queue=New-Object 'Collections.Generic.Queue[object]';$script:starts=@();$global:initCleanupCalls=0
 }
 function Get-SetupInitNativeIdentity {return $script:native}
+function Get-SetupInitPreparationFacts {param($Identity);return @{ReadSucceeded=$true;Build=26200;ProductType=1;IsWinPE=$false;OobeApiSucceeded=$true;OobeComplete=($script:image -eq 'IMAGE_STATE_COMPLETE');SetupInProgress=0;OobeInProgress=0;OobeProcessInSession=$false;ProfileMatches=$true;LocalBuiltin=($script:native.Sid -match '-500$')}}
 function Get-ItemProperty {param($Path,$ErrorAction);switch -Wildcard ($Path){'*Setup\State'{[pscustomobject]@{ImageState=$script:image}} '*CI\Policy'{[pscustomobject]@{SkuPolicyRequired=$script:sMode}} default{[pscustomobject]@{UnattendFile=$script:registryAnswer}}}}
 function Get-CimInstance {param($ClassName,$Filter);@([pscustomobject]@{SessionId=44;ProcessId=1},[pscustomobject]@{SessionId=99;ProcessId=2})}
-function Invoke-CimMethod {param($InputObject,$MethodName);[pscustomobject]@{Sid=$(if($script:desktop){$script:native.Sid}else{'other'})}}
+function Invoke-CimMethod {param($InputObject,$MethodName);[pscustomobject]@{ReturnValue=$script:ownerExit;Sid=$(if($script:desktop){$script:native.Sid}else{'other'})}}
 function Invoke-InitProvisioningEntry {param($SourceRoot,$StageRoot,$ResumeStatePath,$ExpectedUserSID);$script:provisioning=@{SourceRoot=$SourceRoot;StageRoot=$StageRoot;ResumeStatePath=$ResumeStatePath;ExpectedUserSID=$ExpectedUserSID};return $script:handled}
 function Get-LocalUser {param($SID,$ErrorAction);if($SID){[pscustomobject]@{Name='fixture';Enabled=$script:userEnabled}}else{[pscustomobject]@{Name='existing'}}}
 function Get-Process {param($Name,$ErrorAction);if($script:runningSysprep){[pscustomobject]@{Name='sysprep'}}}
@@ -32,8 +33,8 @@ function New-LocalUser {throw 'must never create real accounts'}
 function Restart-Computer {throw 'must never reboot'}
 function Start-SshService {throw 'Init must not install SSH'}
 function RunInit {param([string]$ExpectedUserSID='');Invoke-SetupInit -EntryPath $entry -ModuleRoot $module -ExpectedUserSID $ExpectedUserSID}
-function AuditCase {ResetCase;$script:native.Sid='S-1-5-21-1-2-3-500';$script:native.UserSID=$script:native.Sid;$script:image='IMAGE_STATE_UNDEPLOYABLE'}
-function Passwords([string]$Second='fixture&<密碼'){$script:first=ConvertTo-SecureString 'fixture&<密碼' -AsPlainText -Force;$script:second=ConvertTo-SecureString $Second -AsPlainText -Force;foreach($item in @('AUDIT','fixture_user',$script:first,$script:second)){$script:queue.Enqueue($item)}}
+function AuditCase {ResetCase;$script:native.Sid='S-1-5-21-1-2-3-500';$script:native.UserSID=$script:native.Sid;$script:ownerExit=0;$script:image='IMAGE_STATE_UNDEPLOYABLE'}
+function Passwords([string]$Second='fixture&<密碼'){$script:first=ConvertTo-SecureString 'fixture&<密碼' -AsPlainText -Force;$script:second=ConvertTo-SecureString $Second -AsPlainText -Force;foreach($item in @('YES','fixture_user',$script:first,$script:second)){$script:queue.Enqueue($item)}}
 function Disposed($Value){try{$copy=$Value.Copy();$copy.Dispose();return $false}catch{return $true}}
 try{
  ResetCase;$script:handled=$true;RunInit
@@ -48,21 +49,22 @@ try{
  $command=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($script:starts[0].ArgumentList -split '-EncodedCommand ')[1]));$result=& ([scriptblock]::Create($command))
  Assert ($result.SID -eq $script:native.Sid -and $command.Contains($entry.Replace("'","''"))) '提權使用顯式EntryPath而非library，保留中文空白單引號'
  ResetCase;$script:userEnabled=$false;Reject {RunInit} '停用正式帳號拒絕'
- AuditCase;$script:image='IMAGE_STATE_COMPLETE';Reject {RunInit} '一般內建Administrator桌面拒絕'
- ResetCase;$script:image='UNKNOWN';Reject {RunInit} '未知setup state拒絕'
+ AuditCase;$script:ownerExit=0;$script:image='IMAGE_STATE_COMPLETE';Reject {RunInit} '一般內建Administrator桌面拒絕'
+ ResetCase;$script:ownerExit=0;$script:image='UNKNOWN';Reject {RunInit} '未知setup state拒絕'
  ResetCase;$script:native.Is64Bit=$false;Reject {RunInit} '非x64流程拒絕'
  ResetCase;$script:native.Sid='S-1-5-18';Reject {RunInit} 'SYSTEM不從失敗F10路線落入Audit寫入'
  AuditCase;$script:desktop=$false;Reject {RunInit} 'Audit不是目前桌面owner拒絕'
- AuditCase;$script:queue.Enqueue('no');Reject {RunInit} '未明確AUDIT確認零寫入'
- AuditCase;$script:queue.Enqueue('AUDIT');$script:runningSysprep=$true;Reject {RunInit} '既有Sysprep程序拒絕'
- AuditCase;$script:queue.Enqueue('AUDIT');$script:sMode=1;Reject {RunInit} 'SMode拒絕'
- AuditCase;$script:queue.Enqueue('AUDIT');Move-Item -LiteralPath $sysprep -Destination ($sysprep+'.disabled')
+ AuditCase;$script:ownerExit=5;Reject {RunInit} 'native owner query failure cannot reuse matching SID';Assert ($script:queue.Count -eq 0 -and -not(Test-Path $env:ProgramData)) 'owner failure performs no prompt or write'
+ AuditCase;$script:queue.Enqueue('no');Reject {RunInit} '未同意帳號及OOBE準備零寫入'
+ AuditCase;$script:queue.Enqueue('YES');$script:runningSysprep=$true;Reject {RunInit} '既有Sysprep程序拒絕'
+ AuditCase;$script:queue.Enqueue('YES');$script:sMode=1;Reject {RunInit} 'SMode拒絕'
+ AuditCase;$script:queue.Enqueue('YES');Move-Item -LiteralPath $sysprep -Destination ($sysprep+'.disabled')
  try{Reject {RunInit} '缺少Sysprep不建立設定'}finally{Move-Item -LiteralPath ($sysprep+'.disabled') -Destination $sysprep}
- AuditCase;$script:queue.Enqueue('AUDIT');$oem=Join-Path $fakeWindows 'Panther/unattend.xml';[void][IO.Directory]::CreateDirectory((Split-Path $oem -Parent));[IO.File]::WriteAllText($oem,'OEM fixture')
+ AuditCase;$script:queue.Enqueue('YES');$oem=Join-Path $fakeWindows 'Panther/unattend.xml';[void][IO.Directory]::CreateDirectory((Split-Path $oem -Parent));[IO.File]::WriteAllText($oem,'OEM fixture')
  try{Reject {RunInit} '既有answer檔案不覆寫'}finally{Remove-Item -LiteralPath $oem}
- AuditCase;$script:queue.Enqueue('AUDIT');$script:registryAnswer=Join-Path $fixture 'OEM.xml';Reject {RunInit} '既有answer registry拒絕'
- AuditCase;$script:queue.Enqueue('AUDIT');[void][IO.Directory]::CreateDirectory((Join-Path $env:ProgramData 'NUC-Init'));Reject {RunInit} '既有安全stage不覆寫'
- AuditCase;foreach($i in @('AUDIT','existing')){$script:queue.Enqueue($i)};Reject {RunInit} '既有帳號名稱拒絕'
+ AuditCase;$script:queue.Enqueue('YES');$script:registryAnswer=Join-Path $fixture 'OEM.xml';Reject {RunInit} '既有answer registry拒絕'
+ AuditCase;$script:queue.Enqueue('YES');[void][IO.Directory]::CreateDirectory((Join-Path $env:ProgramData 'NUC-Init'));Reject {RunInit} '既有安全stage不覆寫'
+ AuditCase;foreach($i in @('YES','existing')){$script:queue.Enqueue($i)};Reject {RunInit} '既有帳號名稱拒絕'
  AuditCase;Passwords 'different';Reject {RunInit} '密碼不符不寫answer'
  Assert ((Disposed $script:first) -and (Disposed $script:second) -and -not(Test-Path (Join-Path $env:ProgramData 'NUC-Init/answer.xml'))) '密碼錯誤仍釋放SecureString且不寫明文'
  AuditCase;Passwords;$script:copyFailure=$true;Reject {RunInit} '依賴複製失敗如實拒絕'

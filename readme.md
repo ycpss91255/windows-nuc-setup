@@ -33,7 +33,7 @@ for %d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do @if exist "%d:\wi
 `Shift+F10` 直接執行 Init 的路線仍可使用。如果你已按 `Ctrl+Shift+F3`，Windows 會重新啟動進入稽核模式的 Administrator 桌面，接著依序操作：
 
 1. 取消自動出現的「系統準備工具／Sysprep」視窗，不在該視窗選擇關機或重新啟動。
-2. 從 USB 的完整 `windows_setup` 資料夾執行 `init.cmd`。依提示輸入 `AUDIT` 確認，再輸入要建立的正式本機帳號、密碼及確認密碼。
+2. 從 USB 的完整 `windows_setup` 資料夾執行 `init.cmd`。Init 自動檢查目前帳號與 OOBE 準備條件，不需輸入 `AUDIT`。確認畫面說明的帳號／OOBE 變更並輸入 `YES` 後，再輸入新正式本機帳號、密碼及確認密碼；狀態未知、矛盾或仍有安裝程序時會停止，不要反覆重試。
 3. **只有看到「帳號設定已準備完成」才手動重新啟動。** 可使用開始選單的「重新啟動」，或在 CMD 輸入 `shutdown /r /t 0`。如果顯示錯誤或沒有成功文字，先處理錯誤，不把視窗結束當成成功，也不要直接執行 `windows.cmd`。
 4. 重開後完成剩餘 Windows 初始設定，登入剛準備的新正式本機帳號。稽核模式的 Administrator 只是準備帳號的暫時身分，不是後續套用設定的目標帳號。
 5. 在新正式帳號桌面接上網路，直接執行同一份 USB 工具包的 `windows.cmd`，依下方「接著套用設定」繼續。SSH 由 Windows 第 4 階段安裝，不需要第二次執行 Init。
