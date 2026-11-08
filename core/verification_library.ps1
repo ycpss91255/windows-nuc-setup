@@ -97,6 +97,10 @@ $apps=Get-Content (Resolve-NucPath 'debloat_apps.txt')|Where-Object {$_ -and -no
 $remaining=@(Get-AppxPackage -AllUsers|Where-Object {@($_.PackageUserInformation|Where-Object InstallState -eq 'Installed').Count -gt 0}|Where-Object Name -in $apps|Select-Object -ExpandProperty Name -Unique)
 Add-Check '預載 App 清理' ($remaining.Count -eq 0) ('清單內仍存在：'+($remaining -join ', '))
 try{
+ $fresh=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'apply_debloat.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup/Debloat-Result.json') -Arguments @{VerifyOnly=$true}
+ Add-Check '清理功能登錄讀回' ([bool]$fresh.Success) '重新讀取目前 build 適用功能的登錄型別及值，不以第三方退出碼或舊報告代替'
+}catch{Add-Check '清理功能登錄讀回' $false $_.Exception.Message}
+try{
  $fresh=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'apply_pagefile_settings.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup\Pagefile-Result.json') -Arguments @{VerifyOnly=$true}
  Add-Check '磁碟分頁檔停用設定' ([bool]$fresh.Success) ('本輪即時結果：'+($fresh|ConvertTo-Json -Compress -Depth 5))
  Add-Check '分頁檔實際已停用' (@($fresh.ActivePagefiles|Where-Object {$_}).Count -eq 0) '如仍作用中，需重新開機才生效'
