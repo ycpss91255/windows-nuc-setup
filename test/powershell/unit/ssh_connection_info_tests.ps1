@@ -5,8 +5,14 @@ function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name
 $path=Join-Path $root 'modules/ssh/connection_info_library.ps1'
 Assert (Test-Path $path) 'SSH領域提供獨立連線資訊函式'
 . $path
+function Get-SetupMdnsStatus {
+ param($ComputerName)
+ $script:MdnsObservedName=$ComputerName
+ [pscustomobject]@{Name=($ComputerName+'.local');DnsClientState='Running';GroupPolicyEnableMDNS=$null;LocalEnableMDNS=$null;Udp5353Observed=$false;LocalResolutionMatched=$false;RemoteVerified=$false;ActiveAddresses=@();Queries=@();Notes=@();ReadErrors=@()}
+}
 function Get-NetIPAddress {param($AddressFamily,$ErrorAction) @([pscustomobject]@{IPAddress='192.0.2.42';AddressState='Preferred'},[pscustomobject]@{IPAddress='192.0.2.42';AddressState='Preferred'},[pscustomobject]@{IPAddress='127.0.0.2';AddressState='Preferred'},[pscustomobject]@{IPAddress='169.254.1.1';AddressState='Preferred'},[pscustomobject]@{IPAddress='198.51.100.1';AddressState='Tentative'})}
 $text=@(Get-SetupSshConnectionInfo -UserName 'fixture_user' -ComputerName 'fixture_pc')
+Assert ($script:MdnsObservedName -ceq 'fixture_pc' -and ($text -join '').Contains('fixture_pc.local') -and ($text -join '').Contains("ssh -l 'fixture_user' 'fixture_pc.local'")) '同一SSH資訊函式讀動態主機local並明列另一臺驗證與IP備援'
 Assert ($text[0] -eq '電腦名稱：fixture_pc') '顯示動態電腦名'
 Assert ($text[1].Contains('fixture_user') -and $text[1].Contains('不顯示密碼')) '顯示帳號及既有密碼說明不輸出密碼'
 Assert (@($text|Where-Object {$_ -like 'IPv4*'}).Count -eq 1 -and ($text -join '').Contains('ssh "fixture_user@192.0.2.42"')) '只輸出唯一可用IPv4及完整連線命令'
