@@ -45,6 +45,15 @@ try {
     }
     $problems=@(Get-PnpDevice -PresentOnly|Where-Object Status -ne 'OK')
     try{ & (Resolve-NucPath 'audit_nuc.ps1') }catch{ $stageErrors+=('最終檢查：'+$_.Exception.Message);Write-Warning $stageErrors[-1] }
+    $driverDecision=Get-SetupModuleDecision -Module 'install_drivers.ps1' -Hardware $hardware
+    if($DriverPackagePath -and $driverDecision.Applicable){
+     try{
+      $null=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $DriverPackagePath
+      . (Resolve-NucPath 'verification_library.ps1')
+      $driverSnapshot=Invoke-SetupDriverFreshVerification -DriverPackagePath $DriverPackagePath -VerificationRunId ([guid]::NewGuid().ToString())
+      if(-not $driverSnapshot.Success){throw '完整設定後的官方驅動目標尚未全部核對通過。'}
+     }catch{$failedModules+='install_drivers.ps1';$stageErrors+=('最終驅動核對：'+$_.Exception.Message);Write-Warning $stageErrors[-1]}
+    }
     $pendingModules=@(if($startResult -and -not $startResult.Success){[pscustomobject]@{Module='apply_start_menu_settings.ps1';Status=$startResult.Status}})
     $summary=[ordered]@{Success=($stageErrors.Count -eq 0 -and $problems.Count -eq 0 -and $pendingModules.Count -eq 0);PendingModules=$pendingModules;Computer=$env:COMPUTERNAME;CompletedAt=(Get-Date).ToString('o');AutoLogonUser=$auto.DefaultUserName;AutoLogonEnabled=($auto.AutoAdminLogon -eq '1');RequiresNextSignIn=$true;ProblemDeviceCount=$problems.Count;StageErrors=$stageErrors;FailedModules=$failedModules;HardwareProfile=$hardware;SkippedModules=$skippedModules;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;RebootRequired=((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'))}
     $summary|ConvertTo-Json -Depth 5|Set-Content (Resolve-NucPath 'Setup-Result.json') -Encoding UTF8
