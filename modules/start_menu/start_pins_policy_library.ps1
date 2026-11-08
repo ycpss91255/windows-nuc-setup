@@ -64,3 +64,10 @@ function Invoke-StartPinsConfiguration {
  $result.PolicyRoute=$route
  return $result
 }
+
+function Complete-StartPinsPending {
+ param($Result,[string[]]$StageErrors=@(),[int]$ProblemCount=0,[switch]$NonInteractive,[scriptblock]$Apply)
+ if($null -eq $Result -or $Result.Status -ne 'LegacyPendingApply' -or $StageErrors.Count -gt 0 -or $ProblemCount -gt 0 -or $NonInteractive){return $Result}
+ if($null -eq $Apply){throw '開始選單後置套用入口缺失。'}
+ return (& $Apply -ApplyPolicy)
+}
