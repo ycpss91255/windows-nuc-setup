@@ -10,7 +10,7 @@ function Get-SetupTaskbarFinalizeCommand {
 function Get-SetupTaskbarLayoutBinding {
  param([string]$CommonDataRoot,$Context)
  $role=Get-SetupGuiRunPaths -CommonDataRoot $CommonDataRoot -Role Taskbar -RunId $Context.RunId
- $pointer=Join-Path $role.RoleRoot 'current_layout.json';Assert-SetupGuiProtectedPath $pointer
+ $pointer=Join-Path $role.RoleRoot ('current_layout_'+$Context.UserSID+'.json');Assert-SetupGuiProtectedPath $pointer
  $record=Get-Content -LiteralPath $pointer -Raw -Encoding UTF8|ConvertFrom-Json
  if($null -eq $record -or (@($record.PSObject.Properties.Name|Sort-Object) -join '|') -cne 'ApplyRunID|Computer|UserSID' -or $record.UserSID -cne $Context.UserSID -or $record.Computer -cne $Context.Computer){throw '工作列配置指標不是原帳號與原電腦的固定資料。'}
  $apply=Get-SetupGuiRunPaths -CommonDataRoot $CommonDataRoot -Role Taskbar -RunId $record.ApplyRunID
@@ -35,7 +35,7 @@ function Register-SetupTaskbarFinalize {
   $runOnce='HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
   if(-not(Test-Path $runOnce)){New-Item $runOnce -Force|Out-Null}
   New-ItemProperty $runOnce -Name NUC8FinalizeTaskbar -Value (Get-SetupTaskbarFinalizeCommand $context.RunId) -PropertyType String -Force|Out-Null
-  $pointer=Join-Path (Split-Path $Stage.CodeRoot -Parent|Split-Path -Parent) 'current_layout.json'
+  $pointer=Join-Path (Split-Path $Stage.CodeRoot -Parent|Split-Path -Parent) ('current_layout_'+$context.UserSID+'.json')
   Write-SetupGuiAtomicJson -Path $pointer -Value ([ordered]@{UserSID=$context.UserSID;Computer=$context.Computer;ApplyRunID=$context.RunId})
  }finally{$final.Lock.Dispose()}
 }
