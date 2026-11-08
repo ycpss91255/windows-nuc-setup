@@ -4,10 +4,10 @@ $ErrorActionPreference='Stop'
 $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 Assert ([bool](Get-Command Invoke-InitProvisioningEntry -ErrorAction SilentlyContinue)) 'init routes SYSTEM OOBE and staged formal-user continuation'
-$script:sid='S-1-5-18';$script:oobeCalls=0;$script:sshCalls=0
-function Get-InitProvisioningContext { @{Sid=$script:sid;IsAdministrator=$true;MachineGuid='fixture';ProfilePath=$env:USERPROFILE;RegisteredProfile=$env:USERPROFILE;DesktopOwned=$true;ImageState='IMAGE_STATE_COMPLETE'} }
+$script:sid='S-1-5-18';$script:oobeCalls=0;$script:sshCalls=0;$script:admin=$true
+function Get-InitProvisioningContext { @{Sid=$script:sid;IsAdministrator=$script:admin;MachineGuid='fixture';ProfilePath=$env:USERPROFILE;RegisteredProfile=$env:USERPROFILE;DesktopOwned=$true;ImageState='IMAGE_STATE_COMPLETE'} }
 function Invoke-InitOobeFlow {param($SourceRoot,$StageRoot) $script:oobeCalls++}
-function Test-Path {param($LiteralPath,$Path,$PathType) $true}
+function Test-Path {param($LiteralPath,$Path,$PathType) if(-not $script:admin){throw 'synthetic AccessDenied before elevation'};$true}
 function Assert-InitProtectedDirectory {param($Path)}
 function Assert-InitProvisioningAsset {param($AssetRoot) [pscustomobject]@{PackageSHA256=('a'*64)}}
 function Read-InitProvisioningState {param($StatePath,$MachineGuid,$PackageHash) $s=New-InitProvisioningState 'fixture' 'TEST' 'removed USB' ('a'*64);$s.TargetSid=$script:sid;$s.TargetUserName='fixture';$s.Phase='SshPending';return $s}
@@ -20,4 +20,6 @@ $rejected=$false;try{Invoke-InitProvisioningEntry $root $root (Join-Path $root '
 Assert ($rejected -and $script:sshCalls -eq 0) 'UAC account change rejects before reading resume data'
 Assert (Invoke-InitProvisioningEntry $root $root (Join-Path $root 'state.json') $script:sid) 'formal user resumes from protected stage'
 Assert ($script:sshCalls -eq 1 -and $script:sshPath -eq (Join-Path $root 'runtime/modules/ssh/apply_ssh_settings.ps1')) 'resume calls staged real SSH module path independent of USB'
+$script:admin=$false
+Assert (-not(Invoke-InitProvisioningEntry $root $root)) 'ordinary USB desktop token defers to elevation before private state access'
 Write-Host ('ALL PASS: '+$script:count+' safe entry assertions')
