@@ -1,5 +1,8 @@
-# 工具與驅動二進位由既有下載/雜湊流程管理，不提交 Git。
-/drivers/
+﻿# 工具與驅動二進位由既有下載/雜湊流程管理，不提交 Git。
+/drivers/*/*
+!/drivers/*/profile.json
+!/drivers/*/manifest.json
+!/drivers/*/readme.md
 /Driver/
 *.zip
 *.bin
@@ -88,7 +91,10 @@ id_ecdsa*
 /CustomHostsSync/ssh-config-before-*.backup
 
 # Modular package binary payload and per-machine hosts runtime.
-/modules/drivers/payload/
+/modules/drivers/*/*
+!/drivers/*/profile.json
+!/drivers/*/manifest.json
+!/drivers/*/readme.mdpayload/
 
 /modules/ssh/custom_hosts_sync/runtime.json
 /modules/ssh/custom_hosts_sync/owner.json
