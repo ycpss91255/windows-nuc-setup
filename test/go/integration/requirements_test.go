@@ -228,9 +228,12 @@ func TestRequirementsParity(t *testing.T) {
 		m := copyFiles(original)
 		q := decode(t, m)
 		for i := range q.Checks {
-			if q.Checks[i].Layer == "System" {
+			if !q.Checks[i].Executed {
 				q.Checks[i].Passed = flag(true)
 			}
+		}
+		if q.SchemaVersion == 2 {
+			q.Checks = append(q.Checks, a.Check{Name: "removed", Layer: "System", Status: "Passed", Passed: flag(true)})
 		}
 		save(m, q)
 		reject(t, m)
