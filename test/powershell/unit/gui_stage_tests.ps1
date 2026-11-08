@@ -54,4 +54,6 @@ $call.DesktopSession=0;Reject {New-SetupGuiStage @call} '桌面' 'session zero c
 $call.CallerSession=4;Reject {New-SetupGuiStage @call} '桌面' 'unrelated interactive caller session cannot target another desktop';$call.CallerSession=0
 $script:corruptCopy=$true;Reject {New-SetupGuiStage @call} '雜湊' 'copy corruption aborts protected stage before task launch';$script:corruptCopy=$false
 $again=New-SetupGuiStage @call;$again.Lock.Dispose();Assert ($again.Context.RunId -cne $stage.Context.RunId) 'a failed stage releases lock and a new invocation receives a fresh run ID'
+$requestedRun=[guid]::NewGuid().ToString('D');$requestedStage=New-SetupGuiStage @call -RunId $requestedRun
+try{Assert ($requestedStage.Context.RunId -ceq $requestedRun) 'explicit fresh verification GUID is bound to the actual protected stage context'}finally{$requestedStage.Lock.Dispose()}
 Write-Host ('ALL PASS: '+$script:count+' GUI stage control assertions; TEMP file IO with explicit ACL boundaries mocked')
