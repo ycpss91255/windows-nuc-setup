@@ -1,6 +1,6 @@
-# Init：初始設定與正式帳號 SSH
+# Init：帳號與 OOBE 初始化
 
-一般使用步驟以根目錄 [readme.md](../../readme.md) 的快速開始 A／B 為準。初始設定從 USB 按 Shift+F10 呼叫 init.cmd；不要求切換稽核模式。已有正式帳號時，沿用目前帳號安裝 SSH，不重設密碼。
+一般使用步驟以根目錄 [readme.md](../../readme.md) 的快速開始 A／B 為準。初始設定從 USB 按 Shift+F10 呼叫 init.cmd；不要求切換稽核模式。已有正式帳號時，直接執行 windows.cmd，不需要再次執行 Init；SSH 由 Windows 第 4 階段處理。
 
 ## 已用 Ctrl+Shift+F3，Init 跑完接著做什麼？
 
@@ -8,11 +8,11 @@
 2. 從 USB 執行 `windows_setup\init.cmd`，依提示輸入 `AUDIT`，再輸入新正式本機帳號、密碼及確認密碼。
 3. 看到 **「帳號設定已準備完成」**，表示這一階段成功，接著才手動重新啟動。可由開始選單操作，或在 CMD 輸入 `shutdown /r /t 0`。腳本不會自行替你重新啟動。
 4. 重開後完成剩餘 OOBE，登入新正式本機帳號；不要在稽核模式 Administrator 身分直接套用 Windows 設定。
-5. 在新帳號桌面接上網路，從 USB 再執行 `init.cmd` 安裝 SSH。看到「Init 完成」及中文連線資訊後，再執行 `windows.cmd`。
+5. 在新帳號桌面接上網路，直接從完整工具包執行 `windows.cmd`；不需要第二次 Init。SSH 由 Windows 第 4 階段安裝。
 
 如果出現錯誤、非零退出碼，或沒有「帳號設定已準備完成」，這一階段尚未成功；先保留錯誤畫面並修正問題，不以命令視窗關閉代表完成。若帳號準備成功但尚未重開，下一步就是手動重新啟動，而不是重複建立帳號。
 
-這條可選路線不取代初始設定畫面 `Shift+F10` 直接執行 Init 的路線。兩條路線最後都必須在新正式帳號桌面安裝 SSH，再執行 Windows 設定。
+這條可選路線不取代初始設定畫面 `Shift+F10` 直接執行 Init 的路線。兩條路線最後都在新正式帳號桌面直接執行 Windows 設定。
 
 ## 發行完整性
 
@@ -27,13 +27,15 @@ OOBE 入口需要 assets/hide_oobe.ppkg、hide_oobe.xml、provenance.json，發�
 3. 準備同層 windows_setup_init.cmd 公開唯讀啟動器；此檔先 UAC，再讀私有 runtime。既有啟動器須通過位置、owner、ACL 與內容 hash，不覆寫來源不明的同名檔。
 4. 詢問新帳號與兩次 SecureString 密碼。拒絕既有同名帳號；不重設密碼或提升既有帳號。建立後讀回 SID、啟用狀態及 Administrators 群組 SID 成員。
 5. 先記錄 ApplyPending，再清楚提示 Windows 可能立即重新啟動；輸入 YES 才套用設定包。取消保留帳號及 AwaitingConsent；重跑不需重建帳號。SYSTEM 分支不使用 Sysprep。
-6. 正式帳號登入後，開啟 %ProgramData%\windows_setup_init.cmd，同意同帳號提權。續跑核對機器、目標 SID、ProfileList 與 Explorer 桌面，再呼叫完整 SSH 模組；不依原 USB 代號。SSH 服務 Running／Auto 及防火牆驗證都成功後才顯示完成與中文連線資訊。
+6. 正式帳號登入後，直接執行完整工具包的 windows.cmd。既有 UAC 後、任何設定前會核對機器、目標 SID、ProfileList、Explorer 桌面、正式帳號與群組及已安裝設定包，再記錄 AccountConfirmed。此狀態只代表帳號／OOBE 確認；SSH 在 Windows 第 4 階段安裝。沒有 Init 狀態的既有正式帳號不需要此檢查。
 
 私有狀態與 runtime 只供 SYSTEM／管理員存取。狀態不包含明文、編碼或加密後的密碼；密碼僅在帳號建立呼叫中使用。公開啟動器只給 Users 讀取及執行，不能寫入私有資料。
 
 ## 失敗與恢復
 
-- 缺少網路或 OpenSSH 元件來源：保持 SshPending，連網後執行同一公開入口重試。
+- 取消或中斷 OOBE：可使用受保護的公開啟動器恢復；正常正式登入後直接執行 windows.cmd，不必再跑 Init。
+- 舊版 SshPending／Complete：通過同機、SID、profile、帳號與設定包驗證後，先保存受保護的 state_before_account_confirmation.json，再轉為 AccountConfirmed；不刪除舊 stage，不假稱 SSH 完成。
+- Windows 第 4 階段缺少網路或 OpenSSH 元件：連網後重跑 Windows 或 modules/ssh/apply_ssh_settings.cmd；Init 不安裝 SSH。
 - 套包已成功但回應中斷：以已安裝的 package ID／版本／名稱恢復，不盲目重複套用。
 - 帳號已建立、SID 已儲存但群組失敗：只能恢復相同 SID，驗證後繼續。
 - 帳號已建立但所有權狀態寫入失敗：保留帳號，停止而不刪除／接管同名帳號。這種情況不宣稱可以自動恢復，需先查看錯誤及受保護紀錄。
