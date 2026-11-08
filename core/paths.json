@@ -88,6 +88,7 @@
   "save_desktop_layout.cmd": "modules/desktop/save_desktop_layout.cmd",
   "apply_theme_settings.ps1": "modules/theme/apply_theme_settings.ps1",
   "apply_theme_settings.cmd": "modules/theme/apply_theme_settings.cmd",
+  "input_method_library.ps1": "modules/input/input_method_library.ps1",
   "apply_input_method_settings.ps1": "modules/input/apply_input_method_settings.ps1",
   "apply_input_method_settings.cmd": "modules/input/apply_input_method_settings.cmd",
   "apply_terminal_hotkey.ps1": "modules/terminal/apply_terminal_hotkey.ps1",
