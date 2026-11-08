@@ -510,7 +510,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_
 
 ### 自動報表與徽章
 
-徽章採用與 base 相同的 20px flat-square 樣式，依文字寬度排列；System `not run` 與 Coverage `not measured` 保留未驗證狀態。
+CI 使用與 base 相同的 GitHub Actions 原生徽章；Language／Testing 使用 Shields flat，Go／PowerShell coverage 使用 20px 圓角 SVG。Go 顯示實測值，PowerShell 顯示 `not measured`；報表中的 System `not run` 保留未驗證狀態。
 
 每次測試從實際斷言的結構化事件與程序退出碼產生 JSON、Markdown、自含 HTML、JUnit XML 及分層 SVG。報告先顯示一般使用者結論、宣告版本／分支或 Release 範圍、變更、已知限制與下載，再列所選層級、斷言結果、套件耗時、提交及工作樹狀態；新增 `test/powershell/unit` 或 `integration` 測試會自動列入執行清單。程序崩潰、缺少斷言事件或任何失敗均不能標成通過。
 
@@ -649,7 +649,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\build_s
 
 PR 與 main 的 `requirements-gate` 讀取同一次 PS5.1 測試產物，驗證來源、統計、JUnit／JSON 狀態、文件連結、隱私與 base 徽章規格，並用破壞性負例確認錯誤會被拒絕；`ci-rollup` 必須同時取得測試與需求驗收成功才能合併。PR 的證據保留原分支身分，不會冒充 main。
 
-Pages 部署後會匿名 GET 公開首頁、main 報表、JSON／Markdown／JUnit、四個 SVG、README 徽章實際網址及歷史版本頁；提交與 Actions 執行必須屬於本次 main。CDN 延遲只有限重試，舊報表或不一致會使 workflow 失敗。這些是可重複的自動驗收，不需要 agent 才能續跑；人工看畫面是否清楚、實機安裝是否成功仍是另外的驗收。
+Pages 部署後會匿名 GET 公開首頁、main 報表、JSON／Markdown／JUnit、unit／integration／system／PowerShell coverage 四個 SVG、Go coverage SVG、README 的 CI／Go coverage／PowerShell coverage 實際網址及歷史版本頁；提交與 Actions 執行必須屬於本次 main。Language／Testing 是靜態說明徽章，載入與外觀另由人工目視確認。CDN 延遲只有限重試，舊報表或不一致會使 workflow 失敗。這些是可重複的自動驗收，不需要 agent 才能續跑；人工看畫面是否清楚、實機安裝是否成功仍是另外的驗收。
 
 實作、freeze、主代理與未參與實作的獨立代理完整審查流程見 [維護規範](agents.md)。發現問題必須修正後重新全需求審查，不能把上次 PASS 沿用到修改後版本。
 
