@@ -8,6 +8,7 @@ function Invoke-SetupResidueCleanup {
   [switch]$VerifyOnly
  )
  $ErrorActionPreference='Stop'
+ if($SystemRoot -match '^[a-zA-Z]:$'){$SystemRoot+='\'}
  $SystemRoot=[IO.Path]::GetFullPath($SystemRoot)
  $UserProfile=[IO.Path]::GetFullPath($UserProfile)
  if($UserProfile.TrimEnd('\') -eq [IO.Path]::GetPathRoot($UserProfile).TrimEnd('\')){throw '使用者資料夾不能是磁碟根目錄。'}
