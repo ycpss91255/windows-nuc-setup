@@ -1,5 +1,7 @@
-﻿param([Parameter(Mandatory=$true)][string]$Module,[switch]$VerifyOnly,[switch]$SyncOnly,[ValidateSet('All','Hosts','SSH')][string]$Mode='All',[string]$DriverPackagePath)
+﻿param([Parameter(Mandatory=$true)][string]$Module,[switch]$VerifyOnly,[switch]$SyncOnly,[ValidateSet('All','Hosts','SSH')][string]$Mode='All',[string]$DriverPackagePath,[string]$ExpectedUserSID)
 $ErrorActionPreference='Stop'
+$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+if($ExpectedUserSID -and $ExpectedUserSID -ne $sid){throw '請用原本登入帳號提權，不可改用另一個管理員帳號執行獨立模組。'}
 if($DriverPackagePath){$DriverPackagePath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DriverPackagePath)}
 . (Join-Path $PSScriptRoot 'paths.ps1')
 $allowed=@('Apply-HostsSync','Remove-OneDrive','Remove-SetupResidue','Apply-ExplorerSettings','Apply-TerminalHotkey','Apply-InputMethodSettings','Apply-StartMenuSettings','Apply-AMDPrivacySettings','Apply-CopilotSettings','Apply-AutologonSettings','Apply-PowerSettings','Apply-SSHSettings','Install-Drivers','Install-WindowsUpdates','Apply-Debloat','Apply-TaskbarSettings','Apply-DisplaySettings','Apply-DesktopSettings','Apply-ThemeSettings','Desktop-IconLayout','Apply-PagefileSettings')
@@ -8,6 +10,7 @@ if($Module -ne 'Apply-HostsSync' -and ($SyncOnly -or $Mode -ne 'All')){throw 'Sy
 $isAdmin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if(-not $isAdmin){
  $command="& '"+$PSCommandPath.Replace("'","''")+"' -Module '"+$Module.Replace("'","''")+"'"
+ $command+=" -ExpectedUserSID '"+$sid.Replace("'","''")+"'"
  if($VerifyOnly){$command+=' -VerifyOnly'}
  if($Module -eq 'Apply-HostsSync'){$command+=' -Mode '+$Mode;if($SyncOnly){$command+=' -SyncOnly'}}
  if($DriverPackagePath){$command+=" -DriverPackagePath '"+$DriverPackagePath.Replace("'","''")+"'"}
