@@ -210,7 +210,7 @@ function Get-SetupGuiDesktopSession {
 }
 function Invoke-SetupGuiLocalWorker {
  param($Stage,$Scope)
- & (Join-Path $Stage.CodeRoot 'core/gui_worker.ps1') -Role $Stage.Context.Role -RunId $Stage.Context.RunId
+ $null= & (Join-Path $Stage.CodeRoot 'core/gui_worker.ps1') -Role $Stage.Context.Role -RunId $Stage.Context.RunId
 }
 function Invoke-SetupGuiScheduledWorker {
  param($Stage,$Scope)
@@ -248,4 +248,37 @@ function Invoke-SetupGuiRole {
   if(-not $result.Success){throw $result.Error}
   return $result
  }finally{$stage.Lock.Dispose()}
+}
+function Open-SetupGuiExecutionLock {
+ param($Paths)
+ Assert-SetupGuiProtectedPath $Paths.RoleRoot -Directory
+ $path=Join-Path $Paths.RoleRoot 'execution.lock'
+ if(Test-Path -LiteralPath $path){Assert-SetupGuiProtectedPath $path}
+ try{$lease=[IO.File]::Open($path,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}catch{throw 'GUI worker角色已有執行程序，未執行任何UI設定。'}
+ try{Assert-SetupGuiProtectedPath $path;return $lease}catch{$lease.Dispose();throw}
+}
+function Invoke-SetupGuiWorker {
+ param([Parameter(Mandatory=$true)][string]$CodeRoot,[string]$Role,[string]$RunId)
+ $ErrorActionPreference='Stop'
+ $scope=Get-SetupGuiIdentity
+ $context=Read-SetupGuiContext -CodeRoot $CodeRoot -CommonDataRoot $scope.CommonDataRoot -Role $Role -RunId $RunId
+ Assert-SetupGuiWorkerScope -Context $context -Scope $scope
+ $paths=Get-SetupGuiRunPaths -CommonDataRoot $scope.CommonDataRoot -Role $Role -RunId $RunId
+ $lease=$null;$published=$false
+ try{
+  $lease=Open-SetupGuiExecutionLock -Paths $paths
+  # Role and all executable file hashes were validated before importing this fixed library.
+  $module=Join-Path $CodeRoot 'modules/explorer'
+  . (Join-Path $module 'explorer_settings_library.ps1')
+  $result=Invoke-SetupExplorerSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly
+  if($result.Success -isnot [bool]){throw 'GUI worker葉節點未提供有效成功狀態。'}
+  $details=[ordered]@{};foreach($property in $result.PSObject.Properties){$details[$property.Name]=$property.Value}
+  Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result $details
+  $published=$true
+  if(-not $result.Success){throw $result.Error}
+  return $result
+ }catch{
+  if(-not $published){Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result @{Success=$false;Error=$_.Exception.Message;FailedAt=(Get-Date).ToString('o')}}
+  throw
+ }finally{if($lease){$lease.Dispose()}}
 }
