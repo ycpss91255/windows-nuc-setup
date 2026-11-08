@@ -1,4 +1,7 @@
 {
+  "gui_stage_library.ps1": "core/gui_stage_library.ps1",
+  "gui_worker.ps1": "core/gui_worker.ps1",
+  "explorer_settings_library.ps1": "modules/explorer/explorer_settings_library.ps1",
   "terminal_hotkey_library.ps1": "modules/terminal/terminal_hotkey_library.ps1",
   "start_pins_policy_library.ps1": "modules/start_menu/start_pins_policy_library.ps1",
   "start_pins_asset_library.ps1": "modules/start_menu/start_pins_asset_library.ps1",
