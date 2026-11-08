@@ -324,6 +324,31 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 
 四個桌面圖示的排列範本以繁體中文 Windows、1920×1080、100% 縮放為準。自動檢查不能取代上述登入與畫面觀察。
 
+## Windows Update 進度與紀錄
+
+更新階段使用 Windows Update API 回報的下載／安裝百分比，包含目前第幾項、總項數、標題與單項進度。背景工作每約 5 秒更新進度檔，主視窗每約 15 秒顯示狀態及最後回報時間。掃描階段只有狀態與經過時間，不以時間估算百分比；掃描尚未返回時，最後回報時間可能暫時不變。Windows「設定」頁面不一定會呈現這個 API 工作的相同進度，請以工具視窗及本輪紀錄為準。
+
+可另外開啟 PowerShell 查看目前狀態：
+
+```powershell
+$state = Join-Path $env:ProgramData 'NUC8-Setup\WindowsUpdate'
+Get-Content (Join-Path $state 'Update-Progress.json') -Raw -Encoding UTF8 | ConvertFrom-Json | Format-List
+```
+
+持續查看最新一份更新日誌（按 `Ctrl+C` 只停止觀看，不會中止更新）：
+
+```powershell
+$state = Join-Path $env:ProgramData 'NUC8-Setup\WindowsUpdate'
+$log = Get-ChildItem -LiteralPath $state -Filter 'WindowsUpdate-*.log' |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($log) { Get-Content -LiteralPath $log.FullName -Encoding UTF8 -Tail 30 -Wait }
+```
+
+`WindowsUpdate-Result.json` 保存搜尋結果碼／警告、下載結果碼／HResult、每項安裝結果及是否需要重新開機。只有搜尋與下載結果碼 `2`（完整成功）才繼續；失敗或部分成功不會當作「沒有更新」。結果檔、進度檔與 `WindowsUpdate-*.log` 都位於上述 `$state`；主流程另有工具包內 `reports\Setup-*.log`。
+
+下載與安裝各自預設等待上限為 50 分鐘，逾時先記錄失敗並請求中止。Windows API 的清理可能仍需等待，不代表收到中止請求就已停止；請查看最後回報與日誌，不要因此連續重跑或關機。若同一排程仍在執行，工具會拒絕重啟及覆寫 worker。本工具不自動重新開機。
+
+介面依據：[Microsoft BeginDownload](https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nf-wuapi-iupdatedownloader-begindownload)、[BeginInstall](https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nf-wuapi-iupdateinstaller-begininstall)、[非同步操作與清理](https://learn.microsoft.com/en-us/windows/win32/wua_sdk/guidelines-for-asynchronous-wua-operations)。
 ## 管理員提權提示與還原
 
 `windows.cmd` 第 1 階段會把這臺電腦的 `ConsentPromptBehaviorAdmin` 設為 `0`：此電腦的管理員之後提權會自動核准，不再顯示「是否允許此應用程式變更您的裝置」。第一次啟動腳本仍須核准一次。這會降低管理員操作的提示防護；不影響標準使用者的提權規則，也不關閉 UAC、Defender 或 SmartScreen。
