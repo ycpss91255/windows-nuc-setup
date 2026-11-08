@@ -12,32 +12,91 @@ import (
 )
 
 func TestRepoCoverageEvidenceCannotBeDetachedFromSourceAndCounts(t *testing.T) {
-	inv:=rc.Inventory{Sources:[]rc.Source{{Path:"logic.go",Language:"go",SHA256:strings.Repeat("a",64),ExpectedLines:[]int{2,3}}}}
-	report:=rc.Report{SchemaVersion:rc.SchemaVersion,Metric:rc.Metric,Files:map[string]map[int]bool{"logic.go":{2:true,3:false}}}
-	identity:=rc.Identity{Commit:strings.Repeat("b",40),RunUrl:"https://github.com/example/repo/actions/runs/12",MeasuredAt:"2026-11-08T00:00:00Z",SourceState:"Clean"}
-	artifacts,err:=rc.CreateEvidence(inv,[]rc.Report{report},identity)
-	if err!=nil{t.Fatal(err)}
-	evidence,err:=rc.ValidateEvidence(artifacts.Summary,artifacts.Inventory,artifacts.XML,identity.Commit,identity.RunUrl)
-	if err!=nil||evidence.Result.Percent==nil||*evidence.Result.Percent!=50{t.Fatalf("valid proof refused: %+v %v",evidence,err)}
-	for _,kind:=range []string{"count","metric","hash","source_state","commit","time","xml","inventory","unknown","duplicate"}{t.Run(kind,func(t *testing.T){
-		summary,inventory,xml:=append([]byte(nil),artifacts.Summary...),append([]byte(nil),artifacts.Inventory...),append([]byte(nil),artifacts.XML...)
-		var data map[string]any;if err:=json.Unmarshal(summary,&data);err!=nil{t.Fatal(err)}
-		switch kind {
-		case "count":data["Result"].(map[string]any)["Covered"]=2
-		case "metric":data["Metric"]="statements"
-		case "hash":data["NormalizedSHA256"]=strings.Repeat("f",64)
-		case "source_state":data["SourceState"]="Dirty"
-		case "commit":data["Commit"]=strings.Repeat("c",40)
-		case "time":data["MeasuredAt"]="yesterday"
-		case "xml":xml=[]byte(strings.Replace(string(xml),`hits="0"`,`hits="1"`,1))
-		case "inventory":inventory=[]byte(strings.Replace(string(inventory),`"logic.go"`,`"other.go"`,1))
-		case "unknown":data["Surprise"]="hidden"
-		case "duplicate":summary=append([]byte(`{"Commit":"bad",`),summary[1:]...)
-		}
-		if kind!="duplicate" {summary,_=json.Marshal(data)}
-		if _,err:=rc.ValidateEvidence(summary,inventory,xml,identity.Commit,identity.RunUrl);err==nil{t.Fatal("tampered proof accepted")}
-	})}
-	identity.SourceState="Dirty";if _,err:=rc.CreateEvidence(inv,[]rc.Report{report},identity);err==nil{t.Fatal("dirty source published")}
+	inv := rc.Inventory{Sources: []rc.Source{{Path: "logic.go", Language: "go", SHA256: strings.Repeat("a", 64), ExpectedLines: []int{2, 3}}}}
+	report := rc.Report{SchemaVersion: rc.SchemaVersion, Metric: rc.Metric, Files: map[string]map[int]bool{"logic.go": {2: true, 3: false}}}
+	identity := rc.Identity{Commit: strings.Repeat("b", 40), RunUrl: "https://github.com/example/repo/actions/runs/12", MeasuredAt: "2026-11-08T00:00:00Z", SourceState: "Clean"}
+	artifacts, err := rc.CreateEvidence(inv, []rc.Report{report}, identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := rc.ValidateEvidence(artifacts.Summary, artifacts.Inventory, artifacts.XML, identity.Commit, identity.RunUrl)
+	if err != nil || evidence.Result.Percent == nil || *evidence.Result.Percent != 50 {
+		t.Fatalf("valid proof refused: %+v %v", evidence, err)
+	}
+	for _, kind := range []string{"count", "metric", "hash", "source_state", "commit", "time", "xml", "inventory", "unknown", "duplicate"} {
+		t.Run(kind, func(t *testing.T) {
+			summary, inventory, xml := append([]byte(nil), artifacts.Summary...), append([]byte(nil), artifacts.Inventory...), append([]byte(nil), artifacts.XML...)
+			var data map[string]any
+			if err := json.Unmarshal(summary, &data); err != nil {
+				t.Fatal(err)
+			}
+			switch kind {
+			case "count":
+				data["Result"].(map[string]any)["Covered"] = 2
+			case "metric":
+				data["Metric"] = "statements"
+			case "hash":
+				data["NormalizedSHA256"] = strings.Repeat("f", 64)
+			case "source_state":
+				data["SourceState"] = "Dirty"
+			case "commit":
+				data["Commit"] = strings.Repeat("c", 40)
+			case "time":
+				data["MeasuredAt"] = "yesterday"
+			case "xml":
+				xml = []byte(strings.Replace(string(xml), `hits="0"`, `hits="1"`, 1))
+			case "inventory":
+				inventory = []byte(strings.Replace(string(inventory), `"logic.go"`, `"other.go"`, 1))
+			case "unknown":
+				data["Surprise"] = "hidden"
+			case "duplicate":
+				summary = append([]byte(`{"Commit":"bad",`), summary[1:]...)
+			}
+			if kind != "duplicate" {
+				summary, _ = json.Marshal(data)
+			}
+			if _, err := rc.ValidateEvidence(summary, inventory, xml, identity.Commit, identity.RunUrl); err == nil {
+				t.Fatal("tampered proof accepted")
+			}
+		})
+	}
+	identity.SourceState = "Dirty"
+	if _, err := rc.CreateEvidence(inv, []rc.Report{report}, identity); err == nil {
+		t.Fatal("dirty source published")
+	}
+}
+
+func TestRepoCoverageEvidenceMustMatchCurrentSourceRoster(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "logic.go")
+	if err := os.WriteFile(file, []byte("package fixture\nfunc Run(){println(1)}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	inv, err := rc.ScanInventory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(inv)
+	if err := rc.ValidateInventory(root, data); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("package fixture\nfunc Run(){println(2)}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := rc.ValidateInventory(root, data); err == nil {
+		t.Fatal("stale source digest accepted")
+	}
+	inv, err = rc.ScanInventory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ = json.Marshal(inv)
+	if err := os.WriteFile(filepath.Join(root, "new.ps1"), []byte("Write-Output 1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := rc.ValidateInventory(root, data); err == nil {
+		t.Fatal("new unmeasured source omitted")
+	}
 }
 
 func cobertura(files string) []byte {
