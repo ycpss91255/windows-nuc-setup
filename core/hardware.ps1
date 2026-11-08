@@ -2,9 +2,31 @@
 function Test-SetupAdministrator {
  return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
+function Get-SetupDriverProfile {
+ param([string]$BoardProduct,[string]$ProfileId='', [string]$ProfilesRoot='')
+ if(-not $ProfilesRoot){$ProfilesRoot=Join-Path $PSScriptRoot '../drivers'}
+ if(-not(Test-Path -LiteralPath $ProfilesRoot -PathType Container)){return $null}
+ $profiles=@(Get-ChildItem -LiteralPath $ProfilesRoot -Directory|ForEach-Object {
+  $file=Join-Path $_.FullName 'profile.json'
+  if(Test-Path -LiteralPath $file -PathType Leaf){
+   $p=Get-Content -LiteralPath $file -Raw -ErrorAction Stop|ConvertFrom-Json
+   if($p.SchemaVersion -ne 1 -or $p.ProfileId -cnotmatch '^[a-z0-9][a-z0-9_]{0,63}$' -or $p.ProfileId -cne $_.Name -or $p.PackageDirectory -cnotmatch '^[a-z0-9][a-z0-9_]{0,63}$' -or $p.Architecture -cne 'x64' -or @($p.SupportedBoards).Count -lt 1 -or @($p.SupportedBoards|Select-Object -Unique).Count -ne @($p.SupportedBoards).Count){throw '驅動設定檔識別、目錄、架構或板號無效。'}
+   foreach($board in $p.SupportedBoards){if(-not $board -or $board -ne $board.Trim() -or $board -match '[\\/\r\n]'){throw '驅動設定檔板號無效。'}}
+   $p|Add-Member NoteProperty ProfileSHA256 ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash) -Force
+   $p|Add-Member NoteProperty ProfilePath $file -Force
+   $p
+  }
+ })
+ $allBoards=@{}
+ foreach($p in $profiles){foreach($board in $p.SupportedBoards){if($allBoards.ContainsKey($board)){throw '多個驅動設定檔宣告相同板號，拒絕選型。'};$allBoards[$board]=$true}}
+ $matches=@($profiles|Where-Object {if($ProfileId){$_.ProfileId -ceq $ProfileId}else{$BoardProduct.Trim() -in $_.SupportedBoards}})
+ if($matches.Count -gt 1){throw '驅動設定檔識別重複。'}
+ if($matches.Count -eq 1){return $matches[0]}
+ return $null
+}
 function Get-SetupHardwareProfile {
  param([string]$BoardProduct,[string]$UICulture=(Get-UICulture).Name,[string]$DriverPackagePath='',
-  [ValidateSet('','NUC8i7HVB','NUC8i7HNB')][string]$ConfirmedBoard='', [string]$ConfirmationComputer='')
+  [ValidateSet('','NUC8i7HVB','NUC8i7HNB')][string]$ConfirmedBoard='', [string]$ConfirmationComputer='', [string]$ProfilesRoot='')
  $detectionError='';$ambiguous=$false
  if(-not $PSBoundParameters.ContainsKey('BoardProduct')){
   try{
@@ -22,15 +44,18 @@ function Get-SetupHardwareProfile {
   if(-not $ConfirmationComputer -or $ConfirmationComputer -ine $env:COMPUTERNAME){throw '手動驅動型號確認不屬於目前電腦。'}
   if(-not $unknown -and (-not $detected -or $value -ine $ConfirmedBoard)){throw '目前偵測硬體與手動確認不符，拒絕 NUC 驅動。'}
  }
- $driverBoard=if($ConfirmedBoard){$ConfirmedBoard}elseif($detected){$value}else{''}
- [pscustomobject]@{Name=$(if($driverBoard){'NUC8'}else{'Generic'});BoardProduct=$BoardProduct;DriverBoard=$driverBoard;IsNuc8=[bool]$driverBoard;IsDetectedNuc8=$detected;DetectionStatus=$status;DetectionError=$detectionError;ConfirmedBoard=$ConfirmedBoard;ConfirmationComputer=$ConfirmationComputer;UICulture=$UICulture;DriverPackagePath=$DriverPackagePath}
+ $profileBoard=if($ConfirmedBoard){$ConfirmedBoard}else{$value}
+ $profile=Get-SetupDriverProfile -BoardProduct $profileBoard -ProfilesRoot $ProfilesRoot
+ $driverBoard=if($profile){$profileBoard}else{''}
+ [pscustomobject]@{Name=$(if($profile){$profile.ProfileId}else{'Generic'});DriverProfileId=$(if($profile){$profile.ProfileId}else{''});DriverProfileData=$profile;BoardProduct=$BoardProduct;DriverBoard=$driverBoard;IsNuc8=($driverBoard -in @('NUC8i7HVB','NUC8i7HNB'));IsDetectedNuc8=$detected;DetectionStatus=$status;DetectionError=$detectionError;ConfirmedBoard=$ConfirmedBoard;ConfirmationComputer=$ConfirmationComputer;UICulture=$UICulture;DriverPackagePath=$DriverPackagePath}
 }
 function Get-SetupModuleDecision {
  param([Parameter(Mandatory=$true)][string]$Module,[Parameter(Mandatory=$true)]$Hardware)
- $skip=($Module -in @('install_drivers.ps1','apply_amd_privacy_settings.ps1') -and -not $Hardware.IsNuc8)
+ $hasProfile=([bool]$Hardware.DriverProfileId -or $Hardware.IsNuc8)
+ $skip=($Module -eq 'install_drivers.ps1' -and -not $hasProfile) -or ($Module -eq 'apply_amd_privacy_settings.ps1' -and -not $Hardware.IsNuc8)
  if($Module -eq 'apply_amd_privacy_settings.ps1' -and $Hardware.ConfirmedBoard -and -not $Hardware.IsDetectedNuc8){$skip=$true}
  $reason='非 NUC8i7HV/HN：略過 NUC 專屬驅動／AMD 設定'
- if($Module -eq 'install_drivers.ps1' -and $Hardware.IsNuc8 -and -not $Hardware.DriverPackagePath){$skip=$true;$reason='未選擇獨立驅動包，略過驅動安裝'}
+ if($Module -eq 'install_drivers.ps1' -and $hasProfile -and -not $Hardware.DriverPackagePath){$skip=$true;$reason='未選擇獨立驅動包，略過驅動安裝'}
  if($Module -eq 'desktop_icon_layout.ps1' -and $Hardware.UICulture -ne 'zh-TW'){$skip=$true;$reason='目前排列範本使用繁體中文圖示名稱，略過其他語系的座標套用'}
  [pscustomobject]@{Module=$Module;Applicable=(-not $skip);Status=$(if($skip){'Skipped'}else{'Applicable'});Reason=$(if($skip){$reason}else{'適用目前硬體設定檔'})}
 }
@@ -70,12 +95,17 @@ function Get-SetupDriverManifestEntries {
 }
 function Test-SetupDriverPayload {
  param([Parameter(Mandatory=$true)]$Hardware,[string]$DriverPackagePath,[switch]$AllowLegacyManifest)
- if(-not $Hardware.IsNuc8){return [pscustomobject]@{Status='Skipped';Count=0;Reason='通用電腦不需要 NUC 驅動封存檔'}}
+ if(-not $Hardware.DriverProfileId -and -not $Hardware.IsNuc8){return [pscustomobject]@{Status='Skipped';Count=0;Reason='目前硬體沒有驅動設定檔'}}
  if(-not $DriverPackagePath){return [pscustomobject]@{Status='Skipped';Count=0;Reason='未選擇獨立驅動包'}}
  $driverRoot=$DriverPackagePath
  if(-not $AllowLegacyManifest){
   $identity=Get-Content -LiteralPath (Join-Path $driverRoot 'package.json') -Raw -ErrorAction Stop|ConvertFrom-Json
-  if($identity.SchemaVersion -ne 1 -or $identity.HardwareProfile -ne 'NUC8' -or $identity.Architecture -ne 'x64' -or @($identity.SupportedBoards).Count -ne 2 -or 'NUC8i7HVB' -notin $identity.SupportedBoards -or 'NUC8i7HNB' -notin $identity.SupportedBoards -or $Hardware.DriverBoard -notin $identity.SupportedBoards){throw '驅動包機型或架構識別不符合目前硬體。'}
+  if($identity.SchemaVersion -eq 2){
+   $profile=$Hardware.DriverProfileData
+   if(-not $profile -or $identity.ProfileId -cne $Hardware.DriverProfileId -or $identity.Architecture -cne $profile.Architecture -or $identity.ProfileSHA256 -notmatch '^[A-Fa-f0-9]{64}$' -or $identity.ProfileSHA256 -ne $profile.ProfileSHA256 -or @($identity.SupportedBoards).Count -ne @($profile.SupportedBoards).Count -or @($identity.SupportedBoards|Where-Object {$_ -notin $profile.SupportedBoards}).Count -or $Hardware.DriverBoard -notin $profile.SupportedBoards){throw '驅動包設定檔與目前硬體識別不符。'}
+   $included=Join-Path $driverRoot ('drivers/'+$profile.ProfileId+'/profile.json')
+   if((Get-FileHash -LiteralPath $included -Algorithm SHA256 -ErrorAction Stop).Hash -ne $profile.ProfileSHA256){throw '驅動包內設定檔原始雜湊不符。'}
+  }elseif($identity.SchemaVersion -ne 1 -or -not $Hardware.IsNuc8 -or $identity.HardwareProfile -ne 'NUC8' -or $identity.Architecture -ne 'x64' -or @($identity.SupportedBoards).Count -ne 2 -or 'NUC8i7HVB' -notin $identity.SupportedBoards -or 'NUC8i7HNB' -notin $identity.SupportedBoards -or $Hardware.DriverBoard -notin $identity.SupportedBoards){throw '驅動包機型或架構識別不符合目前硬體。'}
  }
  $manifest=Get-Content -LiteralPath (Join-Path $driverRoot 'manifest.json') -Raw -ErrorAction Stop|ConvertFrom-Json
   $manifest=@(Get-SetupDriverManifestEntries -Manifest $manifest)
@@ -161,11 +191,11 @@ function Select-SetupDriverRequest {
   }
   if(-not $choice -or $choice -eq 'g'){break}
  }
- if(-not $hardware.IsNuc8){Write-Host '通用設定：略過 NUC 驅動。';return [pscustomobject]@{Hardware=$hardware;DriverPackagePath='';ConfirmedBoard='';ConfirmationComputer=''}}
+ if(-not $hardware.DriverProfileId -and -not $hardware.IsNuc8){Write-Host '通用設定：目前沒有對應的驅動設定檔。';return [pscustomobject]@{Hardware=$hardware;DriverPackagePath='';ConfirmedBoard='';ConfirmationComputer=''}}
  if(-not $PathSpecified){
   $DriverPackagePath=''
   if($Interactive){
-   $candidate=Join-Path (Split-Path -Parent $PackageRoot) 'windows_driver_packages/nuc8'
+   $candidate=Join-Path (Split-Path -Parent $PackageRoot) ('windows_driver_packages/'+$hardware.DriverProfileData.PackageDirectory)
    if(Test-Path -LiteralPath $candidate -PathType Container){
     $choice=Read-Host ('找到獨立包 '+$candidate+'；輸入 Y 選用、P 指定其他位置，Enter 略過')
     if($choice -eq 'y'){$DriverPackagePath=$candidate}elseif($choice -eq 'p'){$DriverPackagePath=Read-Host '獨立驅動包完整路徑，Enter 略過'}

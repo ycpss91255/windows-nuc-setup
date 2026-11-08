@@ -5,6 +5,7 @@ $fixture=Join-Path $env:TEMP ('windows_setup_driver_prompt_'+[guid]::NewGuid().T
 $core=Join-Path $fixture 'windows_setup/core'
 New-Item -ItemType Directory -Path $core -Force|Out-Null
 Copy-Item (Join-Path $root 'core/start_windows.ps1'),(Join-Path $root 'core/hardware.ps1') -Destination $core
+Copy-Item -LiteralPath (Join-Path $root 'drivers') -Destination (Split-Path $core -Parent) -Recurse
 [IO.File]::WriteAllText((Join-Path $core 'configure_nuc.ps1'),'param($DriverPackagePath,$ConfirmedBoard,$ConfirmationComputer);$fixtureState.SelectedDriver=$DriverPackagePath',[Text.UTF8Encoding]::new($true))
 $fixtureState=@{Board='';PromptCount=0;Answers=$null;SelectedDriver=''};$count=0
 function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++}

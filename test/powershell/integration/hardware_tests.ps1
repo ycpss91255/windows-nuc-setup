@@ -44,7 +44,7 @@ foreach($relative in @('modules\drivers\install_drivers.ps1','modules\amd\apply_
 # Build a source-only package with no driver payload; Autologon is only an existence fixture.
 $genericPackage=Join-Path $fixture 'generic_package'
 New-Item -ItemType Directory -Path $genericPackage|Out-Null
-foreach($dir in @('core','modules')){
+foreach($dir in @('core','modules','drivers')){
  foreach($file in @(Get-ChildItem -LiteralPath (Join-Path $packageRoot $dir) -Recurse -File|Where-Object {$_.FullName -notmatch '[\\/]Payload[\\/]|[\\/]Reports[\\/]' -and $_.Extension -notin @('.exe','.zip','.log')})){
   $relative=$file.FullName.Substring($packageRoot.Length).TrimStart('\')
   $destination=Join-Path $genericPackage $relative
