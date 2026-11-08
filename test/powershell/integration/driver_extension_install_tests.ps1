@@ -29,7 +29,7 @@ function Assert-SetupDriverPayloadFiles {}
 function Invoke-SetupDriverTarget {[pscustomobject]@{Results=@([pscustomobject]@{InfPath='parent.inf';Status='Current'});Failures=@();RebootRequired=$false}}
 $r=Invoke-SetupOfficialDriverPackage -Entry $entry -Archive (Join-Path $fixture 'package.zip') -Build 26100 -LogPath 'inert.log'
 Assert (@($r.Results|Where-Object Association -eq 'Active').Count -eq 1 -and $r.Failures.Count -eq 0) '真正整包編排也執行Extension讀回而非只測孤立helper'
-@{SchemaVersion=2;Packages=@($entry)}|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $fixture 'manifest.json') -Encoding UTF8
+@{SchemaVersion=2;AuditedAt='2026-11-08';Packages=@($entry)}|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $fixture 'manifest.json') -Encoding UTF8
 function Get-CimInstance {param($ClassName,$ErrorAction) [pscustomobject]@{BuildNumber='26100'}}
 $script:bound=$false;$script:calls=0;$r=Invoke-SetupDriverVerification -DriverRoot $fixture
 Assert (-not $r.Success -and @($r.Targets|Where-Object Status -eq 'Staged').Count -eq 1 -and $script:calls -eq 0) '全流程後唯讀驗證要求真正ExtensionActive且絕不偷偷安裝'
