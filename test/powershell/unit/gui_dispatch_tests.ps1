@@ -23,7 +23,7 @@ Assert ((Get-SetupGuiDesktopSession $script:scope) -eq 4) 'duplicate Explorer pr
 $script:processes+=@([pscustomobject]@{SessionId=5;Owner=$script:scope.UserSID});Reject {Get-SetupGuiDesktopSession $script:scope} '唯一' 'ambiguous sessions cannot silently select a desktop'
 $script:processes=@();Reject {Get-SetupGuiDesktopSession $script:scope} '唯一' 'missing same-user desktop cannot start UI worker'
 $script:processes=@([pscustomobject]@{SessionId=4;Owner=$script:scope.UserSID})
-$script:created=0;$script:disposed=0;$script:started=0;$script:removed=0;$script:taskState='Ready';$script:states=@();$script:writeReport=$true;$script:localRuns=0;$script:failedResult=$false;$script:stages=@();$script:clock=[datetime]'2020-01-01'
+$script:created=0;$script:disposed=0;$script:started=0;$script:removed=0;$script:taskState='Ready';$script:states=@();$script:writeReport=$true;$script:localRuns=0;$script:failedResult=$false;$script:stages=@();$script:clock=[datetime]'2020-01-01';$script:taskExit=0;$script:infoReads=0
 function Get-Date {$script:clock=$script:clock.AddSeconds(31);$script:clock}
 function New-SetupGuiStage {param($SourceRoot,$CommonDataRoot,$Role,$UserSid,$CallerSession,$DesktopSession,$Computer,[switch]$VerifyOnly)
  $script:created++;Assert ($SourceRoot -eq $root -and $UserSid -eq $script:scope.UserSID -and $CallerSession -eq $script:scope.SessionId -and $DesktopSession -eq 4) 'controller stages exact current caller and selected desktop'
@@ -39,6 +39,7 @@ function Read-SetupGuiResult {param($Stage) [pscustomobject]@{Success=(-not $scr
 function New-ScheduledTaskAction {param($Execute,$Argument) Assert ($Execute -ceq 'fixture powershell.exe' -and $Argument.Contains((Join-Path $script:stage.CodeRoot 'core/gui_worker.ps1')) -and $Argument.Contains($script:stage.Context.RunId) -and $Argument.Contains('-Role Explorer') -and -not $Argument.Contains('EncodedCommand')) 'task launches fixed staged worker with only bounded role and run ID';[pscustomobject]@{Execute=$Execute}}
 function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel) Assert ($UserId -ceq $script:scope.UserSID -and $LogonType -ceq 'Interactive' -and $RunLevel -ceq 'Highest') 'GUI task binds original SID interactive highest token';[pscustomobject]@{UserId=$UserId}}
 function Get-ScheduledTask {param($TaskName,$ErrorAction) if($script:started -gt 0){$state=$script:taskState;if($script:states.Count){$state=$script:states[0];$script:states=@($script:states|Select-Object -Skip 1)};[pscustomobject]@{State=$state}}}
+function Get-ScheduledTaskInfo {param($TaskName,$ErrorAction) if(-not $TaskName.Contains($script:stage.Context.RunId)){throw 'wrong task info lookup'};$script:infoReads++;[pscustomobject]@{LastTaskResult=$script:taskExit}}
 function Register-ScheduledTask {param($TaskName,$Action,$Principal,$ErrorAction) Assert ($TaskName.Contains($script:stage.Context.RunId)) 'GUI task uses unique current-run identity'}
 function Start-ScheduledTask {param($TaskName) $script:started++;if($script:writeReport){[IO.File]::WriteAllText((Join-Path $script:stage.DataRoot (Get-SetupGuiResultName $script:stage.Context)),'fixture')}}
 function Unregister-ScheduledTask {param($TaskName,[switch]$Confirm) $script:removed++}
@@ -57,4 +58,10 @@ Assert ($script:disposed -eq 4 -and $script:removed -eq 2) 'timeout releases con
 $script:started=0;$script:writeReport=$true;$script:taskState='Ready';$script:states=@('Running','Ready');$beforeRemoved=$script:removed;$beforeDisposed=$script:disposed
 Invoke-SetupGuiRole -PackageRoot $root -Role Explorer -VerifyOnly|Out-Null
 Assert ($script:states.Count -eq 0 -and $script:removed -eq $beforeRemoved+1 -and $script:disposed -eq $beforeDisposed+1) 'controller waits for worker to finish after report publication and removes completed unique task'
+$script:started=0;$script:taskExit=7;$beforeRemoved=$script:removed;$beforeDisposed=$script:disposed
+Reject {Invoke-SetupGuiRole -PackageRoot $root -Role Explorer -VerifyOnly} '退出碼' 'fresh successful report cannot override completed worker exit seven'
+Assert ($script:removed -eq $beforeRemoved+1 -and $script:disposed -eq $beforeDisposed+1) 'nonzero completed worker still cleans its own task and controller lock'
+$script:started=0;$script:taskExit=0;$beforeReads=$script:infoReads
+Invoke-SetupGuiRole -PackageRoot $root -Role Explorer -VerifyOnly|Out-Null
+Assert ($script:infoReads -eq $beforeReads+1) 'completed zero-exit worker requires native task information before accepting report'
 Write-Host ('ALL PASS: '+$script:count+' GUI dispatch assertions; no real tasks or UI changes')

@@ -15,6 +15,7 @@ function Assert-SetupGuiProtectedPath {param($Path,[switch]$Directory,$UserSid) 
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) [pscustomobject]@{SessionId=4}}
 function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) [pscustomobject]@{ReturnValue=0;Sid='S-1-5-21-1-2-3-1001'}}
 function Get-ScheduledTask {param($TaskName,$ErrorAction) if($script:tasks.ContainsKey($TaskName)){[pscustomobject]@{State='Ready'}}}
+function Get-ScheduledTaskInfo {param($TaskName,$ErrorAction) if(-not $script:tasks.ContainsKey($TaskName)){throw 'missing pipeline task'};[pscustomobject]@{LastTaskResult=0}}
 function New-ScheduledTaskAction {param($Execute,$Argument) $script:taskArguments+=@($Argument);[pscustomobject]@{Execute=$Execute;Argument=$Argument}}
 function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel) if($UserId -ne 'S-1-5-21-1-2-3-1001' -or $LogonType -ne 'Interactive' -or $RunLevel -ne 'Highest'){throw 'wrong principal'};[pscustomobject]@{UserId=$UserId}}
 function Register-ScheduledTask {param($TaskName,$Action,$Principal,$ErrorAction) $script:tasks[$TaskName]=$Action}
