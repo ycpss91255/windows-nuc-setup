@@ -71,6 +71,22 @@ foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immu
  Assert ($global:repoPublicationPublished -eq $(if($mode -eq 'bad-digest'){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
 }
 Remove-Item Function:\gh
+function New-LocalEntry {
+ $manifestPath=Join-Path $public 'quality-manifest.json'
+ $manifest=Get-Content $manifestPath -Raw -Encoding UTF8|ConvertFrom-Json
+ foreach($file in $manifest.Files){$file.SHA256=(Get-FileHash (Join-Path $public $file.Name)).Hash.ToLowerInvariant()}
+ [IO.File]::WriteAllText($manifestPath,($manifest|ConvertTo-Json -Depth 10),$utf8)
+ [pscustomobject]@{Version='v1.0.0';Commit=$identity.Commit;ReleaseUrl='https://github.com/example/repo/releases/tag/v1.0.0';Immutable=$true;SnapshotPath=(Join-Path $public 'quality.json');ManifestPath=$manifestPath;SnapshotDigest=('sha256:'+(Get-FileHash (Join-Path $public 'quality.json')).Hash.ToLowerInvariant());ManifestDigest=('sha256:'+(Get-FileHash $manifestPath).Hash.ToLowerInvariant());AssetDirectory=$public;AssetDigests=@(Get-ChildItem $public -File|ForEach-Object {[pscustomobject]@{Name=$_.Name;Digest=('sha256:'+(Get-FileHash $_.FullName).Hash.ToLowerInvariant())}})}
+}
+$entry=New-LocalEntry
+$verified=Test-PortalReleaseEvidence -Entry $entry -CoverageToolPath $tool
+Assert ($verified.Snapshot.RepoCoverage.Result.Percent -eq 80) 'manifest2歷史來源同樣重算整體量測'
+$xmlOriginal=[IO.File]::ReadAllText((Join-Path $public 'coverage.xml'))
+[IO.File]::AppendAllText((Join-Path $public 'coverage.xml'),' ')
+$forged=New-LocalEntry
+Refuse {Test-PortalReleaseEvidence -Entry $forged -CoverageToolPath $tool} '即使外層digest重簽仍拒絕與coverage內層hash不同的附件'
+[IO.File]::WriteAllText((Join-Path $public 'coverage.xml'),$xmlOriginal,$utf8)
+$entry=New-LocalEntry
 $before=(Get-FileHash (Join-Path $public 'summary.json')).Hash
 [IO.File]::AppendAllText((Join-Path $evidence 'coverage.xml'),'tampered')
 Refuse {& (Join-Path $root 'script/test/attach_repo_coverage.ps1') -PublicDirectory $public -CoverageDirectory $evidence -CoverageToolPath $tool} '篡改逐行證據不得附加'
