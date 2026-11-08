@@ -4,23 +4,29 @@ function Invoke-SetupAfterRestart {
  $ErrorActionPreference='Stop'
 $errors=@();$remaining=@()
 $resultPath=Resolve-NucPath 'Setup-Result.json'
+$retryFiles=@()
 if(Test-Path $resultPath){
  $previous=Get-Content $resultPath -Raw|ConvertFrom-Json
  $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
  if($previous.Computer -eq $env:COMPUTERNAME -and $previous.UserSID -eq $sid){
   $config=[IO.File]::ReadAllText((Resolve-NucPath 'configuration_library.ps1'))
   $allowed=@([regex]::Matches($config,"File='([^']+\.ps1)'" )|ForEach-Object {$_.Groups[1].Value})
-  foreach($file in @($previous.FailedModules|ForEach-Object {Resolve-NucModuleName $_}|Where-Object {$_ -and $_ -ne 'install_windows_updates.ps1'})){
+  $retryFiles=@($previous.FailedModules|ForEach-Object {Resolve-NucModuleName $_}|Where-Object {$_ -and $_ -ne 'install_windows_updates.ps1'})
+  foreach($file in $retryFiles){
    if($file -notin $allowed){throw ('未知的失敗模組：'+$file)}
-   $decision=Get-SetupModuleDecision -Module $file -Hardware $hardware
-   if(-not $decision.Applicable){Write-Host ('[略過] '+$decision.Reason);continue}
-   Write-Host ('重試未完成模組：'+$file) -ForegroundColor Cyan
-   try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -NonInteractive -DriverPackagePath $DriverPackagePath @confirmation}elseif($file -eq 'apply_start_menu_settings.ps1'){& (Resolve-NucPath $file) -VerifyOnly|Out-Null}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
+
   }
  }
 }
 Write-Host '重新掃描更新；完成後再次清理預載程式並驗證。' -ForegroundColor Cyan
-foreach($file in @('install_windows_updates.ps1','apply_debloat.ps1','apply_copilot_settings.ps1','remove_setup_residue.ps1')){
+try{ & (Resolve-NucPath 'install_windows_updates.ps1') }catch{$errors+=('install_windows_updates.ps1：'+$_.Exception.Message);$remaining+='install_windows_updates.ps1';Write-Warning $errors[-1]}
+foreach($file in $retryFiles){
+   $decision=Get-SetupModuleDecision -Module $file -Hardware $hardware
+   if(-not $decision.Applicable){Write-Host ('[略過] '+$decision.Reason);continue}
+   Write-Host ('重試未完成模組：'+$file) -ForegroundColor Cyan
+   try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -NonInteractive -DriverPackagePath $DriverPackagePath @confirmation}elseif($file -eq 'apply_start_menu_settings.ps1'){& (Resolve-NucPath $file) -VerifyOnly|Out-Null}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
+}
+foreach($file in @('apply_debloat.ps1','apply_copilot_settings.ps1','remove_setup_residue.ps1')){
  try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -NonInteractive -DriverPackagePath $DriverPackagePath @confirmation}elseif($file -eq 'apply_start_menu_settings.ps1'){& (Resolve-NucPath $file) -VerifyOnly|Out-Null}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
 }
 if($previous -and $previous.Computer -eq $env:COMPUTERNAME -and $previous.UserSID -eq $sid){
