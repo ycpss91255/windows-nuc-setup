@@ -7,10 +7,11 @@ $log=Resolve-NucPath ('Setup-'+(Get-Date -Format yyyyMMdd-HHmmss)+'.log')
 Start-Transcript -Path $log | Out-Null
 try {
     Write-Host '[1/19] 管理員免提示與開機自動登入' -ForegroundColor Cyan
-    Write-Progress -Id 1 -Activity 'Windows 一鍵設定' -Status '[1/19] 自動登入' -PercentComplete 0
     & (Resolve-NucPath 'apply_uac_settings.ps1')
+    # Start the progress pane only after the SecureString credential prompt has returned.
     & (Resolve-NucPath 'apply_autologon_settings.ps1') -UserName $UserName -AutoLogonPassword $AutoLogonPassword
     $AutoLogonPassword=$null
+    Write-Progress -Id 1 -Activity 'Windows 一鍵設定' -Status '[1/19] 自動登入完成' -PercentComplete 0
     $auto=Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
     $stageErrors=@();$failedModules=@();$startResult=$null
     $stageIndex=1
