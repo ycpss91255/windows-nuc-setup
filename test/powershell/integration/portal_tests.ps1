@@ -30,13 +30,13 @@ $unknown=[pscustomobject]@{Version='v0.1.0';Commit=('d'*40);ReleaseUrl='https://
 $catalog=Join-Path $fixture 'catalog.json';@($a,$b,$unknown)|ConvertTo-Json -Depth 12|Set-Content $catalog -Encoding UTF8
 $mainDir=Join-Path $fixture 'main'
 $null=Write-TestReports -SchemaVersion 1 -Checks $checks -OutputDirectory $mainDir -Layer All -Commit ('e'*40) -RunUrl 'https://github.com/example/repo/actions/runs/43' -SourceState Clean -Version v1.0.1 -Environment 'Windows fixture / PowerShell 5.1' -RefType Branch -RefName main -MeasuredAt '2026-11-07T01:00:00Z' -Changes @('new main')
-$portal1=Join-Path $fixture 'portal1'; & (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $portal1 -MainSnapshotPath (Join-Path $mainDir 'summary.json')|Out-Null
+$portal1=Join-Path $fixture 'portal1'; & (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $catalog -OutputDirectory $portal1 -MainSnapshotPath (Join-Path $mainDir 'summary.json')|Out-Null
 Assert ((Get-Content (Join-Path $portal1 'versions/v1.0.0/index.html') -Raw -Encoding UTF8).Contains('此頁依原始版本紀錄整理')) '歷史頁清楚區分重繪摘要與原始附件'
 Assert ((Get-Content (Join-Path $a.AssetDirectory 'index.html') -Raw -Encoding UTF8).Contains('old renderer evidence')) '不修改原始不可變證據'
 Assert ((Get-FileHash (Join-Path $portal1 'versions/v1.0.0/summary.json')).Hash -eq (Get-FileHash $a.SnapshotPath).Hash) '重繪歷史摘要保留原始JSON雜湊'
 Assert (((Get-Content (Join-Path $portal1 'versions.json') -Raw -Encoding UTF8|ConvertFrom-Json)|Where-Object Version -eq 'v0.1.0').Status -eq 'Unknown') 'old release without evidence retains Unknown data status'
 $null=Write-TestReports -SchemaVersion 1 -Checks $checks -OutputDirectory $mainDir -Layer All -Commit ('f'*40) -RunUrl 'https://github.com/example/repo/actions/runs/44' -SourceState Clean -Version v1.0.1 -Environment 'Windows fixture / PowerShell 5.1' -RefType Branch -RefName main -MeasuredAt '2026-11-07T02:00:00Z' -Changes @('later main')
-$portal2=Join-Path $fixture 'portal2'; & (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $portal2 -MainSnapshotPath (Join-Path $mainDir 'summary.json')|Out-Null
+$portal2=Join-Path $fixture 'portal2'; & (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $catalog -OutputDirectory $portal2 -MainSnapshotPath (Join-Path $mainDir 'summary.json')|Out-Null
 foreach($version in @('v1.0.0','v1.0.1')){Assert ((Get-FileHash (Join-Path $portal1 ('versions/'+$version+'/index.html'))).Hash -eq (Get-FileHash (Join-Path $portal2 ('versions/'+$version+'/index.html'))).Hash) ('latest update preserves distinct-version renderer bytes: '+$version)}
 $first=Get-Content $a.SnapshotPath -Raw -Encoding UTF8|ConvertFrom-Json;$second=Get-Content $b.SnapshotPath -Raw -Encoding UTF8|ConvertFrom-Json
 $first.Checks[0].Assertions=@([pscustomobject]@{Name='fixed';Passed=$false},[pscustomobject]@{Name='new-fail';Passed=$true},[pscustomobject]@{Name='removed';Passed=$true})
@@ -50,7 +50,7 @@ Assert ((Compare-TestSnapshots $first $null).Status -eq 'Unknown') 'missing base
 Assert (-not(Test-Path (Join-Path $portal1 'compare.js'))) '取消比較前台程式'
 # A corrupted historical attachment is Invalid, not Verified, without blocking other versions.
 [IO.File]::AppendAllText((Join-Path $a.AssetDirectory 'index.html'),'tampered')
-$portal3=Join-Path $fixture 'portal3'; & (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $portal3|Out-Null
+$portal3=Join-Path $fixture 'portal3'; & (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $catalog -OutputDirectory $portal3|Out-Null
 $versions=Get-Content (Join-Path $portal3 'versions.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert (($versions|Where-Object Version -eq 'v1.0.0').Status -eq 'Invalid' -and ($versions|Where-Object Version -eq 'v1.0.1').Status -eq 'Verified') 'corrupt version is Invalid while valid history remains available'
 # Parameterized tests can emit duplicate display names: retain evidence but refuse ambiguous comparisons.
@@ -63,7 +63,7 @@ Assert ($comparison.Status -eq 'Unknown' -and $comparison.Reason.Contains('重�
 $duplicateCatalog=Join-Path $fixture 'duplicate_catalog.json'
 ConvertTo-Json -InputObject @($duplicate) -Depth 12|Set-Content $duplicateCatalog -Encoding UTF8
 $duplicatePortal=Join-Path $fixture 'duplicate_portal'
-& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $duplicateCatalog -MainSnapshotPath (Join-Path $mainDir 'summary.json') -OutputDirectory $duplicatePortal|Out-Null
+& (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $duplicateCatalog -MainSnapshotPath (Join-Path $mainDir 'summary.json') -OutputDirectory $duplicatePortal|Out-Null
 Assert (-not(Test-Path (Join-Path $duplicatePortal 'comparisons')) -and (Test-Path (Join-Path $duplicatePortal 'main/unit.svg'))) '不產生比較資料且主線報告可用'
 $preserved=Get-Content (Join-Path $duplicatePortal 'versions/v1.0.2/summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert ($preserved.Checks[0].Assertions.Count -eq 2) 'both measured assertions remain in immutable evidence'
@@ -118,6 +118,6 @@ $failedDir=Join-Path $fixture 'failed_main'
 $null=Write-TestReports -SchemaVersion 1 -Checks $failedChecks -OutputDirectory $failedDir -Layer All -Commit ('8'*40) -RunUrl 'https://github.com/example/repo/actions/runs/45' -SourceState Clean -Version v1.0.1 -Environment 'Windows fixture / PowerShell 5.1' -RefType Branch -RefName main -MeasuredAt '2026-11-07T03:00:00Z'
 $emptyCatalog=Join-Path $fixture 'empty_catalog.json';[IO.File]::WriteAllText($emptyCatalog,'[]')
 $failedPortal=Join-Path $fixture 'failed_portal'
-& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $emptyCatalog -OutputDirectory $failedPortal -MainSnapshotPath (Join-Path $failedDir 'summary.json')|Out-Null
+& (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $emptyCatalog -OutputDirectory $failedPortal -MainSnapshotPath (Join-Path $failedDir 'summary.json')|Out-Null
 Assert ((Get-Content (Join-Path $failedPortal 'index.html') -Raw -Encoding UTF8).Contains('目前程式檢查未通過')) '最新檢查失敗在首頁清楚顯示'
 Write-Host ('UX preview: '+(Join-Path $portal1 'index.html'))

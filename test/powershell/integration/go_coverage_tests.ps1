@@ -54,17 +54,17 @@ Assert ($joined.GoCoverage.ProfileSHA256 -eq $coverage.ProfileSHA256 -and $joine
 Assert ((Get-FileHash (Join-Path $arguments.OutputDirectory 'go_coverage.out')).Hash -eq (Get-FileHash $profile).Hash) 'published profile bytes match measured source file'
 $catalog=Join-Path $fixture 'catalog.json';[IO.File]::WriteAllText($catalog,'[]')
 $portal=Join-Path $fixture 'portal'
-& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $portal -MainSnapshotPath (Join-Path $arguments.OutputDirectory 'summary.json') -RequireGoCoverage|Out-Null
+& (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $catalog -OutputDirectory $portal -MainSnapshotPath (Join-Path $arguments.OutputDirectory 'summary.json') -RequireGoCoverage|Out-Null
 Assert ((Get-FileHash (Join-Path $portal 'main/go_coverage.out')).Hash -eq (Get-FileHash $profile).Hash -and (Test-Path (Join-Path $portal 'main/go_coverage.svg'))) 'main portal preserves dedicated Go coverage artifacts'
 $portalHome=[IO.File]::ReadAllText((Join-Path $portal 'index.html'))
 Assert ($portalHome.Contains('整體覆蓋率') -and $portalHome.Contains('尚未提供完整量測') -and -not $portalHome.Contains('80.0%') -and $portalHome.Contains('main/index.html')) '首頁不以Go分項冒充整體，提供真實分項報告入口'
 $portalDetail=[IO.File]::ReadAllText((Join-Path $portal 'main/index.html'))
 Assert ($portalDetail.Contains('Go 程式敘述覆蓋率：80.0%') -and $portalDetail.Contains('8/10 statements') -and $portalDetail.Contains('不等於整體覆蓋率')) '首頁簡化不丟失報告中的Go量測分項'
 $legacyPortal=Join-Path $fixture 'legacy_portal'
-& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $legacyPortal -MainSnapshotPath (Join-Path $fixture 'legacy/summary.json')|Out-Null
+& (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $catalog -OutputDirectory $legacyPortal -MainSnapshotPath (Join-Path $fixture 'legacy/summary.json')|Out-Null
 $legacyHome=[IO.File]::ReadAllText((Join-Path $legacyPortal 'index.html'))
 Assert (($legacyHome.Contains('整體覆蓋率') -and $legacyHome.Contains('尚未提供完整量測')) -and -not $legacyHome.Contains('Go 程式敘述覆蓋率：')) 'legacy portal without measured Go never invents a percentage'
-Refuse {& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory (Join-Path $fixture 'missing') -MainSnapshotPath (Join-Path $fixture 'legacy/summary.json') -RequireGoCoverage} 'current main publication cannot silently omit measured Go coverage'
+Refuse {& (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $catalog -OutputDirectory (Join-Path $fixture 'missing') -MainSnapshotPath (Join-Path $fixture 'legacy/summary.json') -RequireGoCoverage} 'current main publication cannot silently omit measured Go coverage'
 $before=(Get-FileHash (Join-Path $arguments.OutputDirectory 'summary.json')).Hash
 [IO.File]::AppendAllText($profile,'tampered')
 Refuse {& $attach -PublicDirectory $arguments.OutputDirectory -CoverageDirectory $producer} 'tampered raw profile cannot be attached'

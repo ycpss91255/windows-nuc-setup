@@ -18,7 +18,7 @@ function Assert-RepoCoverage {
  }
  if($r.Covered -ne $covered -or $r.Executable -ne $executable){throw '整體與語言計數不一致。'}
  if($r.Complete){
-  if(@($r.Missing).Count -or @($r.Blockers).Count -or $executable -le 0 -or $null -eq $r.Percent -or [Math]::Abs([double]$r.Percent-100.0*$covered/$executable) -gt 0.0000001){throw '完整覆蓋率缺來源或百分比不符。'}
+  if(@($r.Missing|Where-Object {$null -ne $_}).Count -or @($r.Blockers|Where-Object {$null -ne $_}).Count -or $executable -le 0 -or $null -eq $r.Percent -or [Math]::Abs([double]$r.Percent-100.0*$covered/$executable) -gt 0.0000001){throw '完整覆蓋率缺來源或百分比不符。'}
  }elseif($null -ne $r.Percent){throw '不完整量測不能顯示總率。'}
 }
 function Get-RepoCoveragePercentText {
@@ -35,4 +35,17 @@ function Get-RepoCoverageLanguages {
  param($Coverage)
  if($null -eq $Coverage){return @()}
  return @(foreach($item in @($Coverage.Result.Languages.PSObject.Properties|Sort-Object Name)){$item.Name+'：'+$item.Value.Covered+'/'+$item.Value.Executable+' 可執行行'})
+}
+function Assert-RepoCoverageArtifacts {
+ param([Parameter(Mandatory=$true)]$Report,[Parameter(Mandatory=$true)][string]$Directory,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL,[string]$SourceRoot,[switch]$RequireComplete)
+ if(-not $Report.PSObject.Properties['RepoCoverage']){throw '缺少整體覆蓋率，拒絕發布。'}
+ Assert-RepoCoverage $Report.RepoCoverage $Report
+ $published=Get-Content -LiteralPath (Join-Path $Directory 'repo_coverage.json') -Raw -Encoding UTF8|ConvertFrom-Json
+ if(($published|ConvertTo-Json -Depth 20 -Compress) -cne ($Report.RepoCoverage|ConvertTo-Json -Depth 20 -Compress)){throw '摘要與整體覆蓋率附件不一致。'}
+ if(-not $CoverageToolPath){$CoverageToolPath='repo_coverage_tool.exe'}
+ $arguments=@('verify','--artifact-dir',$Directory,'--expected-sha',$Report.Commit,'--expected-run-url',$Report.RunUrl)
+ if($SourceRoot){$arguments+=@('--source-root',$SourceRoot)}
+ if($RequireComplete){$arguments+=@('--require-complete','--minimum-percent','80')}
+ & $CoverageToolPath @arguments | Write-Host
+ if($LASTEXITCODE -ne 0){throw ('整體覆蓋率證據驗證失敗：'+$LASTEXITCODE)}
 }

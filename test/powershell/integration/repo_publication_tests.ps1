@@ -26,8 +26,8 @@ foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml'
 $catalog=Join-Path $fixture 'catalog.json';[IO.File]::WriteAllText($catalog,'[]')
 $portal=Join-Path $fixture 'portal'
 & (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory $portal -MainSnapshotPath (Join-Path $public 'summary.json') -CoverageToolPath $tool|Out-Null
-$home=[IO.File]::ReadAllText((Join-Path $portal 'index.html'))
-Assert ($home.Contains('80.0%') -and $home.Contains('4/5 可執行行')) 'Pages首頁顯示整體共同計量'
+$landingPage=[IO.File]::ReadAllText((Join-Path $portal 'index.html'))
+Assert ($landingPage.Contains('80.0%') -and $landingPage.Contains('4/5 可執行行')) 'Pages首頁顯示整體共同計量'
 foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml')){Assert ((Get-FileHash (Join-Path $portal ('main/'+$name))).Hash -eq (Get-FileHash (Join-Path $evidence $name)).Hash) ('Pages保留可重算證據：'+$name)}
 $missing=Join-Path $fixture 'missing';Write-TestReports -Checks $checks -OutputDirectory $missing @identity -RefName main|Out-Null
 Refuse {& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory (Join-Path $fixture 'missing_portal') -MainSnapshotPath (Join-Path $missing 'summary.json') -CoverageToolPath $tool} '正式Pages缺整體量測必須拒絕'
