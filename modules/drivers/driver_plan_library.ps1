@@ -83,6 +83,42 @@ function Get-SetupDriverDeviceInventory {
 function Get-SetupDriverPnpTool {
  return Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'pnputil.exe'
 }
+function Get-SetupDriverExtensionInventory {
+ $output=& (Get-SetupDriverPnpTool) /enum-drivers /devices /format xml 2>&1
+ if($LASTEXITCODE -ne 0){throw ('原生延伸驅動XML盤點失敗：'+$LASTEXITCODE+'；不能以僅存在DriverStore當作已套用。')}
+ $settings=New-Object Xml.XmlReaderSettings;$settings.DtdProcessing=[Xml.DtdProcessing]::Prohibit;$settings.XmlResolver=$null;$settings.MaxCharactersInDocument=52428800
+ $reader=[Xml.XmlReader]::Create([IO.StringReader]::new(($output -join "`n")),$settings)
+ try{$document=New-Object Xml.XmlDocument;$document.XmlResolver=$null;$document.Load($reader)}finally{$reader.Dispose()}
+ if($document.DocumentElement.LocalName -cne 'pnputil'){throw '原生延伸驅動盤點不是預期XML。'}
+ return $document
+}
+function Get-SetupDriverExtensionReadback {
+ param([Parameter(Mandatory=$true)]$Target,[object[]]$Devices=@(),[Parameter(Mandatory=$true)][Xml.XmlDocument]$Inventory,[int]$Build)
+ $matches=@($Devices|Where-Object {$ids=@($_.HardwareIds);@($Target.HardwareIds|Where-Object {$_ -in $ids}).Count -gt 0})
+ if($Build -lt $Target.MinimumBuild -or $Target.Architecture -ne 'amd64'){return [pscustomobject]@{InfPath=$Target.InfPath;Status='NotApplicable';Association='None';InstanceId='';TargetVersion=$Target.DriverVersion}}
+ if(-not $matches){return [pscustomobject]@{InfPath=$Target.InfPath;Status='Absent';Association='None';InstanceId='';TargetVersion=$Target.DriverVersion}}
+ $candidates=@($Inventory.SelectNodes('/pnputil/driver')|Where-Object {[string]$_.ClassGuid -ieq '{e2f84ce7-8efa-411c-aa69-97454ca4cb57}' -and [string]$_.ExtensionId -ieq $Target.ExtensionId -and [string]$_.OriginalName -ieq [IO.Path]::GetFileName($Target.InfPath) -and ([string]$_.ProviderName -eq $Target.Provider -or [string]$_.ProviderName -in @($Target.ProviderAliases))})
+ $targetDate=[datetime]::MinValue
+ if(-not [datetime]::TryParseExact([string]$Target.DriverDate,'MM/dd/yyyy',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$targetDate)){throw '延伸驅動目標缺少可信DriverVer日期。'}
+ foreach($device in $matches){
+  $active=@(foreach($candidate in $candidates){
+   $associated=@($candidate.SelectNodes('Devices/Device')|Where-Object {$_.GetAttribute('InstanceId') -ieq $device.InstanceId})
+   $match=[regex]::Match([string]$candidate.DriverVersion,'^(\d{2}/\d{2}/\d{4})\s+(\d+\.\d+\.\d+\.\d+)$')
+   $date=[datetime]::MinValue;$version=$null
+   if($associated.Count -and $match.Success -and [datetime]::TryParseExact($match.Groups[1].Value,'MM/dd/yyyy',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$date) -and [version]::TryParse($match.Groups[2].Value,[ref]$version)){[pscustomobject]@{Date=$date;Version=$version;PublishedName=$candidate.GetAttribute('DriverName')}}
+  })
+  $best=@($active|Sort-Object -Property Date,Version -Descending|Select-Object -First 1)
+  $status='Unverified';$association='None';$current='';$reason='沒有可信且已關聯的延伸驅動套件'
+  if($device.Status -ne 'OK' -or $device.HardwareIdsReadError){$reason='所綁裝置異常或硬體識別不可讀'}
+  elseif($best.Count){
+   $association='Active';$current=$best[0].Version.ToString();$desired=[version]$Target.DriverVersion
+   if($best[0].Date -gt $targetDate -or ($best[0].Date -eq $targetDate -and $best[0].Version -gt $desired)){$status='NewerInstalled';$reason='同ExtensionId較新DriverVer已關聯，保留原生排名'}
+   elseif($best[0].Date -eq $targetDate -and $best[0].Version -eq $desired){$status='Current';$reason='已核版本精確關聯本輪裝置'}
+   else{$status='UpdateRequired';$reason='目前已關聯的延伸DriverVer早於已核目標'}
+  }elseif($candidates.Count){$status='Staged';$association='Staged';$reason='套件只在DriverStore，未關聯本輪裝置'}
+  [pscustomobject]@{InfPath=$Target.InfPath;InstanceId=$device.InstanceId;Status=$status;Association=$association;CurrentVersion=$current;TargetVersion=$Target.DriverVersion;ExtensionId=$Target.ExtensionId;Reason=$reason}
+ }
+}
 function Invoke-SetupDriverInfInstall {
  param([Parameter(Mandatory=$true)][string]$InfPath,[Parameter(Mandatory=$true)][string]$LogPath,[switch]$StageOnly)
  $arguments=@('/add-driver',$InfPath);if(-not $StageOnly){$arguments+='/install'}
