@@ -44,4 +44,27 @@ if($PSVersionTable.PSVersion.Major -ge 7 -and [Environment]::Version.Major -ge 8
  try{$ErrorActionPreference='Continue';& pwsh.exe -NoProfile -File $reader -SourceRoot $temp -AssemblyPath $dll -PDBPath $otherPdb -OutputPath (Join-Path $temp 'invalid.json') *> (Join-Path $temp 'mismatch.log');$rejected=($LASTEXITCODE -ne 0)}finally{$ErrorActionPreference=$savedPreference}
 }
 Assert ($rejected -and -not(Test-Path (Join-Path $temp 'invalid.json'))) 'swapped PDB cannot publish a valid source catalog'
+function Assert-CatalogRejected {
+ param([string]$SourceDirectory,[string]$PE,[string]$Symbols,[string]$Expected,[string]$Name)
+ if($PSVersionTable.PSVersion.Major -ge 7 -and [Environment]::Version.Major -ge 8){
+  $message='';try{Get-ManagedPortableCatalog -SourceRoot $SourceDirectory -AssemblyPath $PE -PDBPath $Symbols|Out-Null}catch{$message=$_.Exception.Message}
+ }else{
+  $log=Join-Path $temp ('rejected_'+[guid]::NewGuid().ToString('N')+'.log');$target=Join-Path $temp ('rejected_'+[guid]::NewGuid().ToString('N')+'.json')
+  $savedPreference=$ErrorActionPreference
+  try{$ErrorActionPreference='Continue';& pwsh.exe -NoProfile -File $reader -SourceRoot $SourceDirectory -AssemblyPath $PE -PDBPath $Symbols -OutputPath $target *> $log;$exitCode=$LASTEXITCODE}finally{$ErrorActionPreference=$savedPreference}
+  if($exitCode -eq 0){throw 'Expected rejection but catalog command succeeded'}
+  $message=[IO.File]::ReadAllText($log)
+ }
+ Assert ($message -match [regex]::Escape($Expected)) $Name
+}
+Assert-CatalogRejected $temp $dll $pdb 'Compiler PDB source checksum differs' 'modified source cannot be accepted using old compiler checksum'
+Assert-CatalogRejected (Join-Path $temp 'unrelated') $other $otherPdb 'outside the declared source root' 'compiler source document cannot escape declared source root'
+$noDebug=Join-Path $temp 'no_debug.dll'
+& $dotnet $compiler /nologo /noconfig /nostdlib+ /target:library /debug- ('/out:'+$noDebug) ('/reference:'+(Join-Path $refs 'mscorlib.dll')) $source
+if($LASTEXITCODE -ne 0){throw 'No-debug fixture compilation failed'}
+Assert-CatalogRejected $temp $noDebug $otherPdb 'exactly one portable PDB' 'assembly without debug identity is rejected'
+$sha1=Join-Path $temp 'sha1.dll';$sha1Pdb=Join-Path $temp 'sha1.pdb'
+& $dotnet $compiler /nologo /noconfig /nostdlib+ /target:library /debug:portable /checksumalgorithm:sha1 ('/out:'+$sha1) ('/pdb:'+$sha1Pdb) ('/reference:'+(Join-Path $refs 'mscorlib.dll')) $source
+if($LASTEXITCODE -ne 0){throw 'SHA1 fixture compilation failed'}
+Assert-CatalogRejected $temp $sha1 $sha1Pdb 'checksums must use SHA256' 'weak compiler source checksum is rejected'
 Write-Host ('ALL PASS: '+$script:count+' actual PE/portable PDB catalog assertions; no assembly code invoked')
