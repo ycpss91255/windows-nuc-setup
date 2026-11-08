@@ -37,4 +37,9 @@ $client=New-FakeClient;$client.IsBusy=$true;$script:events=@();Reject {Invoke-Se
 $client=New-FakeClient;$client.Job.Never=$true;$script:events=@();Reject {Invoke-SetupUpdateOperation -Operation Download -Client $client -Titles a -ProgressPath x -TimeoutSeconds 0 -PollSeconds 0} '下載超時明確失敗';Assert ($script:events -contains 'Abort' -and $script:events -contains 'CleanUp' -and @($script:events|Where-Object {$_ -eq 'Begin'}).Count -eq 1) '超時只中止自己工作並清理不重啟';Assert $script:cleanupSawFailure '進入可能阻塞的COM清理前已保存失敗進度'
 $client=New-FakeClient;$script:failEnd=$true;$script:events=@();Reject {Invoke-SetupUpdateOperation -Operation Install -Client $client -Titles a -ProgressPath x -PollSeconds 0} 'End錯誤如實失敗';Assert ($script:events[-1] -eq 'CleanUp') 'End失敗仍Cleanup';$script:failEnd=$false
 $client=New-FakeClient;$script:failProgress=$true;$script:events=@();Reject {Invoke-SetupUpdateOperation -Operation Download -Client $client -Titles a -ProgressPath x -PollSeconds 0} '進度API錯誤不假成功';Assert ($script:events -contains 'Abort' -and $script:events[-1] -eq 'CleanUp') '進度失敗清理自己job';$script:failProgress=$false
+# Reload the named library to test the real constructor, not the fake WUA operation boundary.
+. $lib
+$a=New-SetupUpdateCallback;$b=New-SetupUpdateCallback
+Assert ($a.GetType().FullName -eq 'WindowsSetup.UpdateCallback' -and $b.GetType().FullName -eq 'WindowsSetup.UpdateCallback') '真原檔callback建構首次編譯與重用類型均成功'
+$a.Invoke($null,$null);$b.Invoke($null,$null)
 Write-Host 'ALL PASS: fake WUA boundaries, original orchestration only'
