@@ -44,6 +44,14 @@ function Assert-LocalDriverReleaseAsset {
  Add-Type -AssemblyName System.IO.Compression,System.IO.Compression.FileSystem
  $archive=[IO.Compression.ZipFile]::OpenRead($file)
  try{
+  $names=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  foreach($entry in $archive.Entries){
+   $name=$entry.FullName
+   if($name.Contains('\') -or $name.StartsWith('/')){throw 'Driver archive contains a noncanonical Windows path.'}
+   if($name.EndsWith('/')){$name=$name.Substring(0,$name.Length-1)}
+   $segments=@($name.Split('/'))
+   if(@($segments|Where-Object {[string]::IsNullOrEmpty($_) -or $_ -in @('.','..') -or $_.EndsWith('.') -or $_.EndsWith(' ') -or $_.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0}).Count -or -not $names.Add($name)){throw 'Driver archive contains an aliased or duplicate Windows path.'}
+  }
   $licenses=@($archive.Entries|Where-Object FullName -ieq 'license')
   if($licenses.Count -ne 1 -or $licenses[0].FullName -cne 'license' -or $licenses[0].Length -ne 11358){throw 'Driver archive must contain exactly one canonical root license.'}
   $licenseStream=$licenses[0].Open();$licenseSHA=[Security.Cryptography.SHA256]::Create()
