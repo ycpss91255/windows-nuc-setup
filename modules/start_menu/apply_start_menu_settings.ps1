@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 #Requires -RunAsAdministrator
-param([switch]$Worker,[switch]$VerifyOnly)
+param([switch]$Worker,[switch]$VerifyOnly,[switch]$ApplyPolicy,[switch]$NonInteractive)
 $ErrorActionPreference='Stop'
 $resultFileName=if($VerifyOnly){'StartMenu-Verification.json'}else{'StartMenu-Result.json'}
 $root=Join-Path $env:ProgramData 'NUC8-Setup'
