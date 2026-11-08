@@ -36,3 +36,5 @@ OOBE 入口需要 assets/hide_oobe.ppkg、hide_oobe.xml、provenance.json，發�
 CI 的 oobe_payload_inspection 獨立使用 script/test/verify_oobe_payload.ps1，以原生 WIM 唯讀列檔和抽取七個允許路徑；所有 XML 禁止 DTD／外部實體，並限制大小。沒有已由主代理及獨立審查確認的 payload_baseline.json 時會失敗，保留七天內容證據供審查，不能視為通過。這是設定資產檢查，不是 Windows 安裝 E2E。
 
 官方依據：[OOBEComplete](https://learn.microsoft.com/en-us/windows/win32/api/oobenotification/nf-oobenotification-oobecomplete)、[WCD OOBE 設定](https://learn.microsoft.com/en-us/windows/configuration/wcd/wcd-oobe)、[設定包命令列建置](https://learn.microsoft.com/en-us/windows/configuration/provisioning-packages/provisioning-command-line)。
+
+來源與原生 metadata 分層：Assert-InitProvisioningAssetSource 只核對三檔來源；runtime 使用的 Assert-InitProvisioningAsset 始終再呼叫 Windows 11 client 原生 API，缺少命令或 metadata 不符即失敗。Server CI 的真 WIM 內容檢驗不冒稱 client metadata 測試；本機唯讀六項檢查命令見根目錄 README 的 Windows CI 章節。
