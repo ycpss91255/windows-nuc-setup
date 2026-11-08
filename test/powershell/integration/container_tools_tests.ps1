@@ -16,6 +16,13 @@ Assert (-not(Test-Path $reports)) 'planning never creates or overwrites report d
 [IO.File]::AppendAllText((Join-Path $source 'script/docker/container_test.ps1'),"`r`n# changed fixture")
 $changed=Get-ContainerContext $source $reports
 Assert ($changed.Image -cne $first.Image) 'changed runner content cannot reuse stale image tag'
+# The toolchain installer must participate in the content-addressed build cache.
+$managedInstaller=Join-Path $source 'script/docker/install_managed_tools.ps1'
+Copy-Item -LiteralPath (Join-Path $root 'script/docker/install_managed_tools.ps1') -Destination $managedInstaller
+$beforeManaged=Get-ContainerContext $source $reports
+[IO.File]::AppendAllText($managedInstaller,"`r`n# changed managed tool pin")
+$afterManaged=Get-ContainerContext $source $reports
+Assert ($afterManaged.Image -cne $beforeManaged.Image) 'changed managed SDK or PowerShell pin cannot reuse stale offline container image'
 Refuse {Get-ContainerContext $source (Join-Path $source 'reports')} 'report bind cannot be inside read-only source'
 Refuse {Get-ContainerContext $source $fixture} 'report bind cannot contain source checkout'
 Refuse {Get-ContainerContext $source $source} 'report bind cannot equal source checkout'

@@ -39,3 +39,9 @@ function Invoke-CINative {param($File,$Arguments) if($File -eq 'pwsh.exe'){'7.6.
 $failed=$false;try{Assert-CIRequiredTools -Managed}catch{$failed=$true}
 Assert $failed 'wrong managed SDK cannot silently substitute compiler'
 Remove-Item Function:/Get-Command,Function:/Invoke-CINative
+$docker=[IO.File]::ReadAllText((Join-Path $root 'dockerfile/windows_tests.dockerfile'))
+$ignore=[IO.File]::ReadAllText((Join-Path $root '.dockerignore'))
+$runner=[IO.File]::ReadAllText((Join-Path $root 'script/docker/container_test.ps1'))
+Assert ($docker.Contains('COPY script/docker/install_managed_tools.ps1 C:/tools/install_managed_tools.ps1') -and $docker.Contains('RUN C:/tools/install_managed_tools.ps1') -and $ignore.Contains('!script/docker/install_managed_tools.ps1')) 'Docker build must actually receive and execute the pinned installer'
+Assert ($docker.Contains('C:\pwsh;C:\dotnet;') -and $docker.Contains('WINDOWS_SETUP_MANAGED_PACKAGE_PATH="C:/tools/cache/dotnet-coverage.17.14.1.nupkg"')) 'offline runtime resolves portable tools and verified local native package'
+Assert ($docker.Contains('Assert-CIRequiredTools -Managed') -and $runner.Contains('Assert-CIRequiredTools -Managed')) 'image build and test startup both reject missing managed prerequisites'
