@@ -30,14 +30,23 @@ function Register-SetupTaskbarFinalize {
   $name='WindowsSetup-Gui-TaskbarFinalize-'+$context.RunId
   if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){throw '工作列收尾 GUID 工作已存在，拒絕接管。'}
   $worker=Join-Path $final.CodeRoot 'core/gui_worker.ps1';Assert-SetupGuiProtectedPath $worker
-  $action=New-ScheduledTaskAction -Execute $Scope.PowerShell -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$worker+'" -Role TaskbarFinalize -RunId '+$context.RunId)
+  $arguments='-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$worker+'" -Role TaskbarFinalize -RunId '+$context.RunId
+  $action=New-ScheduledTaskAction -Execute $Scope.PowerShell -Argument $arguments
   $principal=New-ScheduledTaskPrincipal -UserId $context.UserSID -LogonType Interactive -RunLevel Highest
   Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -ErrorAction Stop|Out-Null
+  $registered=@(Get-ScheduledTask -TaskName $name -ErrorAction Stop)
+  if($registered.Count -ne 1 -or @($registered[0].Actions).Count -ne 1 -or -not [string]::Equals([string]$registered[0].Actions[0].Execute,[string]$Scope.PowerShell,[StringComparison]::OrdinalIgnoreCase) -or $registered[0].Actions[0].Arguments -cne $arguments -or [string]$registered[0].Principal.LogonType -cne 'Interactive' -or [string]$registered[0].Principal.RunLevel -cne 'Highest'){throw '工作列收尾原生工作讀回與固定 action 或權限不符。'}
+  try{$principalId=[string]$registered[0].Principal.UserId;$principalSid=if($principalId -match '^S-1-'){(New-Object Security.Principal.SecurityIdentifier($principalId)).Value}else{(New-Object Security.Principal.NTAccount($principalId)).Translate([Security.Principal.SecurityIdentifier]).Value}}catch{throw '工作列收尾原生工作無法解析原帳號 SID。'}
+  if($principalSid -cne $context.UserSID){throw '工作列收尾原生工作讀回不是原帳號 SID。'}
   $runOnce='HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
   if(-not(Test-Path $runOnce)){New-Item $runOnce -Force|Out-Null}
-  New-ItemProperty $runOnce -Name NUC8FinalizeTaskbar -Value (Get-SetupTaskbarFinalizeCommand $context.RunId) -PropertyType String -Force|Out-Null
+  $command=Get-SetupTaskbarFinalizeCommand $context.RunId
+  New-ItemProperty $runOnce -Name NUC8FinalizeTaskbar -Value $command -PropertyType String -Force|Out-Null
+  if((Get-ItemProperty $runOnce -ErrorAction Stop).NUC8FinalizeTaskbar -cne $command){throw '工作列收尾 RunOnce 原生讀回未指向本輪固定 GUID 工作。'}
   $pointer=Join-Path (Split-Path $Stage.CodeRoot -Parent|Split-Path -Parent) ('current_layout_'+$context.UserSID+'.json')
   Write-SetupGuiAtomicJson -Path $pointer -Value ([ordered]@{UserSID=$context.UserSID;Computer=$context.Computer;ApplyRunID=$context.RunId})
+  $binding=Get-SetupTaskbarLayoutBinding -CommonDataRoot $Stage.CommonDataRoot -Context $context
+  if($binding.ApplyRunID -cne $context.RunId -or $binding.LayoutPath -cne $layout -or $binding.FinalizeCommand -cne $command -or -not $binding.PendingFinalizeTask){throw '工作列收尾本輪指標、配置與固定工作讀回不一致。'}
  }finally{$final.Lock.Dispose()}
 }
 function Invoke-SetupTaskbarBoundFinalize {
