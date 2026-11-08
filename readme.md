@@ -287,7 +287,7 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 
 若有錯誤，記下模組名稱與訊息，並查看工具包內的 `reports\Setup-Result.json`。腳本可能繼續後面的模組，因此「本輪執行結束」不一定代表所有模組成功。進度可查看 `reports\Setup-Progress.json`；更新進度可另開 `modules\updates\show_update_status.cmd`。
 
-如果在最前面的帳號密碼／自動登入階段就中止，這個失敗不會加入後續模組重試清單；先修正密碼或畫面指出的問題，再執行 `windows.cmd`。不要把上次留下的結果檔當成本輪已完成。
+如果在最前面的 UAC 政策／帳號密碼／自動登入階段就中止，這個失敗不會加入後續模組重試清單；先修正密碼或畫面指出的問題，再執行 `windows.cmd`。不要把上次留下的結果檔當成本輪已完成。
 
 ## 4. 等整輪結束後手動重新開機
 
@@ -324,6 +324,23 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 
 四個桌面圖示的排列範本以繁體中文 Windows、1920×1080、100% 縮放為準。自動檢查不能取代上述登入與畫面觀察。
 
+## 管理員提權提示與還原
+
+`windows.cmd` 第 1 階段會把這臺電腦的 `ConsentPromptBehaviorAdmin` 設為 `0`：此電腦的管理員之後提權會自動核准，不再顯示「是否允許此應用程式變更您的裝置」。第一次啟動腳本仍須核准一次。這會降低管理員操作的提示防護；不影響標準使用者的提權規則，也不關閉 UAC、Defender 或 SmartScreen。
+
+在工具包根目錄可單獨執行：
+
+```cmd
+modules\uac\apply_uac_settings.cmd
+modules\uac\apply_uac_settings.cmd -VerifyOnly
+modules\uac\apply_uac_settings.cmd -Restore
+```
+
+模組要求原有 `EnableLUA` 為 DWORD `1`，否則停止並要求先人工確認，不順便修改它或安全桌面政策。首次執行會在 `%ProgramData%\NUC8-Setup\UAC-Original.json` 保存這臺電腦的原值與是否存在；重跑不覆寫。`-Restore` 只還原這份原值（原先不存在則移除該值），不保證還原後一定顯示提示；不要刪除原值檔或拿其他電腦的檔案覆蓋它。
+
+每次都讀回政策確認，組織政策覆寫或錯誤會回報失敗。結果在 `%ProgramData%\NUC8-Setup\UAC-Result.json`；`windows.cmd -VerifyOnly` 也核對本輪結果。還原後，針對一鍵流程的「管理員免提示」驗證可能不通過，這代表目前採用還原的設定。
+
+政策值依據：[Microsoft UAC 設定及組態](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/user-account-control/settings-and-configuration/)。
 ## 非必要資料分享與隱私設定
 
 `windows.cmd` 會在原本的 Win11Debloat 清理階段末端套用下列隱私政策，主流程仍是 19 個階段。也可在工具包根目錄單獨執行；CMD 會沿用目前帳號並要求必要的管理員權限：
@@ -353,7 +370,7 @@ Home 或無法辨識／未支援的版本會明確回報 `Unsupported`，不寫�
 
 | 順序 | 處理內容 |
 | --- | --- |
-| 01 | 目前帳號開機自動登入 |
+| 01 | 此電腦管理員提權免提示、目前帳號開機自動登入 |
 | 02 | 停用磁碟分頁檔（虛擬記憶體） |
 | 03 | 插電時停用自動睡眠／休眠 |
 | 04 | OpenSSH Server、區域網路防火牆、SSH 目錄與 hosts／SSH 同步框架 |
@@ -402,6 +419,7 @@ Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安�
 | --- | --- |
 | `modules\init` | 初始帳號建立 |
 | `modules\accounts` | 自動登入 |
+| `modules\uac` | 管理員提權免提示、原值還原 |
 | `modules\memory` | 分頁檔 |
 | `modules\power` | 電源與睡眠 |
 | `modules\ssh` | SSH 與 hosts 同步 |
