@@ -61,3 +61,11 @@ $other=Invoke-SetupGuiRole -PackageRoot $root -Role Taskbar
 $script:sid=$originalSid;$script:scopeSid=$originalSid;$script:values=$originalValues;$failure='';$r=$null
 try{$r=Invoke-SetupGuiFreshVerification -PackageRoot $root -Role Taskbar}catch{$failure=$_.Exception.Message}
 Assert (-not $failure -and -not $r.Success -and $r.Status -eq 'PendingSignIn' -and $r.TaskbarLayout -ceq $currentLayout) 'another local user cannot replace the original user protected layout pointer'
+$paths=Get-SetupGuiRunPaths -CommonDataRoot $temp -Role Taskbar -RunId $r.RunId;$context=Read-SetupGuiContext -CodeRoot $paths.CodeRoot -CommonDataRoot $temp -Role Taskbar -RunId $r.RunId;$stage=[pscustomobject]@{CodeRoot=$paths.CodeRoot;DataRoot=$paths.DataRoot;CommonDataRoot=$temp;Context=$context}
+$resultPath=Join-Path $paths.DataRoot 'Taskbar-Verification.json';$original=[IO.File]::ReadAllText($resultPath)
+foreach($case in @(@{Status='PendingSignIn';Success=$true},@{Status='Confirmed';Success=$false},@{Status='Applied';Success=$true},@{Status='Failed';Success=$true})){
+ $bad=$original|ConvertFrom-Json;$bad.Status=$case.Status;$bad.Success=$case.Success;[IO.File]::WriteAllText($resultPath,($bad|ConvertTo-Json -Depth 8));$failure=''
+ try{Read-SetupGuiResult $stage|Out-Null}catch{$failure=$_.Exception.Message}
+ Assert ($failure.Contains('工作列結果')) ('bound Taskbar status cannot contradict mode or success: '+$case.Status+'/'+$case.Success)
+}
+[IO.File]::WriteAllText($resultPath,$original)
