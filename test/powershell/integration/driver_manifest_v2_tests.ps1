@@ -36,6 +36,12 @@ foreach($case in @('Duplicate','Traversal','UntrustedSource','MissingVersion','W
  Assert $failed ('版本2拒絕不可信規格：'+$case)
  $manifest=$saved|ConvertFrom-Json
 }
+SaveManifest
+$export=Join-Path $fixture 'exported'
+$exportError='';$exportResult=$null
+try{$exportResult=& (Join-Path $root 'script/package/export_driver_package.ps1') -SourceDirectory $fixture -OutputDirectory $export}catch{$exportError=$_.Exception.Message}
+Assert ($exportResult.Status -eq 'Passed' -and $exportResult.Count -eq 5) ('真export入口應保留版本2完整五包：'+$exportError)
+Assert ((Test-SetupDriverPayload $h $export).Count -eq 5) '輸出包可離線獨立驗證版本2'
 @($entries[0..3]|ForEach-Object {@{File=$_.File;SHA256=$_.SHA256}})|ConvertTo-Json|Set-Content (Join-Path $fixture 'manifest.json') -Encoding UTF8
 Assert ((Test-SetupDriverPayload $h $fixture).Count -eq 4) '舊四檔格式仍可驗證'
 Assert ((Test-SetupDriverPayload (Get-SetupHardwareProfile -BoardProduct Other) $fixture).Status -eq 'Skipped') '非NUC仍略過驅動'
