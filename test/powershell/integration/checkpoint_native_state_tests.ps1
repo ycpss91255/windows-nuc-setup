@@ -11,8 +11,8 @@ function Descriptor([bool]$Directory){
 }
 function Get-Acl {param($LiteralPath,$ErrorAction) if(-not ([IO.Path]::GetFullPath($LiteralPath)).StartsWith($fixture,[StringComparison]::OrdinalIgnoreCase)){throw 'ACL outside owned TEMP'};Descriptor ([IO.Directory]::Exists($LiteralPath))}
 function Set-Acl {param($LiteralPath,$AclObject,$ErrorAction) if(-not ([IO.Path]::GetFullPath($LiteralPath)).StartsWith($fixture,[StringComparison]::OrdinalIgnoreCase)){throw 'ACL write outside owned TEMP'};$script:aclWrites++}
-function Get-LocalUser {param($SID,$ErrorAction) $script:accountReads++;[pscustomobject]@{Name='fixture';SID=[pscustomobject]@{Value=$sid};Enabled=$true}}
-function Get-LocalGroupMember {param($SID,$ErrorAction) [pscustomobject]@{SID=[pscustomobject]@{Value=$sid}}}
+function Get-LocalUser {param($SID,$ErrorAction) $script:accountReads++;[pscustomobject]@{Name='fixture';SID=[pscustomobject]@{Value=$script:sid};Enabled=$true}}
+function Get-LocalGroupMember {param($SID,$ErrorAction) [pscustomobject]@{SID=[pscustomobject]@{Value=$script:sid}}}
 function Get-ProvisioningPackage {
  param([switch]$AllInstalledPackages,$PackagePath,$LogsDirectoryPath,$ErrorAction)
  if($PackagePath){return [pscustomobject]@{PackageID='1c2605ea-96ae-42fc-8f11-45fc0cb9d133';PackageName='windows_setup_hide_oobe';Version='1.0';Rank=0;OwnerType=5000;IsInstalled=$false}}
