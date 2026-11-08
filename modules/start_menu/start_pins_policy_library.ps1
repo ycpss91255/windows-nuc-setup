@@ -30,3 +30,28 @@ function Get-StartPinsExportState {
  $status=if($PolicyState.Status -eq 'LegacyPendingApply'){'LegacyPendingApply'}elseif($count -eq 0){'Confirmed'}else{'PendingSignIn'}
  return [ordered]@{Success=($status -eq 'Confirmed');Status=$status;PinCount=$count;ExportPath=$ExportPath;CheckedAt=(Get-Date).ToString('o')}
 }
+function Invoke-StartPinsConfiguration {
+ param([string]$AssetRoot,[string]$OutputRoot,[string]$AdmxPath=(Join-Path $env:WINDIR 'PolicyDefinitions/StartMenu.admx'),[switch]$VerifyOnly,[switch]$ApplyPolicy,[switch]$NonInteractive)
+ $version=Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
+ $admx=if(Test-Path -LiteralPath $AdmxPath -PathType Leaf){[IO.File]::ReadAllText($AdmxPath)}else{''}
+ $route=Get-StartPinsRoute ([int]$version.CurrentBuildNumber) ([int]$version.UBR) $admx
+ if($route -eq 'Gpo'){
+  if(-not $VerifyOnly){
+   $layout=Join-Path $OutputRoot 'EmptyStartLayout.json'
+   Set-Content -LiteralPath $layout -Value '{"pinnedList":[],"applyOnce":true}' -Encoding UTF8 -ErrorAction Stop
+   $key='HKCU:\Software\Policies\Microsoft\Windows\Explorer'
+   New-Item -Path $key -Force|Out-Null
+   New-ItemProperty -Path $key -Name ConfigureStartPins -PropertyType DWord -Value 1 -Force|Out-Null
+   New-ItemProperty -Path $key -Name ConfigureStartPinsJSON -PropertyType String -Value $layout -Force|Out-Null
+  }
+  $policy=[pscustomobject]@{Status='PendingSignIn';PolicyInstalled=$true}
+ }else{
+  $policy=Invoke-StartPinsLegacyPolicy -AssetRoot $AssetRoot -ApplyPolicy:($ApplyPolicy -and -not $VerifyOnly) -NonInteractive:$NonInteractive -Confirm {
+   Write-Host '舊版 Windows 的開始選單政策套用於整臺電腦，每次登入會重新清空釘選。Windows 可能要求重新登入或重新啟動。' -ForegroundColor Yellow
+   Read-Host '請確認其他設定與更新都已完成；現在套用請輸入 YES，其餘輸入保留待處理'
+  }
+ }
+ $result=Get-StartPinsExportState -ExportPath (Join-Path $OutputRoot ('StartMenu-Actual-'+[guid]::NewGuid().ToString('N')+'.json')) -PolicyState $policy
+ $result.PolicyRoute=$route
+ return $result
+}
