@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed（修正）
+
+- 驅動延伸組件支援 Windows 11 原生 `PnpUtil/Driver` XML 結構，保留精確版本、供應商與裝置關聯驗證；未知結構、無效欄位或僅存在 DriverStore 的套件仍不算已套用。
+
 ## [v0.2.1] — 2026-11-08
 
 此版整合未發布 v0.2.1-rc1 的功能與後續修正。版本標題代表已準備發布；實際公開版本、對應提交與品質證據，以 GitHub Release、Actions 及 Pages 為準。
