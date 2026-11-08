@@ -1,7 +1,8 @@
 ﻿#Requires -Version 5.1
 $ErrorActionPreference='Stop'
 try {
- foreach($tool in @('powershell.exe','cmd.exe','git.exe','go.exe')){Get-Command $tool -CommandType Application -ErrorAction Stop|Out-Null}
+ . C:/tools/ci_tasks.ps1
+ Assert-CIRequiredTools -Managed
  if($PSVersionTable.PSVersion.Major -ne 5 -or $PSVersionTable.PSVersion.Minor -ne 1){throw 'Windows PowerShell 5.1 required.'}
  $null=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
  & git.exe --version

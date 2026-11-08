@@ -9,3 +9,5 @@
 !script/docker/install_go.ps1
 !script/test/
 !script/test/ci_tasks.ps1
+
+!script/docker/install_managed_tools.ps1
