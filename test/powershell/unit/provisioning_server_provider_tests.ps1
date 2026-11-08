@@ -14,8 +14,9 @@ function global:Get-ProvisioningPackage {
 '@
  $text=$prefix.Replace('__MARKER__',$marker.Replace("'","''"))+"`r`n& '"+$path.Replace("'","''")+"'`r`n"
  [IO.File]::WriteAllText($runner,$text,[Text.UTF8Encoding]::new($true))
- & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $runner *> $log
- $outcomes+=[pscustomobject]@{Suite=$suite;ExitCode=$LASTEXITCODE;NativeReached=(Test-Path -LiteralPath $marker);Log=$log}
+ $oldPreference=$ErrorActionPreference
+ try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $runner *> $log;$childCode=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference}
+ $outcomes+=[pscustomobject]@{Suite=$suite;ExitCode=$childCode;NativeReached=(Test-Path -LiteralPath $marker);Log=$log}
 }
 foreach($outcome in $outcomes){
  $passed=($outcome.ExitCode -eq 0 -and -not $outcome.NativeReached)
