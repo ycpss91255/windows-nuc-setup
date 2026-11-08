@@ -30,10 +30,10 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: 檢查設定包來源與原生 metadata
+      - name: 檢查設定包三檔來源與實際雜湊
         shell: powershell
         run: |
-          .\test\powershell\integration\provisioning_asset_tests.ps1
+          .\test\powershell\integration\provisioning_source_tests.ps1
       - name: 唯讀抽取並核對已審查內容
         id: payload
         if: always()
