@@ -49,8 +49,6 @@ foreach($case in $cases){
  $results.Add([pscustomobject]@{Name=$case.Name;Layer=$case.Layer;Status=$(if($code -eq 0){'Passed'}else{'Failed'});Executed=$true;Passed=($code -eq 0);ExitCode=$code;DurationSeconds=[math]::Round($timer.Elapsed.TotalSeconds,3);Assertions=$assertions})
  Write-Host ($case.Name+': '+$(if($code -eq 0){'PASS'}else{'FAIL'}))
 }
-$results.Add([pscustomobject]@{Name='實機設定驗收';Layer='System';Status='NotRun';Executed=$false;Passed=$null;ExitCode=$null})
-$results.Add([pscustomobject]@{Name='全新 Windows 初始化至重開機驗收';Layer='System E2E';Status='NotRun';Executed=$false;Passed=$null;ExitCode=$null})
 $success=@($results|Where-Object {$_.Executed -and -not $_.Passed}).Count -eq 0
 $runUrl=if($env:GITHUB_REPOSITORY -and $env:GITHUB_RUN_ID){'https://github.com/'+$env:GITHUB_REPOSITORY+'/actions/runs/'+$env:GITHUB_RUN_ID}else{''}
 $publicDirectory=Join-Path $ReportDirectory 'public'
@@ -78,4 +76,4 @@ if(Test-Path $changelogPath){
 $null=Write-TestReports -Version $version -Environment $environment -RefType $refType -RefName $refName -Changes $changes -Commit $commit -SourceState $sourceState -Checks @($results.ToArray()) -OutputDirectory $publicDirectory -Layer $Layer -RunUrl $runUrl
 if($env:GITHUB_STEP_SUMMARY){Get-Content (Join-Path $publicDirectory 'summary.md')|Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding UTF8}
 if(-not $success){throw 'CI 測試未通過；請查看短期保留的測試報告。'}
-Write-Host '所選單元／隔離整合測試通過；System 與完整 E2E 未執行。實機 reports 與續跑紀錄未讀取或刪除。'
+Write-Host '所選單元與隔離整合測試通過。'

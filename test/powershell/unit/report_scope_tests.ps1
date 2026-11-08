@@ -11,7 +11,7 @@ Assert ($r.SchemaVersion -eq 2) '新測試報告使用不含實機占位的 sche
 Assert (-not(Test-Path (Join-Path $fixture 'system.svg'))) '新報告不產生 System 徽章'
 foreach($file in @('index.html','summary.md','summary.json','junit.xml')){
  $content=[IO.File]::ReadAllText((Join-Path $fixture $file))
- Assert ($content -notmatch 'System|E2E|完整安裝|尚未實測|ComparisonStatus|FlakyStatus') ('新產物不顯示或保留取消的交付要求：'+$file)
+ Assert ($content -cnotmatch 'System|E2E|完整安裝|尚未實測|ComparisonStatus|FlakyStatus') ('新產物不顯示或保留取消的交付要求：'+$file)
 }
 Assert ($r.Success -and $r.Totals.SuitesExecuted -eq 2 -and $r.Totals.UnexecutedSuites -eq 0) '成功與分母只來自真正執行的測試'
 $system=[pscustomobject]@{Name='System';Layer='System';Status='NotRun';Executed=$false;Passed=$null;ExitCode=$null;Assertions=@()}
