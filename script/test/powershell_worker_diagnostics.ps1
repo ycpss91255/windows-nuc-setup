@@ -35,7 +35,8 @@ function Read-PesterWorkerFailureRecord {
  if(($value|ConvertTo-Json -Depth 5 -Compress) -cne $text -or $value -isnot [pscustomobject] -or @($value.PSObject.Properties).Count -ne 2 -or @($value.PSObject.Properties|Where-Object Name -cnotin @('SchemaVersion','Failures')).Count -or $value.SchemaVersion -isnot [int] -or $value.SchemaVersion -ne 1 -or $value.Failures -isnot [array] -or $value.Failures.Count -lt 1 -or $value.Failures.Count -gt 16){throw 'Invalid failure diagnostic schema.'}
  $seen=@{}
  foreach($row in $value.Failures){
-  if($row -isnot [pscustomobject] -or @($row.PSObject.Properties).Count -ne 4 -or @($row.PSObject.Properties|Where-Object Name -cnotin @('Phase','Type','File','Line')).Count -or $row.Phase -isnot [string] -or $row.Phase -cnotin @('InvokePester','ContainerDiscovery','BlockSetup','TestRun') -or $row.Type -isnot [string] -or $row.Type -cnotin @(Get-PesterDiagnosticTypes) -or $row.File -isnot [string] -or $row.Line -isnot [int] -or $row.Line -lt 0 -or $row.Line -gt 1000000){throw 'Invalid typed failure diagnostic row.'}
+  if($row -isnot [pscustomobject] -or @($row.PSObject.Properties).Count -ne 4 -or @($row.PSObject.Properties|Where-Object Name -cnotin @('Phase','Type','File','Line')).Count -or $row.Phase -isnot [string] -or $row.Phase -cnotin @('InvokePester','InvokePesterNoResult','ContainerDiscovery','BlockSetup','TestRun') -or $row.Type -isnot [string] -or $row.Type -cnotin @(Get-PesterDiagnosticTypes) -or $row.File -isnot [string] -or $row.Line -isnot [int] -or $row.Line -lt 0 -or $row.Line -gt 1000000){throw 'Invalid typed failure diagnostic row.'}
+  if($row.Type -ceq 'NoErrorRecord' -and ($row.Phase -cne 'InvokePesterNoResult' -or $row.File -cne '' -or $row.Line -ne 0)){throw 'NoErrorRecord cannot claim an exception or location.'}
   if($row.File){if($row.File.Length -gt 300 -or $row.File -cnotmatch '^[A-Za-z0-9_./-]+\.ps1$' -or $row.File.StartsWith('/') -or $row.File -match '(^|/)\.\.(/|$)' -or $row.File -cnotin $AllowedFiles -or $row.Line -lt 1){throw 'Failure diagnostic source is not allowed.'}}elseif($row.Line -ne 0){throw 'Failure diagnostic source is unavailable.'}
   $key=$row.Phase+'|'+$row.Type+'|'+$row.File+'|'+$row.Line
   if($seen.ContainsKey($key)){throw 'Duplicate failure diagnostic row.'};$seen[$key]=$true
@@ -44,11 +45,23 @@ function Read-PesterWorkerFailureRecord {
 }
 
 function Get-PesterDiagnosticTypes {
- return @('Exception','RuntimeException','IOException','UnauthorizedAccessException','ArgumentException','ParameterBindingException','CommandNotFoundException','OutOfMemoryException','InvalidOperationException','ParseException','MethodInvocationException','ActionPreferenceStopException','PipelineStoppedException')
+ return @('Exception','RuntimeException','IOException','UnauthorizedAccessException','ArgumentException','ParameterBindingException','CommandNotFoundException','OutOfMemoryException','InvalidOperationException','ParseException','MethodInvocationException','ActionPreferenceStopException','PipelineStoppedException','NoErrorRecord')
+}
+
+function Get-NewPesterInvocationErrors {
+ param([Management.Automation.ErrorRecord[]]$PriorErrors,[Management.Automation.ErrorRecord[]]$CurrentErrors,[object[]]$InvocationErrors)
+ $observed=[Collections.Generic.List[Management.Automation.ErrorRecord]]::new()
+ # The newest automatic errors precede ErrorVariable's earlier pipeline items.
+ foreach($candidate in @($CurrentErrors)+@($InvocationErrors)){
+  if($candidate -isnot [Management.Automation.ErrorRecord]){continue};$known=$false
+  foreach($previous in @($PriorErrors)+@($observed)){if([object]::ReferenceEquals($candidate,$previous)){$known=$true;break}}
+  if(-not $known){$observed.Add($candidate);if($observed.Count -ge 16){break}}
+ }
+ return $observed
 }
 
 function Write-PesterWorkerFailureRecord {
- param([string]$Path,[string]$SourceRoot,[string[]]$AllowedFiles,$Result,[Management.Automation.ErrorRecord[]]$InvocationErrors)
+ param([string]$Path,[string]$SourceRoot,[string[]]$AllowedFiles,$Result,[Management.Automation.ErrorRecord[]]$InvocationErrors,[switch]$NoResult)
  $rows=[Collections.Generic.List[object]]::new();$seen=@{};$allowed=@{}
  foreach($relative in $AllowedFiles){
   if($relative -cmatch '^[A-Za-z0-9_./-]+\.ps1$' -and -not $relative.StartsWith('/') -and $relative -notmatch '(^|/)\.\.(/|$)'){
@@ -66,12 +79,14 @@ function Write-PesterWorkerFailureRecord {
   if(-not $safeLocations.Count){$safeLocations=@([pscustomobject]@{File='';Line=0})}
   $exception=$ErrorRecord.Exception
   for($depth=0;$null -ne $exception -and $depth -lt 4;$depth++){
-   $type=$exception.GetType().Name;if($type -cnotin @(Get-PesterDiagnosticTypes)){$type='Exception'}
+   $type=$exception.GetType().Name;if($type -cnotin @(Get-PesterDiagnosticTypes) -or $type -ceq 'NoErrorRecord'){$type='Exception'}
    foreach($location in $safeLocations){$key=$Phase+'|'+$type+'|'+$location.File+'|'+$location.Line;if(-not $seen.ContainsKey($key) -and $rows.Count -lt 16){$seen[$key]=$true;$rows.Add([pscustomobject][ordered]@{Phase=$Phase;Type=$type;File=$location.File;Line=$location.Line})}}
    $exception=$exception.InnerException
   }
  }
- foreach($errorRecord in $InvocationErrors){Add-PesterDiagnosticError 'InvokePester' $errorRecord}
+ $invocationPhase=if($NoResult){'InvokePesterNoResult'}else{'InvokePester'}
+ foreach($errorRecord in $InvocationErrors){Add-PesterDiagnosticError $invocationPhase $errorRecord}
+ if($NoResult -and -not $rows.Count){$rows.Add([pscustomobject][ordered]@{Phase='InvokePesterNoResult';Type='NoErrorRecord';File='';Line=0})}
  if($null -ne $Result){foreach($group in @(@{Property='FailedContainers';Phase='ContainerDiscovery'},@{Property='FailedBlocks';Phase='BlockSetup'},@{Property='Failed';Phase='TestRun'})){foreach($failure in @($Result.($group.Property))){foreach($errorRecord in @($failure.ErrorRecord)){Add-PesterDiagnosticError $group.Phase $errorRecord}}}}
  if($rows.Count){[IO.File]::WriteAllText($Path,([ordered]@{SchemaVersion=1;Failures=@($rows)}|ConvertTo-Json -Depth 5 -Compress),[Text.UTF8Encoding]::new($false))}
 }
