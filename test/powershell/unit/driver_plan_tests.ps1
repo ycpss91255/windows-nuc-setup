@@ -39,3 +39,5 @@ $d=[pscustomobject]@{InstanceId='USB\fixture';HardwareIds=$t.HardwareIds;DriverP
 Assert ((@(Get-SetupDriverTargetPlan -Target $t -Devices @($d) -Build 22621 -Architecture amd64))[0].Status -eq 'Unverified') '同版本但裝置異常不能列Current'
 $d.DriverVersion='23.0.0.1'
 Assert ((@(Get-SetupDriverTargetPlan -Target $t -Devices @($d) -Build 22621 -Architecture amd64))[0].Status -eq 'Unverified') '較新但裝置異常不能列正常已更新'
+$d.Status='OK';$d|Add-Member DriverSigned $false
+Assert ((@(Get-SetupDriverTargetPlan -Target $t -Devices @($d) -Build 22621 -Architecture amd64))[0].Status -eq 'Unverified') '已載入驅動未簽章不可只靠provider及版本當官方已核'
