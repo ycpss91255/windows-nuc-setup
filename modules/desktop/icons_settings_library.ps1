@@ -26,6 +26,7 @@ function Invoke-SetupIconsSettings {
   $result=[ordered]@{Success=$true;Mode=$Mode;Reference=$reference}
  }else{
   Assert-SetupSystemIconSet -Icons $Reference.Icons -Names @(Get-SetupSystemIconNames)
+  Assert-SetupSystemIconSet -Icons $snapshot.Icons -Names @($Reference.Icons|ForEach-Object Name)
 
   if($snapshot.Width -ne $reference.Width -or $snapshot.Height -ne $reference.Height){throw '桌面範圍與範本不同，請確認解析度、縮放及螢幕數量。'}
   $differences=@()
