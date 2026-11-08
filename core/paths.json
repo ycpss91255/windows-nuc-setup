@@ -3,6 +3,8 @@
   "gui_worker.ps1": "core/gui_worker.ps1",
   "explorer_settings_library.ps1": "modules/explorer/explorer_settings_library.ps1",
   "display_settings_library.ps1": "modules/display/display_settings_library.ps1",
+  "desktop_settings_library.ps1": "modules/desktop/desktop_settings_library.ps1",
+  "icons_settings_library.ps1": "modules/desktop/icons_settings_library.ps1",
   "theme_settings_library.ps1": "modules/theme/theme_settings_library.ps1",
   "terminal_hotkey_library.ps1": "modules/terminal/terminal_hotkey_library.ps1",
   "start_pins_policy_library.ps1": "modules/start_menu/start_pins_policy_library.ps1",
