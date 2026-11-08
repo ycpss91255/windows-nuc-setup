@@ -3944,10 +3944,118 @@
     {
       "Id": "wifi_8265",
       "File": "wifi_8265_22.200.2.zip",
-      "SHA256": "3EAA311DC2CBCC2D9CD5F12C571D03A64BA38614BD15DE42FB8D7310DE5B9E65",
+      "SHA256": "3A61884B823AEB14C8650FF4F5A3ED70DE5E6E30F0566422151A4DFF0BA8D4BC",
       "SourceUrl": "https://downloadmirror.intel.com/777193/WiFi-22.200.2-Driver64-Win10-Win11.exe",
       "PackageVersion": "22.200.2",
       "Files": [
+        {
+          "Path": "EULA/ar-sa/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/cs-cz/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/da-dk/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/de-de/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/el-gr/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/en-us/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/es-es/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/fi-fi/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/fr-fr/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/he-il/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/hu-hu/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/it-it/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/ja-jp/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/ko-kr/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/nb-no/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/nl-nl/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/pl-pl/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/pt-br/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/pt-pt/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/ru-ru/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/sv-se/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/th-th/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/tr-tr/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/uk-ua/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/zh-cn/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/zh-hk/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
+        {
+          "Path": "EULA/zh-tw/License.rtf",
+          "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32"
+        },
         {
           "Path": "IntelIhvRouter06.dll",
           "SHA256": "1FF4E1090046D9F020718C88FCDDD8169C95172DCDE1D364C41ED28A7CE664E6"
@@ -3996,15 +4104,180 @@
         "PayloadMethod": "Read-only archive/CAB extraction; original INF/CAT/binaries unchanged; no installer execution",
         "CatalogMembership": "signtool verify /pa /c, native exit 0",
         "Notes": [
-          "Official last supported 8265 driver; package and INF versions intentionally differ."
+          "Official last supported 8265 driver; package and INF versions intentionally differ.",
+          "Original vendor license text retained byte-for-byte; inclusion does not grant additional redistribution rights."
         ],
-        "HashOrigin": "Official published package digest verified"
+        "HashOrigin": "Official published package digest verified",
+        "PreservedLicenseFiles": [
+          {
+            "Path": "EULA/ar-sa/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u78",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/cs-cz/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u79",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/da-dk/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u80",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/de-de/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u81",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/el-gr/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u82",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/en-us/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u83",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/es-es/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u84",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/fi-fi/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u85",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/fr-fr/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u86",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/he-il/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u87",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/hu-hu/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u88",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/it-it/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u89",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/ja-jp/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u90",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/ko-kr/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u91",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/nb-no/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u92",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/nl-nl/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u93",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/pl-pl/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u94",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/pt-br/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u95",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/pt-pt/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u96",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/ru-ru/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u97",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/sv-se/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u98",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/th-th/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u99",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/tr-tr/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u100",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/uk-ua/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u101",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/zh-cn/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u102",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/zh-hk/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u103",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          },
+          {
+            "Path": "EULA/zh-tw/License.rtf",
+            "SHA256": "718BD1BDE02C13688F9B48455468982386AB74462FACE0FE32006EF2B5E93A32",
+            "OriginalMember": "BurnManifest UX u104",
+            "OriginalMemberSHA1": "6D6EFE62173116665D2D1A69E91E6E3F1061A239"
+          }
+        ]
       }
     },
     {
       "Id": "bluetooth_8265",
       "File": "bluetooth_8265_22.200.0.zip",
-      "SHA256": "9C1E091EA445C9F478CFE1EF0FD8937E656EADC69458408C30347CD5DE18157E",
+      "SHA256": "D578210202B2B37E7A5E462F7C9A48AAE309226F0D6C352B92EC3E6E119B2C86",
       "SourceUrl": "https://downloadmirror.intel.com/774201/BT-22.200.0-64UWD-Win10-Win11.exe",
       "PackageVersion": "22.200.0",
       "Files": [
@@ -4019,6 +4292,14 @@
         {
           "Path": "ibtusb.sys",
           "SHA256": "CC01AE59BAD5110E3818FE507084E16AF51FFA12B8A682FE12C146A03D2CE8B2"
+        },
+        {
+          "Path": "patch_intel_software_license.rtf",
+          "SHA256": "301252B14D0111E009353306EA5760A8BCCECD2046F53FC0CA2933F8257D2A34"
+        },
+        {
+          "Path": "patch_license.txt",
+          "SHA256": "5B15962179E42A81D8E6C943FDDC8855050FB103B1100CFEE791022378E807CB"
         }
       ],
       "Drivers": [
@@ -4048,9 +4329,22 @@
         "PayloadMethod": "Read-only archive/CAB extraction; original INF/CAT/binaries unchanged; no installer execution",
         "CatalogMembership": "signtool verify /pa /c, native exit 0",
         "Notes": [
-          "Official last supported 8265 Bluetooth driver; payload selected from original MSI/CAB without running the installer."
+          "Official last supported 8265 Bluetooth driver; payload selected from original MSI/CAB without running the installer.",
+          "Original vendor license text retained byte-for-byte; inclusion does not grant additional redistribution rights."
         ],
-        "HashOrigin": "Official published package digest verified"
+        "HashOrigin": "Official published package digest verified",
+        "PreservedLicenseFiles": [
+          {
+            "Path": "patch_license.txt",
+            "SHA256": "5B15962179E42A81D8E6C943FDDC8855050FB103B1100CFEE791022378E807CB",
+            "OriginalMember": "MSI/Setup.cab/patch_license.txt"
+          },
+          {
+            "Path": "patch_intel_software_license.rtf",
+            "SHA256": "301252B14D0111E009353306EA5760A8BCCECD2046F53FC0CA2933F8257D2A34",
+            "OriginalMember": "MSI/Setup.cab/patch_intel_software_license.rtf"
+          }
+        ]
       }
     },
     {

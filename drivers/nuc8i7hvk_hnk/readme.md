@@ -30,7 +30,7 @@
 
 ## 安裝與讀回契約
 
-- 12 包、33 個 INF 裝置目標、1 個 AMD Extension；ZIP 約 1.636 GiB，封存檔與 1,211 個 payload 檔案雜湊已核對。35 組 INF／CAT（含不適用 Win11 的 Intel 控制器擴充研究項）使用 Microsoft SDK signtool `/pa /c` 原生驗證，實際退出碼均為 0；CAT 成員驗證與目前裝置是否採用該驅動是不同檢查。
+- 12 包、33 個 INF 裝置目標、1 個 AMD Extension；ZIP 約 1.636 GiB，封存檔與 1,240 個 payload 檔案雜湊已核對。35 組 INF／CAT（含不適用 Win11 的 Intel 控制器擴充研究項）使用 Microsoft SDK signtool `/pa /c` 原生驗證，實際退出碼均為 0；CAT 成員驗證與目前裝置是否採用該驅動是不同檢查。
 - 晶片組套件 10.1.19376.8374 不代表每個 INF 都是這版；各 INF 保留 10.1.10.5／10.1.7.4／10.1.6.2。Serial IO GPIO／I2C／SPI／UART 與 UCM TPS659xx 依精準 ID 個別判斷。
 - Wi-Fi／藍牙採 Intel 最後支援 8265 的官方套件。LAN 31.3 採官方 `W11` 路線，I219 12.19.2.64、I210 14.1.28.0；不得因 NDIS68 版號較大就選錯 OS。最低系統為官方套件與 INF 裝飾的交集，LAN 至少 Windows 11 build 22000。
 - MEI A13A 對應 `TEE_DDI_x64_LEGACY.Components`：父裝置 2220.3.1.0；DAL 1.41.2021.0121、ICLS 1.64.1234.0、WMI 2219.3.0.0。先預加入三個 SWC INF，再安裝父裝置、重新枚舉並逐個讀回；父裝置存在時，初始沒看到孩子不算成功略過。此安裝 section 不要求 ES_ONLY。保留完整 INF 依賴，不執行 SetupME 或韌體更新程式。
@@ -41,6 +41,8 @@
 - 保留較新已安裝官方驅動，不為了吻合清單而降版。不同 provider 的版本不直接作數字比較；不把 Microsoft 泛用驅動版本當 Realtek／BayHub 的較新原廠版本。
 
 不包含 BIOS、Thunderbolt／ME 韌體更新；UCM 是 USB Type-C Power Delivery 驅動。ASUS [Hades Canyon USB Type-C 說明](https://www.asus.com/support/faq/1052592/) 與目前官方清單沒有要求另執行本包未提供的 TBT 韌體工具。完整原始 AMD 及 MEI INF 依賴樹保留，安裝器僅使用列出的 INF，不執行來源 Setup.exe。
+
+Wi-Fi 重包保留原廠 BurnManifest UX 對應的 27 份 EULA/<語系>/License.rtf；各語系原文位元組相同，原始 member SHA1 與重包檔案 SHA256 均已核對。藍牙保留原 MSI/CAB 的 patch_license.txt 及 patch_intel_software_license.rtf。清單的 Provenance.PreservedLicenseFiles 記錄原始來源 member 及雜湊，檔案同樣納入完整 payload hash。保留文件不代表新增散布權利。
 
 ## 來源及封存查核
 
