@@ -41,4 +41,14 @@ function Read-InitProvisioningState {param($StatePath,$MachineGuid,$PackageHash)
 Assert (-not(Invoke-InitWindowsCheckpoint -StageRoot (Join-Path $env:TEMP 'fixture_checkpoint'))) 'Windows checkpoint is a no-op when no Init stage exists'
 $script:hasStage=$true
 Assert (Invoke-InitWindowsCheckpoint -StageRoot (Join-Path $env:TEMP 'fixture_checkpoint')) 'Windows entry validates existing Init account state without SSH'
+$configure=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\core\configure_nuc.ps1'))
+$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile($configure,[ref]$tokens,[ref]$errors)
+$hooks=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Invoke-InitWindowsCheckpoint'},$true))
+Assert ($hooks.Count -eq 1) 'Windows main flow invokes exactly one Init account checkpoint'
+$uac=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Extent.Text -match 'principal\.IsInRole'},$true))[0]
+$text=[IO.File]::ReadAllText($configure)
+Assert ($hooks[0].Extent.StartOffset -gt $uac.Extent.EndOffset -and $hooks[0].Extent.StartOffset -lt $text.IndexOf("& (Resolve-NucPath 'test_setup_prerequisites.ps1')")) 'account checkpoint runs after elevation and before Windows work'
+function Invoke-InitWindowsCheckpoint {param($StageRoot) $script:hookRoot=$StageRoot}
+& ([scriptblock]::Create($hooks[0].Extent.Text))
+Assert ($script:hookRoot -eq (Join-Path $env:ProgramData 'windows_setup_init')) 'actual Windows hook dynamically passes ProgramData stage without user or drive binding'
 Write-Host ('ALL PASS: '+$script:count+' account checkpoint assertions; all OS operations mocked')
