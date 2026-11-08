@@ -56,3 +56,8 @@ foreach($wrong in @('SID','SessionZero','OtherSession')){
 }
 $script:scopeSid=$script:sid;$script:session=0
 Assert (-not(Test-Path -LiteralPath (Join-Path $temp 'NUC8-Setup'))) 'Taskbar never publishes executable or authoritative result under old public root'
+$originalSid=$script:sid;$originalValues=$script:values.Clone();$script:sid='S-1-5-21-1-2-3-1002';$script:scopeSid=$script:sid;$script:values=@{}
+$other=Invoke-SetupGuiRole -PackageRoot $root -Role Taskbar
+$script:sid=$originalSid;$script:scopeSid=$originalSid;$script:values=$originalValues;$failure='';$r=$null
+try{$r=Invoke-SetupGuiFreshVerification -PackageRoot $root -Role Taskbar}catch{$failure=$_.Exception.Message}
+Assert (-not $failure -and -not $r.Success -and $r.Status -eq 'PendingSignIn' -and $r.TaskbarLayout -ceq $currentLayout) 'another local user cannot replace the original user protected layout pointer'
