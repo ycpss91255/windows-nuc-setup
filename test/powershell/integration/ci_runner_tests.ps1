@@ -69,6 +69,13 @@ try{
  Assert ($LASTEXITCODE -eq 0) 'CLI 真子程序委派成功'
  $called=Get-Content -LiteralPath $cliOut -Raw|ConvertFrom-Json
  Assert ($called.Layer -eq 'Integration' -and $called.Output -eq $cliOut -and $called.Root -eq (Join-Path $temp 'cli')) 'CLI 動態套件根與參數完整委派'
+ # Reproduce equivalent directory spelling independently of runner TEMP naming.
+ $aliasRoot=Join-Path $temp 'cli\.'
+ $aliasOut=Join-Path $temp 'alias_cli.json'
+ & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aliasRoot 'script/test/run_ci.ps1') -Layer Integration -ReportDirectory $aliasOut
+ Assert ($LASTEXITCODE -eq 0) '等價路徑 CLI 真子程序委派成功'
+ $aliasCalled=Get-Content -LiteralPath $aliasOut -Raw|ConvertFrom-Json
+ Assert ($aliasCalled.Layer -ceq 'Integration' -and $aliasCalled.Output -ceq $aliasOut -and $aliasCalled.Root -ieq $aliasRoot) ('等價路徑 CLI 動態套件根與參數完整委派；actualRoot='+$aliasCalled.Root+';expectedRoot='+$aliasRoot+';actualOutput='+$aliasCalled.Output+';expectedOutput='+$aliasOut+';actualLayer='+$aliasCalled.Layer)
 }finally{
  foreach($key in $keys){[Environment]::SetEnvironmentVariable($key,$saved[$key],'Process')}
  # Only this test-created absolute TEMP tree can be removed.
