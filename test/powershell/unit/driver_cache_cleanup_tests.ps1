@@ -13,6 +13,18 @@ function Assert-SetupUpdateAcl {param($Acl,[switch]$Directory)}
 function NewStage { $p=Join-Path $parent ([guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($p);[IO.File]::WriteAllText((Join-Path $p 'payload.sys'),'owned');Register-SetupDriverExtractionLease -Path $p;return $p }
 $one=NewStage;$two=NewStage
 Assert ((Remove-SetupDriverExtractionRoot -Path $one) -and -not(Test-Path $one) -and (Test-Path $two)) '只刪本輪指定lease，不碰兄弟stage'
+function Get-SetupDriverPnpTool {'Invoke-CacheNativeDouble'}
+function Invoke-CacheNativeDouble {
+ $script:busyDuringNative=$lease.NativeActive
+ $script:cleanupDuringNative=Remove-SetupDriverExtractionRoot -Path $two
+ if($script:abortNative){throw 'native completion unknown'}
+ $global:LASTEXITCODE=0
+}
+$native=Invoke-SetupDriverInfInstall -InfPath (Join-Path $two 'payload.sys') -LogPath (Join-Path $fixture 'native.log')
+Assert ($script:busyDuringNative -and -not $script:cleanupDuringNative -and -not $script:SetupDriverExtractionLeases[$two].NativeActive -and $native.ExitCode -eq 0) '真同步原生邊界完成後才釋放Busy，期間不能清理'
+$script:abortNative=$true;$threw=$false;try{Invoke-SetupDriverInfInstall -InfPath (Join-Path $two 'payload.sys') -LogPath (Join-Path $fixture 'native.log')}catch{$threw=$true}
+Assert ($threw -and $script:SetupDriverExtractionLeases[$two].NativeActive -and -not(Remove-SetupDriverExtractionRoot -Path $two)) '原生完成狀態未知時不在finally冒充已完成並刪檔'
+$script:SetupDriverExtractionLeases[$two].NativeActive=$false
 $outside=Join-Path $fixture ([guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($outside)
 Assert (-not(Remove-SetupDriverExtractionRoot -Path $outside) -and (Test-Path $outside)) '外部及未租用路徑不刪除'
 $old=Join-Path $parent ([guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($old)

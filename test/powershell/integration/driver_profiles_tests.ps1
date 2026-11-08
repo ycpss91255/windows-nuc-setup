@@ -41,6 +41,9 @@ $command="& '"+$entryPath.Replace("'","''")+"' -PackageOnly -DriverPackagePath '
 $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
 $cli=@(& powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded 2>&1)
 Assert ($LASTEXITCODE -eq 0 -and ($cli -join '') -match '"Status":"Passed"' -and ($cli -join '') -match '"Count":1') '真交付CLI離線驗包支援第二個機型，不固定NUC板號'
+$offlineResult=@(. $entryPath -PackageOnly -DriverPackagePath $export)
+Assert ($offlineResult.Count -eq 1 -and $offlineResult[0].Status -eq 'Passed') '同程序正式入口同樣離線驗證第二機型，保留來源量測'
+. (Join-Path $root 'core/hardware.ps1')
 $wrong=Get-SetupHardwareProfile -BoardProduct NUC8i7HVB
 Reject {Test-SetupDriverPayload $wrong $export} '其他合法profile的包不能跨板安裝'
 $identity.SupportedBoards=@('NUC8i7HVB');$identity|ConvertTo-Json|Set-Content (Join-Path $export 'package.json') -Encoding UTF8
