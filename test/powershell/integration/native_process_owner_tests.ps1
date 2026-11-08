@@ -43,9 +43,12 @@ function Write-Host {param($Object,$ForegroundColor)}
 . (Join-Path $root 'core/prerequisites_library.ps1')
 $preflightSid='S-1-5-21-1-2-3-1001'
 $preflightUserSid=[Security.Principal.SecurityIdentifier]::new($preflightSid)
-function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) switch($ClassName){'Win32_BaseBoard'{[pscustomobject]@{Product='unregistered-fixture'}} 'Win32_OperatingSystem'{[pscustomobject]@{BuildNumber='26200'}} 'Win32_Process'{[pscustomobject]@{SessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId}} default{throw 'unexpected preflight CIM class'}}}
-function Get-ItemProperty {param([Alias('Path')]$LiteralPath,$ErrorAction) switch($LiteralPath){'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'{[pscustomobject]@{EditionID='Professional'}} 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\State'{[pscustomobject]@{ImageState='IMAGE_STATE_COMPLETE'}} default{throw 'unexpected preflight registry read'}}}
-function Get-Command {param($Name,$ErrorAction) if($Name -in @('wt.exe','winget.exe')){return [pscustomobject]@{Name=$Name}};Microsoft.PowerShell.Core\Get-Command -Name $Name -ErrorAction $ErrorAction}
+$global:OwnerPreflightFixture=[pscustomobject]@{Build=26200;Edition='Professional';Image='IMAGE_STATE_COMPLETE';LocalEnabled=$true;LocalMissing=$false;LocalMismatch=$false;MissingCommand=$false}
+$global:OwnerPreflightActualEntrySid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+function Get-LocalUser {param($SID,$ErrorAction) $script:accountReads++;if($global:OwnerPreflightFixture.LocalMissing -or $SID.Value -notin @('S-1-5-21-1-2-3-1001',$global:OwnerPreflightActualEntrySid)){throw 'controlled local account missing'};[pscustomobject]@{Name='fixture';SID=[Security.Principal.SecurityIdentifier]::new($(if($global:OwnerPreflightFixture.LocalMismatch){'S-1-5-21-1-2-3-9999'}else{$SID.Value}));Enabled=$global:OwnerPreflightFixture.LocalEnabled}}
+function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) switch($ClassName){'Win32_BaseBoard'{[pscustomobject]@{Product='unregistered-fixture'}} 'Win32_OperatingSystem'{[pscustomobject]@{BuildNumber=$global:OwnerPreflightFixture.Build}} 'Win32_Process'{[pscustomobject]@{SessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId}} default{throw 'unexpected preflight CIM class'}}}
+function Get-ItemProperty {param([Alias('Path')]$LiteralPath,$ErrorAction) switch($LiteralPath){'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'{[pscustomobject]@{EditionID=$global:OwnerPreflightFixture.Edition}} 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\State'{[pscustomobject]@{ImageState=$global:OwnerPreflightFixture.Image}} default{throw 'unexpected preflight registry read'}}}
+function Get-Command {param($Name,$ErrorAction) if($Name -in @('wt.exe','winget.exe')){if($global:OwnerPreflightFixture.MissingCommand){return $null};return [pscustomobject]@{Name=$Name}};Microsoft.PowerShell.Core\Get-Command -Name $Name -ErrorAction $ErrorAction}
 function Test-Path {param($LiteralPath,$Path,$PathType) $value=if($LiteralPath){$LiteralPath}else{$Path};if([IO.Path]::GetFileName($value) -eq 'Autologon64.exe'){return $true};if($PathType){Microsoft.PowerShell.Management\Test-Path -LiteralPath $value -PathType $PathType}else{Microsoft.PowerShell.Management\Test-Path -LiteralPath $value}}
 foreach($case in $ownerCases){
  $global:OwnerStatusFixtureThrow=[bool]$case.Throws
@@ -71,3 +74,25 @@ $entry=[IO.File]::ReadAllText((Join-Path $root 'core/test_setup_prerequisites.ps
 $tokens=$null;$parseErrors=$null;$ast=[Management.Automation.Language.Parser]::ParseInput($entry,[ref]$tokens,[ref]$parseErrors)
 $shared=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Assert-SetupWindowsPrerequisites'},$true))
 Assert ($parseErrors.Count -eq 0 -and $shared.Count -eq 1 -and $shared[0].Extent.Text -match '-UserSid\s+\$identity.User' -and $entry -match '\$identity=\[Security.Principal.WindowsIdentity\]::GetCurrent\(\)' -and @($ast.ParamBlock.Parameters|Where-Object {$_.Name.VariablePath.UserPath -match 'Identity|UserSid'}).Count -eq 0) '正常Windows入口直接讀原生WindowsIdentity並呼叫同一完整守門，沒有身分覆寫參數'
+foreach($unknownSid in @('S-1-5-21-1-2-3-9999','S-1-5-32-544')){
+ $global:OwnerStatusFixtureThrow=$true;$script:aclWrites=0;$failure=$null
+ try{Assert-SetupWindowsPrerequisites -UserSid ([Security.Principal.SecurityIdentifier]::new($unknownSid)) -SourceRoot $root|Out-Null}catch{$failure=$_}
+ Assert ($failure -and $failure.Exception.Message -eq 'controlled local account missing' -and $script:aclWrites -eq 0) '完整Windows前置檢查拒絕不是本機正式帳號的有效SID且零寫入'
+}
+$global:OwnerStatusFixtureThrow=$false;$global:OwnerStatusFixtureResult=[pscustomobject]@{ReturnValue=[uint32]0;Sid=$preflightSid}
+foreach($guard in @('Build','Edition','Image','LocalEnabled','LocalMissing','LocalMismatch','MissingCommand')){
+ $old=$global:OwnerPreflightFixture.$guard
+ $global:OwnerPreflightFixture.$guard=switch($guard){'Build'{22000};'Edition'{'Core'};'Image'{'IMAGE_STATE_UNDEPLOYABLE'};'LocalEnabled'{$false};default{$true}}
+ $failure=$null;$script:aclWrites=0
+ try{Assert-SetupWindowsPrerequisites -UserSid $preflightUserSid -SourceRoot $root|Out-Null}catch{$failure=$_}finally{$global:OwnerPreflightFixture.$guard=$old}
+ Assert ($failure -and $script:aclWrites -eq 0) ('共用完整Windows前置檢查保留原守門：'+$guard)
+}
+# The normal entry still obtains the real runner SID; Builtin500/SYSTEM is expected to fail here.
+$global:OwnerStatusFixtureResult=[pscustomobject]@{ReturnValue=[uint32]0;Sid=$global:OwnerPreflightActualEntrySid}
+$failure=$null
+try{& (Join-Path $root 'core/test_setup_prerequisites.ps1')|Out-Null}catch{$failure=$_}
+$nativeBlocked=$global:OwnerPreflightActualEntrySid -eq 'S-1-5-18' -or $global:OwnerPreflightActualEntrySid -match '-500$'
+Assert (($nativeBlocked -and $failure -and $failure.Exception.Message -like '*Windows 流程不可在 SYSTEM*') -or (-not $nativeBlocked -and -not $failure)) '原Windows入口仍使用真runner身份：內建帳號明確拒絕，正常帳號經同完整守門'
+$global:OwnerStatusFixtureThrow=$true
+& (Join-Path $root 'core/test_setup_prerequisites.ps1') -PackageOnly -HardwareProfile Generic|Out-Null
+Assert $true '原PackageOnly入口不讀取owner或套用系統設定'
