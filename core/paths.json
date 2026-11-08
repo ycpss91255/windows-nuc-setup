@@ -63,6 +63,7 @@
   "driver_installation_library.ps1": "modules/drivers/driver_installation_library.ps1",
   "install_drivers.ps1": "modules/drivers/install_drivers.ps1",
   "install_drivers.cmd": "modules/drivers/install_drivers.cmd",
+  "amd_privacy_library.ps1": "modules/amd/amd_privacy_library.ps1",
   "apply_amd_privacy_settings.ps1": "modules/amd/apply_amd_privacy_settings.ps1",
   "apply_amd_privacy_settings.cmd": "modules/amd/apply_amd_privacy_settings.cmd",
   "install_windows_updates.ps1": "modules/updates/install_windows_updates.ps1",
