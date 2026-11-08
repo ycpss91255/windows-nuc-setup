@@ -1,13 +1,31 @@
 ﻿#Requires -Version 5.1
 function Get-SetupHardwareProfile {
- param([string]$BoardProduct,[string]$UICulture=(Get-UICulture).Name,[string]$DriverPackagePath='')
- if(-not $PSBoundParameters.ContainsKey('BoardProduct')){$BoardProduct=[string](Get-CimInstance Win32_BaseBoard -ErrorAction Stop).Product}
- $matched=$BoardProduct.Trim() -in @('NUC8i7HVB','NUC8i7HNB')
- [pscustomobject]@{Name=$(if($matched){'NUC8'}else{'Generic'});BoardProduct=$BoardProduct;IsNuc8=$matched;UICulture=$UICulture;DriverPackagePath=$DriverPackagePath}
+ param([string]$BoardProduct,[string]$UICulture=(Get-UICulture).Name,[string]$DriverPackagePath='',
+  [ValidateSet('','NUC8i7HVB','NUC8i7HNB')][string]$ConfirmedBoard='', [string]$ConfirmationComputer='')
+ $detectionError='';$ambiguous=$false
+ if(-not $PSBoundParameters.ContainsKey('BoardProduct')){
+  try{
+   $boards=@(Get-CimInstance Win32_BaseBoard -ErrorAction Stop)
+   if($boards.Count -eq 1){$BoardProduct=[string]$boards[0].Product}
+   elseif($boards.Count -gt 1){$BoardProduct=(@($boards|ForEach-Object {[string]$_.Product}) -join ' | ');$ambiguous=$true;$detectionError='回傳多塊主機板，無法安全選型。'}
+   else{$BoardProduct='';$detectionError='未回傳主機板。'}
+  }catch{$BoardProduct='';$detectionError=$_.Exception.Message}
+ }
+ $value=$BoardProduct.Trim()
+ $detected=$value -in @('NUC8i7HVB','NUC8i7HNB')
+ $unknown=(-not $value -or $value -in @('Unknown','To be filled by O.E.M.','Default string','Not specified')) -and -not $ambiguous
+ $status=if($unknown){'Unknown'}elseif($ambiguous){'Ambiguous'}else{'Detected'}
+ if($ConfirmedBoard){
+  if(-not $ConfirmationComputer -or $ConfirmationComputer -ine $env:COMPUTERNAME){throw '手動驅動型號確認不屬於目前電腦。'}
+  if(-not $unknown -and (-not $detected -or $value -ine $ConfirmedBoard)){throw '目前偵測硬體與手動確認不符，拒絕 NUC 驅動。'}
+ }
+ $driverBoard=if($ConfirmedBoard){$ConfirmedBoard}elseif($detected){$value}else{''}
+ [pscustomobject]@{Name=$(if($driverBoard){'NUC8'}else{'Generic'});BoardProduct=$BoardProduct;DriverBoard=$driverBoard;IsNuc8=[bool]$driverBoard;IsDetectedNuc8=$detected;DetectionStatus=$status;DetectionError=$detectionError;ConfirmedBoard=$ConfirmedBoard;ConfirmationComputer=$ConfirmationComputer;UICulture=$UICulture;DriverPackagePath=$DriverPackagePath}
 }
 function Get-SetupModuleDecision {
  param([Parameter(Mandatory=$true)][string]$Module,[Parameter(Mandatory=$true)]$Hardware)
  $skip=($Module -in @('install_drivers.ps1','apply_amd_privacy_settings.ps1') -and -not $Hardware.IsNuc8)
+ if($Module -eq 'apply_amd_privacy_settings.ps1' -and $Hardware.ConfirmedBoard -and -not $Hardware.IsDetectedNuc8){$skip=$true}
  $reason='非 NUC8i7HV/HN：略過 NUC 專屬驅動／AMD 設定'
  if($Module -eq 'install_drivers.ps1' -and $Hardware.IsNuc8 -and -not $Hardware.DriverPackagePath){$skip=$true;$reason='未選擇獨立驅動包，略過驅動安裝'}
  if($Module -eq 'desktop_icon_layout.ps1' -and $Hardware.UICulture -ne 'zh-TW'){$skip=$true;$reason='目前排列範本使用繁體中文圖示名稱，略過其他語系的座標套用'}
@@ -20,7 +38,7 @@ function Test-SetupDriverPayload {
  $driverRoot=$DriverPackagePath
  if(-not $AllowLegacyManifest){
   $identity=Get-Content -LiteralPath (Join-Path $driverRoot 'package.json') -Raw -ErrorAction Stop|ConvertFrom-Json
-  if($identity.SchemaVersion -ne 1 -or $identity.HardwareProfile -ne 'NUC8' -or $identity.Architecture -ne 'x64' -or @($identity.SupportedBoards).Count -ne 2 -or 'NUC8i7HVB' -notin $identity.SupportedBoards -or 'NUC8i7HNB' -notin $identity.SupportedBoards -or $Hardware.BoardProduct.Trim() -notin $identity.SupportedBoards){throw '驅動包機型或架構識別不符合目前硬體。'}
+  if($identity.SchemaVersion -ne 1 -or $identity.HardwareProfile -ne 'NUC8' -or $identity.Architecture -ne 'x64' -or @($identity.SupportedBoards).Count -ne 2 -or 'NUC8i7HVB' -notin $identity.SupportedBoards -or 'NUC8i7HNB' -notin $identity.SupportedBoards -or $Hardware.DriverBoard -notin $identity.SupportedBoards){throw '驅動包機型或架構識別不符合目前硬體。'}
  }
  $manifest=Get-Content -LiteralPath (Join-Path $driverRoot 'manifest.json') -Raw -ErrorAction Stop|ConvertFrom-Json
  if($manifest.Count -ne 4 -or @($manifest.File|Select-Object -Unique).Count -ne 4){throw 'NUC 驅動清單必須包含四個封存檔。'}
