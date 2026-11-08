@@ -1,13 +1,14 @@
 ﻿#Requires -Version 5.1
-param([string]$DriverPackagePath,[switch]$PackageOnly,[string]$ConfirmedBoard,[string]$ConfirmationComputer,[switch]$NonInteractive)
+param([string]$DriverPackagePath,[switch]$PackageOnly,[string]$ConfirmedBoard,[string]$ConfirmationComputer,[switch]$NonInteractive,[switch]$VerifyOnly,[string]$VerificationRunId=([guid]::NewGuid().ToString()))
 $ErrorActionPreference='Stop'
 if($PackageOnly -and ($ConfirmedBoard -or $ConfirmationComputer)){throw 'PackageOnly 離線驗包不可混用手動實機確認。'}
+if($PackageOnly -and $VerifyOnly){throw 'PackageOnly 與 VerifyOnly 不可混用。'}
 if($DriverPackagePath){$DriverPackagePath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DriverPackagePath)}
 . (Join-Path $PSScriptRoot '..\..\core\hardware.ps1')
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $PSScriptRoot 'driver_archive_library.ps1')
 if(-not $PackageOnly){
- $request=Select-SetupDriverRequest -PackageRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))) -DriverPackagePath $DriverPackagePath -PathSpecified:$PSBoundParameters.ContainsKey('DriverPackagePath') -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer -Interactive:((Test-SetupInteractiveHost) -and -not $NonInteractive)
+ $request=Select-SetupDriverRequest -PackageRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))) -DriverPackagePath $DriverPackagePath -PathSpecified:$PSBoundParameters.ContainsKey('DriverPackagePath') -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer -Interactive:((Test-SetupInteractiveHost) -and -not $NonInteractive -and -not $VerifyOnly)
  $DriverPackagePath=$request.DriverPackagePath;$ConfirmedBoard=$request.ConfirmedBoard;$ConfirmationComputer=$request.ConfirmationComputer
 }
 $hardware=if($PackageOnly){Get-SetupHardwareProfile -BoardProduct 'NUC8i7HVB' -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}else{Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}
@@ -15,6 +16,13 @@ $decision=Get-SetupModuleDecision -Module 'install_drivers.ps1' -Hardware $hardw
 if(-not $decision.Applicable){Write-Host ('[略過] '+$decision.Reason);$decision;return}
 $payload=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $DriverPackagePath
 if($PackageOnly){$payload;return}
+if($VerifyOnly){
+ . (Join-Path $PSScriptRoot 'driver_installation_library.ps1')
+ $result=Invoke-SetupDriverVerification -DriverRoot $DriverPackagePath -VerificationRunId $VerificationRunId
+ $result
+ if(-not $result.Success){throw '驅動唯讀驗證尚未通過；請依各目標目前版本及狀態處理。'}
+ return
+}
 $principal=[Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
  $command="& '"+$PSCommandPath.Replace("'","''")+"' -NonInteractive -DriverPackagePath '"+$DriverPackagePath.Replace("'","''")+"'"
