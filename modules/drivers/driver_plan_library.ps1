@@ -59,15 +59,24 @@ function Assert-SetupDriverTargetIntegrity {
  return $true
 }
 function Get-SetupDriverDeviceInventory {
+ param([object[]]$Targets=@())
  $signed=@(Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop)
  foreach($device in @(Get-PnpDevice -PresentOnly -ErrorAction Stop)){
+  if($Targets.Count){
+   $candidate=$false;$instance=[string]$device.InstanceId
+   foreach($id in @($Targets|ForEach-Object HardwareIds)){
+    $baseId=([string]$id -replace '&REV_[0-9A-F]+$','')
+    if(($id -like 'SWC\*' -and ($device.Class -eq 'SoftwareComponent' -or $instance.StartsWith('SWD\DRIVERENUM\',[StringComparison]::OrdinalIgnoreCase))) -or $instance.StartsWith(($baseId+'\'),[StringComparison]::OrdinalIgnoreCase) -or $instance.StartsWith(($baseId+'&'),[StringComparison]::OrdinalIgnoreCase)){$candidate=$true;break}
+   }
+   if(-not $candidate){continue}
+  }
   $driver=@($signed|Where-Object DeviceID -eq $device.InstanceId|Select-Object -First 1)
   $ids=@();$readError=''
   foreach($key in @('DEVPKEY_Device_HardwareIds','DEVPKEY_Device_CompatibleIds')){
    try{$ids+=@((Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName $key -ErrorAction Stop).Data)}catch{$readError=$_.Exception.Message}
   }
   $ids=@($ids|Where-Object {$_}|Select-Object -Unique)
-  [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;HardwareIds=$ids;HardwareIdsReadError=$readError;Status=$device.Status;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion}
+  [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;Class=$device.Class;HardwareIds=$ids;HardwareIdsReadError=$readError;Status=$device.Status;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion}
  }
 }
 function Get-SetupDriverPnpTool {
@@ -88,14 +97,14 @@ function Invoke-SetupDriverPnpRescan {
 function Invoke-SetupDriverTarget {
  param([Parameter(Mandatory=$true)]$Target,[Parameter(Mandatory=$true)][string]$Root,[int]$Build,[string]$Architecture,[string]$LogPath,[switch]$RequiredPresent)
  $null=Assert-SetupDriverTargetIntegrity -Target $Target -Root $Root
- $plans=@(Get-SetupDriverTargetPlan -Target $Target -Devices @(Get-SetupDriverDeviceInventory) -Build $Build -Architecture $Architecture)
+ $plans=@(Get-SetupDriverTargetPlan -Target $Target -Devices @(Get-SetupDriverDeviceInventory -Targets @($Target)) -Build $Build -Architecture $Architecture)
  if($RequiredPresent){foreach($plan in $plans){if($plan.Status -eq 'Absent'){$plan.Status='Unverified';$plan.Reason='必需子元件尚未枚舉，需續跑核實'}}}
  $failures=@();$reboot=$false;$results=@()
  if(@($plans|Where-Object Status -eq 'UpdateRequired').Count){
   $native=Invoke-SetupDriverInfInstall -InfPath (Join-Path $Root $Target.InfPath) -LogPath $LogPath
   if($native.ExitCode -eq 3010){$reboot=$true}
   elseif($native.ExitCode -notin @(0,259)){$failures+=($Target.InfPath+': '+$native.ExitCode)}
-  $after=@(Get-SetupDriverDeviceInventory)
+  $after=@(Get-SetupDriverDeviceInventory -Targets @($Target))
   foreach($plan in $plans){
    if($plan.Status -eq 'UpdateRequired'){$result=Get-SetupDriverReadback -Plan $plan -Devices $after;$results+=$result;if($result.Status -eq 'Unverified'){$failures+=($Target.InfPath+': 安裝後版本尚未核實')}}
    else{$results+=$plan}
@@ -139,7 +148,7 @@ function Invoke-SetupOfficialDriverPackage {
  foreach($target in @($Entry.Drivers|Where-Object {-not $_.ParentTarget})){
   $children=@($Entry.Drivers|Where-Object {$_.ParentTarget -and $_.ParentTarget -ceq $target.Id})
   $parentAvailable=$false
-  if($children.Count){$parentPlan=@(Get-SetupDriverTargetPlan -Target $target -Devices @(Get-SetupDriverDeviceInventory) -Build $Build -Architecture amd64);$parentAvailable=@($parentPlan|Where-Object Status -in @('UpdateRequired','Current','NewerInstalled')).Count -gt 0}
+  if($children.Count){$parentPlan=@(Get-SetupDriverTargetPlan -Target $target -Devices @(Get-SetupDriverDeviceInventory -Targets @($target)) -Build $Build -Architecture amd64);$parentAvailable=@($parentPlan|Where-Object Status -in @('UpdateRequired','Current','NewerInstalled')).Count -gt 0}
   $dependencyFailed=$false
   if($parentAvailable){foreach($child in $children){
    if($Build -lt $child.MinimumBuild -or $child.Architecture -ne 'amd64'){$failures+=($child.InfPath+': 必需元件不適用目前OS');$dependencyFailed=$true;continue}
