@@ -1,15 +1,18 @@
 ﻿#Requires -Version 5.1
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$CoverageDirectory)
+param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$CoverageDirectory,[switch]$PreparingRelease)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'test_report.ps1')
 . (Join-Path $PSScriptRoot '../report/portal.ps1')
 $report=Get-Content -LiteralPath (Join-Path $PublicDirectory 'summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert-TestReportSnapshot $report
-if($report.RefType -cne 'Branch'){throw 'Go 附件只用於分支報告；不可改寫不可變 Release 契約。'}
+if($report.RefType -ceq 'Release'){
+ if(-not $PreparingRelease -or $report.SchemaVersion -ne 2 -or $report.PSObject.Properties['GoCoverage'] -or $report.PSObject.Properties['RepoCoverage'] -or $report.Coverage -cne 'NotMeasured'){throw '只允許為尚未附加量測的本機 schema2 發布準備加入 Go 證據；既有版本不改寫。'}
+}elseif($PreparingRelease){throw '發布準備旗標只適用於 Tag staging。'}
 $coverage=Get-Content -LiteralPath (Join-Path $CoverageDirectory 'go_coverage.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert-GoCoverage -Coverage $coverage -Report $report
 Assert-GoCoverageProfile -Coverage $coverage -Directory $CoverageDirectory
+if($PreparingRelease -and $coverage.Covered*100 -lt $coverage.TotalStatements*80){throw '發布準備的 Go 覆蓋率不得低於精確八成。'}
 $report|Add-Member -NotePropertyName GoCoverage -NotePropertyValue $coverage -Force
 Write-SnapshotView -Snapshot $report -OutputDirectory $PublicDirectory
 $source=[IO.Path]::GetFullPath((Join-Path $CoverageDirectory 'go_coverage.out'))

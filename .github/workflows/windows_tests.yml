@@ -172,9 +172,8 @@ jobs:
         run: |
           & .\script\test\measure_go_coverage.ps1 -SourceRoot $PWD.Path -ReportDirectory $env:WINDOWS_SETUP_ARTIFACT_DIR -OutputDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage')
       - name: 附加分項 Go 證據
-        if: github.ref_type != 'tag'
         run: |
-          & .\script\test\attach_go_coverage.ps1 -PublicDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public') -CoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage')
+          & .\script\test\attach_go_coverage.ps1 -PublicDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public') -CoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage') -PreparingRelease:($env:GITHUB_REF_TYPE -eq 'tag')
       - name: 量測 managed 原生程式的完整計數點
         run: |
           & .\script\test\managed_coverage.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'managed-coverage')
