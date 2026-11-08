@@ -28,6 +28,7 @@ try{
   if($mode -eq 'policy_zero'){Assert ($s.PolicyMode -eq 'UseLocal' -and -not $s.NativeDisabledObserved) '官方ADMX的GPO零值為使用本機設定，不等於停用'}
   if($mode -eq 'local_disabled'){Assert ($s.NativeDisabledObserved -and $s.Notes.Count -gt 0) '本機明確停用可見原因但不覆寫'}
   if($mode -eq 'policy_enabled'){Assert ($s.PolicyMode -eq 'EnabledByPolicy' -and $s.GroupPolicyEnableMDNS -eq 1 -and $s.LocalEnableMDNS -eq 0) '原則與本機值分開回報不亂猜'}
+  if($mode -eq 'policy_error'){Assert ($s.PolicyMode -eq 'Unknown' -and -not $s.GroupPolicyReadSucceeded -and -not $s.LocalPolicyReadSucceeded) '讀取失敗不能冒稱系統預設或UseLocal'}
   if($mode -like '*_error'){Assert ($s.ReadErrors.Count -gt 0) ('原生讀取失敗有具體原因 '+$mode)}
  }
  $s=Get-SetupMdnsStatus;Assert ($s.Name -ceq ([Environment]::MachineName+'.local')) '預設名稱直接來自目前系統MachineName'
