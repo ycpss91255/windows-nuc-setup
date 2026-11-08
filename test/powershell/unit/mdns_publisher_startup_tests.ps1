@@ -10,7 +10,7 @@ function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Na
 $realPaths=(Get-Command Get-SetupMdnsPaths).ScriptBlock
 $failed=$false;try{Get-SetupMdnsPaths '../escape'|Out-Null}catch{$failed=$true};Assert $failed 'startup worker RunId不接受任意路徑'
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('mdns_startup_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
-$script:ownerCode=0;$script:ownerMissing=$false;$script:ownerThrows=$false;$script:task=$null;$script:starts=0;$script:stops=0;$script:registers=0;$script:processPresent=$true;$script:ownerSid='S-1-5-18';$script:protected=@{}
+$script:creationDate=[datetime]::UtcNow.AddMinutes(-1);$script:ownerCode=0;$script:ownerMissing=$false;$script:ownerThrows=$false;$script:task=$null;$script:starts=0;$script:stops=0;$script:registers=0;$script:processPresent=$true;$script:ownerSid='S-1-5-18';$script:protected=@{}
 $script:facts=[pscustomobject]@{ComputerName='FIXTURE-PC';Addresses=@([pscustomobject]@{InterfaceIndex=7;IPAddress='192.0.2.9'});PolicyAllowed=$true;DnsClientRunning=$true;SshdRunning=$true;DnsClientProcessId=42}
 function Get-SetupMdnsPaths {param($RunId) $p=& $realPaths $RunId;$p.Common=$temp;$p.Root=Join-Path $temp 'windows_setup_mdns';$p.Runs=Join-Path $p.Root 'runs';$p.Current=Join-Path $p.Root 'current.json';if($RunId){$p.RunRoot=Join-Path $p.Runs $RunId;$p.CodeRoot=Join-Path $p.RunRoot 'code';$p.Context=Join-Path $p.RunRoot 'context.json';$p.Status=Join-Path $p.RunRoot 'status.json'};return $p}
 function Get-SetupMdnsMachineGuid {return '11111111-2222-3333-4444-555555555555'}
@@ -28,7 +28,7 @@ function Start-ScheduledTask {
  $value=[ordered]@{Schema=1;RunId=$ctx.RunId;MachineGuid=$ctx.MachineGuid;SourceFingerprint=$ctx.SourceFingerprint;ComputerName=$script:facts.ComputerName;ProcessId=731;DnsClientProcessId=$script:facts.DnsClientProcessId;PlanFingerprint=(Get-SetupMdnsFingerprint $plans $script:facts.DnsClientProcessId);Plans=$plans;Status='Registered';Registered=$true;LeaseCount=$plans.Count;Error='';CheckedAt=[datetime]::UtcNow.ToString('o');RemoteVerified=$false}
  Write-SetupMdnsAtomicJson -Path $paths.Status -Value $value
 }
-function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) if($ClassName -cne 'Win32_Process' -or $Filter -cne 'ProcessId=731'){throw 'unexpected native process query'};if($script:processPresent){$ctx=Read-SetupMdnsCurrent;$paths=Get-SetupMdnsPaths $ctx.RunId;[pscustomobject]@{SessionId=0;ExecutablePath=$paths.PowerShell;CommandLine=('"'+$paths.PowerShell+'" '+(Get-SetupMdnsTaskArguments $ctx.RunId));CreationDate=[datetime]::UtcNow.AddMinutes(-1)}}}
+function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) if($ClassName -cne 'Win32_Process' -or $Filter -cne 'ProcessId=731'){throw 'unexpected native process query'};if($script:processPresent){$ctx=Read-SetupMdnsCurrent;$paths=Get-SetupMdnsPaths $ctx.RunId;[pscustomobject]@{SessionId=0;ExecutablePath=$paths.PowerShell;CommandLine=('"'+$paths.PowerShell+'" '+(Get-SetupMdnsTaskArguments $ctx.RunId));CreationDate=$script:creationDate}}}
 function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) if($MethodName -cne 'GetOwnerSid'){throw 'unexpected native owner query'};if($script:ownerThrows){throw [IO.IOException]::new('controlled native owner failure')};$r=[pscustomobject]@{Sid=$script:ownerSid};if(-not $script:ownerMissing){$r|Add-Member NoteProperty ReturnValue $script:ownerCode};return $r}
 function Start-Sleep {param($Seconds,$Milliseconds) throw 'positive fixture must be immediately ready, not timeout'}
 foreach($name in @('Register-ScheduledTask','Start-ScheduledTask','Stop-ScheduledTask','Get-ScheduledTask','Unregister-ScheduledTask')){if((Get-Command $name).CommandType -ne 'Function' -or (Get-Command $name).ModuleName){throw 'Unsafe native task boundary escaped fixture: '+$name}}
@@ -66,6 +66,35 @@ $foreign=$script:task;$script:task.Principal.UserId='S-1-5-21-1-2-3-1001';$faile
 try{Invoke-SetupMdnsPublisher -SourceRoot $root|Out-Null}catch{$failed=$true}
 Assert ($failed -and $script:stops -eq 0 -and $script:registers -eq 1) '既有同名foreign principal不接管不停止不Force覆寫'
 $script:task.Principal.UserId='SYSTEM'
+# Isolated process-only TimeZoneInfo cache: deterministic non-UTC cases even on UTC CI.
+# No Windows timezone/registry writes; this test runs in its own PS5 child and always restores cache.
+$cacheField=[TimeZoneInfo].GetField('s_cachedData',[Reflection.BindingFlags]'Static,NonPublic')
+if(-not $cacheField){throw 'PS5 timezone fixture ABI unavailable; cannot skip deterministic offset coverage'}
+$cache=$cacheField.GetValue($null);$localField=$cache.GetType().GetField('m_localTimeZone',[Reflection.BindingFlags]'Instance,NonPublic')
+if(-not $localField){throw 'PS5 local timezone fixture ABI unavailable'}
+$oldZone=$localField.GetValue($cache);$oldCreation=$script:creationDate
+try{
+ foreach($offset in @(8,-7,0)){
+  $zone=[TimeZoneInfo]::CreateCustomTimeZone(('FixtureOffset'+$offset),[TimeSpan]::FromHours($offset),'Fixture','Fixture');$localField.SetValue($cache,$zone)
+  Assert ([TimeZoneInfo]::Local.BaseUtcOffset.TotalHours -eq $offset) ('process-only timezone fixture active '+$offset)
+  foreach($kind in @('Local','Utc')){
+   $checked=[datetime]::UtcNow.AddSeconds(-2);$created=$checked.AddSeconds(-1)
+   $script:creationDate=if($kind -ceq 'Local'){[datetime]::SpecifyKind($created.AddHours($offset),[DateTimeKind]::Local)}else{$created}
+   $v=$original|ConvertFrom-Json;$v.CheckedAt=$checked.ToString('o');Write-SetupMdnsAtomicJson $paths.Status $v
+   $ready=Get-SetupMdnsPublisherStatus -SourceRoot $root
+   Assert ($ready.Success -and $script:creationDate.ToUniversalTime() -le $checked) ('真驗收接受先建立程序 '+$kind+' offset='+$offset)
+  }
+  foreach($fault in @('future_process','expired_heartbeat','future_heartbeat')){
+   $checked=[datetime]::UtcNow.AddSeconds(-2);$created=$checked.AddSeconds(-1)
+   switch($fault){future_process{$created=$checked.AddSeconds(1)} expired_heartbeat{$checked=[datetime]::UtcNow.AddMinutes(-2);$created=$checked.AddSeconds(-1)} future_heartbeat{$checked=[datetime]::UtcNow.AddMinutes(1);$created=[datetime]::UtcNow.AddMinutes(-1)}}
+   $script:creationDate=[datetime]::SpecifyKind($created.AddHours($offset),[DateTimeKind]::Local)
+   $v=$original|ConvertFrom-Json;$v.CheckedAt=$checked.ToString('o');Write-SetupMdnsAtomicJson $paths.Status $v
+   $ready=Get-SetupMdnsPublisherStatus -SourceRoot $root
+   Assert (-not $ready.Success) ('真驗收拒絕PID/時間異常 '+$fault+' offset='+$offset)
+  }
+ }
+}finally{$localField.SetValue($cache,$oldZone);$script:creationDate=$oldCreation;[IO.File]::WriteAllText($paths.Status,$original,[Text.UTF8Encoding]::new($true))}
+Assert ([TimeZoneInfo]::Local.Id -ceq $oldZone.Id -and $script:nativeForbiddenCalls -eq 0) '子程序時區cache已還原且OS mutation spy為0'
 $copied=Join-Path $paths.CodeRoot 'modules/ssh/native/mdns_publisher.cs';[IO.File]::AppendAllText($copied,'//tampered');$failed=$false
 try{Invoke-SetupMdnsPublisher -SourceRoot $root -VerifyOnly|Out-Null}catch{$failed=$true};Assert $failed 'snapshot來源變動即拒絕，而非只信心跳檔'
 Copy-Item -LiteralPath (Join-Path $root 'modules/ssh/native/mdns_publisher.cs') -Destination $copied
