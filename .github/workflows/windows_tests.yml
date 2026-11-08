@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 9997531f873e7a378b131e847a4851b1b514b7b7
+          ref: dc99d8e71fa1c02306b96316e14b3844d87bba84
           persist-credentials: false
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -31,31 +31,31 @@ jobs:
           $directory = Join-Path $env:RUNNER_TEMP 'actionlint-1.7.12'
           Install-ContainerToolArtifact -Artifact $artifact -Destination $directory -ArchiveDirectory (Join-Path $env:RUNNER_TEMP 'actionlint-download')
           "WINDOWS_SETUP_ACTIONLINT=$(Join-Path $directory 'actionlint.exe')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-      - name: Reproduce original concurrent pair with full sources
+      - name: Reproduce unchanged shard E2E case with full sources
         run: |
           $ErrorActionPreference='Stop'
           [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
           $source=$PWD.Path
           $head=(& git rev-parse HEAD).Trim()
-          if($head -ne '9997531f873e7a378b131e847a4851b1b514b7b7'){throw 'Unexpected source'}
+          if($head -ne 'dc99d8e71fa1c02306b96316e14b3844d87bba84'){throw 'Unexpected source'}
           $folder=Join-Path $env:RUNNER_TEMP 'configuration-diagnostic'
           [void][IO.Directory]::CreateDirectory($folder)
           $path=Join-Path $folder 'manifest.json'
           .\test\powershell\coverage\create_baseline_manifest.ps1 -SourceRoot $source -OutputPath $path
           $manifest=Get-Content $path -Raw -Encoding UTF8|ConvertFrom-Json
-          $case='test/powershell/integration/configuration_helpers_tests.ps1'
-          if($manifest.Tests[7] -cne $case){throw 'Unexpected canonical case'}
-          $manifest.Tests=@($manifest.Tests[3],$case)
+          $case='test/powershell/integration/coverage_shards_tests.ps1'
+          if($manifest.Tests[11] -cne $case){throw 'Unexpected canonical case'}
+          $manifest.Tests=@($case)
           $manifest.TestEngines=[pscustomobject]@{}
-          $manifest|Add-Member ShardContext ([pscustomobject]@{Commit=$head;RunUrl='https://github.com/ycpss91255/windows_setup/actions/runs/42512829236';RunAttempt=1;ShardIndex=3;ShardCount=4;GlobalIndices=@(3,7)})
+          $manifest|Add-Member ShardContext ([pscustomobject]@{Commit=$head;RunUrl='https://github.com/ycpss91255/windows_setup/actions/runs/42512829236';RunAttempt=1;ShardIndex=3;ShardCount=4;GlobalIndices=@(11)})
           [IO.File]::WriteAllText($path,($manifest|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
           $nativeSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
           $kind=if($nativeSid -eq 'S-1-5-18'){'System'}elseif($nativeSid -match '-500$'){'BuiltinAdministrator'}else{'StandardAccount'}
           Write-Host ('NativeIdentityKind='+$kind+';SourceCommit='+$head+';Sources='+$manifest.Sources.Count)
           $proof=Join-Path $folder 'proof'
           $old=$ErrorActionPreference
-          try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\powershell_coverage.ps1 -ManifestPath $path -OutputDirectory $proof -ThrottleLimit 2 *> (Join-Path $folder 'collector.private.log');$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
-          foreach($workerIndex in @(0,1)){
+          try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\powershell_coverage.ps1 -ManifestPath $path -OutputDirectory $proof -ThrottleLimit 1 *> (Join-Path $folder 'collector.private.log');$code=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
+          foreach($workerIndex in @(0)){
             Write-Host ('DiagnosticWorkerIndex='+$workerIndex)
             $stdout=Join-Path $proof ('worker_'+$workerIndex+'.private.stdout.log')
           $stderr=Join-Path $proof ('worker_'+$workerIndex+'.private.stderr.log')
@@ -67,6 +67,14 @@ jobs:
           if(Test-Path $stderr){
             foreach($line in Get-Content $stderr -Encoding UTF8){if($line -match '^At (.+\.ps1):(\d+) char:(\d+)'){$file=[IO.Path]::GetFileName($matches[1]);Write-Host ('DIAG_LOCATION '+(@{File=$file;Line=[int]$matches[2];Column=[int]$matches[3]}|ConvertTo-Json -Compress))}}
           }
+          }
+          $privateText=''
+          foreach($file in @($stdout,$stderr)){if(Test-Path $file){$privateText+=[IO.File]::ReadAllText($file)}}
+          $codes=ConvertFrom-Json '{"BaselineOutputExists":"+lfafQVurlU4j/pR8l1YWyhXAjA=","BaselineTestsEmpty":"iVtoUSxuZooFbq5VunB6egIw","BaselineTestMissing":"iVtoUSxuZop6kDFZGv8=","BaselineGitFailed":"IXHVbNZTl19Icixnp2M2UoZPkG4Fbq5VAjA=","BaselineSourcesEmpty":"Y2sPXyAAUABvAHcAZQByAFMAaABlAGwAbAAgAIZPkG4Fbq5VunB6egIw"}'
+          foreach($property in $codes.PSObject.Properties){$needle=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($property.Value));if($privateText.Contains($needle)){Write-Host ('KNOWN_FAILURE='+$property.Name)}}
+          foreach($location in [regex]::Matches($privateText,'(?<path>[A-Za-z]:[\\/][^\r\n]*?\.ps1)(?::(?:line\s*)?|,\s*line\s*)(?<line>[0-9]+)')){
+            $full=$location.Groups['path'].Value
+            if($full.StartsWith($source+'\',[StringComparison]::OrdinalIgnoreCase)){$relative=$full.Substring($source.Length+1).Replace('\','/');if($relative -in @('test/powershell/coverage/create_baseline_manifest.ps1','test/powershell/integration/coverage_shards_tests.ps1','test/powershell/coverage/safe_suite.ps1','script/test/powershell_coverage.ps1')){Write-Host ('KNOWN_LOCATION '+(@{File=$relative;Line=[int]$location.Groups['line'].Value}|ConvertTo-Json -Compress))}}
           }
           Write-Host ('NativeExitCode='+$code+';CompletedEvidence='+(Test-Path (Join-Path $proof 'evidence.json')))
           & git diff --exit-code
