@@ -520,11 +520,11 @@ Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安�
 
 ### 主機名稱與區域網路
 
-- 第 4 階段與獨立 SSH 模組會顯示目前系統的 `主機名稱.local`、實際 IPv4／IPv6、帳號與可直接複製的連線命令，不固定電腦名稱或使用者。既有 LAN Ping 模組的 `-VerifyOnly` 也會顯示同一份唯讀名稱觀測。
+- 第 4 階段會在 SSH 與 LAN Ping 就緒後，啟動 Windows 原生持續 mDNS publisher，公告目前系統名稱的 `主機名稱.local`、各作用中介面的 A／AAAA 與 SSH `_ssh._tcp` 22。名稱與使用者動態取得；DHCP／網卡變更會重新綁定，改電腦名稱後重新啟動即可沿用新名稱。獨立入口是 `modules\ssh\apply_mdns_settings.cmd`，加 `-VerifyOnly` 可唯讀檢查。
 - 在**另一臺同網段電腦的 PowerShell**，先複製畫面的 `ping -4 '主機名稱.local'`，再試 `ssh -l '帳號' '主機名稱.local'`；IPv6 可另用畫面的 `ping -6`。若名稱解析失敗，先複製畫面的 IP 備援命令。多個 IP 會完整列出，單一備援範例優先選一般 IPv4。
 - IPv6 `fe80::` 是 link-local；畫面保留本機的 `%介面索引`，從另一臺直連時，scope 必須改用**用戶端**該網段的索引，可在該臺執行 `Get-NetIPInterface -AddressFamily IPv6 -ConnectionState Connected` 查看；不能直接沿用伺服器的索引。優先使用名稱或 IPv4 備援可避免手動選 scope。
-- 此觀測只讀取 DNS Client、兩處 `EnableMDNS`、UDP 5353 與本機系統 A／AAAA 解析是否符合作用中的本機 IP。未設定值代表系統預設；管理原則值 0 依 Windows 官方 ADML 代表使用本機設定。讀取失敗會另外標示未知，不會覆寫政策、開防火牆孔、安裝 Bonjour、改 hosts、改名稱或關閉 IPv6。沒有 5353 端點可能是按需啟用；本機解析吻合也不代表另一臺已可連線。
-- `.local` 通常限同網段；訪客網路、AP 隔離或跨 VLAN 可能阻擋 multicast。本工具的名稱觀測失敗不會阻斷既有 Ping／SSH IP 存取。原生解析使用 `Resolve-DnsName -NoHostsFile`，未使用會排除 multicast 的 `-DnsOnly`；參見 [Microsoft 的名稱解析說明](https://techcommunity.microsoft.com/blog/networkingblog/resolve-dnsname-vs-nslookup-in-windows/4483858)及 [mDNS 管理說明](https://techcommunity.microsoft.com/blog/networkingblog/mdns-in-the-enterprise/3275777)。
+- publisher 使用受保護的本機來源快照與 SYSTEM 開機工作，拔除 USB 後仍持續運作，不需要 agent 或 Bonjour。驗證會讀回目前工作、來源、SYSTEM 程序、本輪 RunId、鮮活 heartbeat 與原生註冊狀態；失敗會讓模組與總驗收失敗。`Registered` 表示本機原生公告已註冊，`RemoteVerified` 保持 false；另一臺能否解析仍以你實際執行上述命令為準，不以本機 `LocalMatched` 冒充跨機成功。
+- `.local` 通常限同網段；訪客網路、AP 隔離、跨 VLAN、用戶端不支援 mDNS 或網路政策可能阻擋 multicast。工具不覆寫 GPO、開 UDP 5353 防火牆孔、修改 hosts、改名或關閉 IPv6；名稱失敗時可使用畫面中的實際 IP 備援。既有名稱觀測仍可用 `Resolve-DnsName -NoHostsFile` 協助診斷，不把觀測當公告或跨機證明；參見 [Microsoft 的名稱解析說明](https://techcommunity.microsoft.com/blog/networkingblog/resolve-dnsname-vs-nslookup-in-windows/4483858)及 [mDNS 管理說明](https://techcommunity.microsoft.com/blog/networkingblog/mdns-in-the-enterprise/3275777)。
 - 多臺電腦建議路由器固定 DHCP 租約；需要跨網段時使用區域 DNS，例如 nuc-001.home.arpa。
 - 沒有寫入固定 IP、個人 SSH 私鑰、hosts 站點資料或其他人的 SSH config。
 
