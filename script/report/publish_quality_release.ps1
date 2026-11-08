@@ -2,13 +2,14 @@
 param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../test/test_report.ps1')
+. (Join-Path $PSScriptRoot 'portal.ps1')
 $snapshot=Get-Content (Join-Path $PublicDirectory 'summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert-TestReportSnapshot -Report $snapshot -Release
 if($snapshot.Commit -cne $Commit -or $snapshot.Version -cne $Version -or $snapshot.RefName -cne $Version){throw '發布版本與測試來源不一致。'}
-$files=@('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','system.svg','coverage.svg')
+$files=@(Get-TestReportArtifactNames $snapshot.SchemaVersion)
 $hashes=@(foreach($name in $files){[ordered]@{Name=$name;SHA256=(Get-FileHash -LiteralPath (Join-Path $PublicDirectory $name)).Hash.ToLowerInvariant()}})
 $quality=Join-Path $PublicDirectory 'quality.json';Copy-Item -LiteralPath (Join-Path $PublicDirectory 'summary.json') -Destination $quality
-$manifest=[ordered]@{SchemaVersion=1;Version=$Version;Commit=$Commit;MeasuredAt=$snapshot.MeasuredAt;RunUrl=$snapshot.RunUrl;SnapshotSHA256=(Get-FileHash $quality).Hash.ToLowerInvariant();Files=$hashes}
+$manifest=[ordered]@{SchemaVersion=$snapshot.SchemaVersion;Version=$Version;Commit=$Commit;MeasuredAt=$snapshot.MeasuredAt;RunUrl=$snapshot.RunUrl;SnapshotSHA256=(Get-FileHash $quality).Hash.ToLowerInvariant();Files=$hashes}
 $manifestPath=Join-Path $PublicDirectory 'quality-manifest.json'
 [IO.File]::WriteAllText($manifestPath,($manifest|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
 $existing=& gh api --paginate ('repos/'+$Repository+'/releases?per_page=100') --jq '.[].tag_name'
