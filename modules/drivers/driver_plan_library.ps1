@@ -4,7 +4,14 @@ function Get-SetupDriverTargetPlan {
  $matches=@($Devices|Where-Object {$ids=@($_.HardwareIds);@($Target.HardwareIds|Where-Object {$_ -in $ids}).Count -gt 0})
  $status='';$reason=''
  if($Build -lt $Target.MinimumBuild -or $Architecture -ne $Target.Architecture){$status='NotApplicable';$reason='作業系統或架構不適用'}
- elseif(-not $matches){$status='Absent';$reason='未枚舉相符硬體'}
+ elseif(-not $matches){
+  $possibleErrors=@($Devices|Where-Object {
+   if(-not $_.HardwareIdsReadError){return $false}
+   $instance=[string]$_.InstanceId
+   @($Target.HardwareIds|Where-Object {$instance.StartsWith(($_+'\'),[StringComparison]::OrdinalIgnoreCase) -or $instance.StartsWith(($_+'&'),[StringComparison]::OrdinalIgnoreCase)}).Count -gt 0
+  })
+  if($possibleErrors.Count){$status='Unverified';$reason='相符裝置硬體屬性未能讀取'}else{$status='Absent';$reason='未枚舉相符硬體'}
+ }
  if($status){return [pscustomobject]@{InstanceId='';InfPath=$Target.InfPath;Status=$status;Reason=$reason;CurrentVersion='';TargetVersion=$Target.DriverVersion;TargetProvider=$Target.Provider;ProviderAliases=@($Target.ProviderAliases)}}
  foreach($device in $matches){
   $current=$null;$desired=$null
@@ -54,8 +61,9 @@ function Get-SetupDriverDeviceInventory {
  $signed=@(Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop)
  foreach($device in @(Get-PnpDevice -PresentOnly -ErrorAction Stop)){
   $driver=@($signed|Where-Object DeviceID -eq $device.InstanceId|Select-Object -First 1)
-  $ids=@((Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_HardwareIds -ErrorAction Stop).Data)
-  [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;HardwareIds=$ids;Status=$device.Status;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion}
+  $ids=@();$readError=''
+  try{$ids=@((Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_HardwareIds -ErrorAction Stop).Data)}catch{$readError=$_.Exception.Message}
+  [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;HardwareIds=$ids;HardwareIdsReadError=$readError;Status=$device.Status;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion}
  }
 }
 function Get-SetupDriverPnpTool {
