@@ -115,7 +115,7 @@ namespace WindowsSetup {
    public void Dispose(){
     bool cancelNow=false,stop=false;
     lock(gate){if(freed)return;disposeRequested=true;if(pending && operation==0 && !cancelSent){cancelSent=true;cancelNow=true;}else if(!pending && registered)stop=true;Cleanup();}
-    if(cancelNow){uint code=api.Cancel(cancel);if(code!=0)throw new InvalidOperationException("Native registration cancellation failed: "+code);}
+    if(cancelNow){uint code;lock(gate){sending++;}try{code=api.Cancel(cancel);}finally{lock(gate){sending--;Cleanup();}}if(code!=0)throw new InvalidOperationException("Native registration cancellation failed: "+code);}
     if(stop)Send(1);
     bool wait;lock(gate)wait=pending;
     if(wait && !api.Wait(completed,timeout))throw new TimeoutException("Native cancellation/deregistration is still pending; memory retained until its callback or process exit.");
