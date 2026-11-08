@@ -32,23 +32,21 @@ Copy-Item -LiteralPath (Join-Path $packageRoot 'modules/updates/update_stage_lib
 $cmd='@echo off'+"`r`n"+'powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0modules\drivers\install_drivers.ps1" -DriverPackagePath "%~dp0." %*'+"`r`n"
 [IO.File]::WriteAllText((Join-Path $output 'install.cmd'),$cmd,[Text.Encoding]::ASCII)
 $readme=@"
-# NUC8 獨立驅動包
+# 獨立驅動包：$($profile.ProfileId)
 
-完整複製此資料夾到目標電腦，雙擊 install.cmd。管理員權限由安裝器提示；錯誤機型安全略過。
+完整複製此資料夾到目標電腦，執行 install.cmd；管理員權限由安裝器提示。依 Win32_BaseBoard.Product 精準比對下列板號，不依使用者名稱、磁碟代號或原 repo 路徑。
 
-| 整機／套件型號 | 接受的主機板 Product |
-| --- | --- |
-| NUC8i7HVK；同板 NUC8i7HVKVA／NUC8i7HVKVAW | NUC8i7HVB |
-| NUC8i7HNK；同板 NUC8i7HNKQC | NUC8i7HNB |
+架構：$($profile.Architecture)；接受板號：$($profile.SupportedBoards -join '、')。
 
-依 [ASUS 官方 NUC 規格索引](https://zentalk.asus.com/t5/faq/nuc-technical-product-specifications-for-nuc-products/ta-p/451363) 的 BIOS 識別對照。腳本實際讀取 Win32_BaseBoard.Product，去除首尾空白後精確比對白名單，不依外殼型號猜測；不是所有 NUC8 都可使用。已知其他值會略過。空白／明確未知或CIM失敗時，可選重新偵測、通用略過，或依上表選整機並輸入完整板號確認；多塊板或確認衝突不允許強制。原始偵測資料保留，安裝前仍核對本機與包身分。
+未符合設定檔或未選擇包時略過。逐裝置比對硬體 ID、provider、INF 版本及 OS 範圍；保留較新驅動，不以套件版號代替所有 INF 版本。必要 SWC 先加入後安裝父裝置並重新枚舉讀回；Extension 需確認 active 裝置關聯。
 
-這是型號對照與安裝條件，不代表每個整機變體已實測。清單內的封存檔不代表所有裝置皆已枚舉或達官方目標版本；仍須依裝置管理員與 Windows Update 檢查其他驅動。AMD 封存檔 GFX-Radeon-Win10-23.10.01.46.zip 在官方列為 Windows 10 64-bit，不能宣稱 Windows 11 官方認證；本工具在 Windows 11 的結果須逐機驗證。
+唯讀檢查包完整性：install.cmd -PackageOnly。此結果不能當成目前主機可安裝的證明。版本 2 package.json 以原始 SHA256 綁定 drivers/$($profile.ProfileId)/profile.json；manifest.json 記錄全部來源、封存檔及 payload 雜湊。完整性驗證不等於目前每個裝置皆已安裝。
 
-只檢查包完整性（不安裝、不檢查目前電腦是否相容）：install.cmd -PackageOnly。此結果不能當成目前主機可安裝的證明，不可混用手動確認參數。非互動主控台不等待型號輸入；-NonInteractive亦可關閉詢問，未知型號需人工確認後明確傳入-ConfirmedBoard NUC8i7HVB（HNK用HNB）及-ConfirmationComputer目前電腦名稱，已知其他機型仍拒絕。
-
-可由 Windows 設定工具的 DriverPackagePath 選擇本目錄；此包不需要原主包路徑。安裝日誌位於 modules/drivers/driver_logs；既有 ProgramData NUC8-Setup 快取識別保留。獨立包不依賴 script/test/.github。完整性檢查會核對 package.json 的型號／架構與 manifest.json 的所有封存檔雜湊。
+日誌位於 modules/drivers/driver_logs。可從主 Windows 工具的 DriverPackagePath 選擇本目錄，或獨立使用；不依賴 script、test 或 .github。不執行來源安裝 EXE 或韌體工具。詳細官方來源及每個 INF 版本見 manifest.json。
 "@
+if(Test-Path -LiteralPath (Join-Path (Split-Path $profile.ProfilePath -Parent) 'readme.md')){
+ Copy-Item -LiteralPath (Join-Path (Split-Path $profile.ProfilePath -Parent) 'readme.md') -Destination (Join-Path $profileDirectory 'readme.md')
+}
 [IO.File]::WriteAllText((Join-Path $output 'readme.md'),$readme,(New-Object Text.UTF8Encoding($true)))
 $null=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $output
 [pscustomobject]@{OutputDirectory=$output;Count=$manifest.Count;Status='Passed'}

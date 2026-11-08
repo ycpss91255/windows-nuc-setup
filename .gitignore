@@ -91,10 +91,7 @@ id_ecdsa*
 /CustomHostsSync/ssh-config-before-*.backup
 
 # Modular package binary payload and per-machine hosts runtime.
-/modules/drivers/*/*
-!/drivers/*/profile.json
-!/drivers/*/manifest.json
-!/drivers/*/readme.mdpayload/
+/modules/drivers/payload/
 
 /modules/ssh/custom_hosts_sync/runtime.json
 /modules/ssh/custom_hosts_sync/owner.json

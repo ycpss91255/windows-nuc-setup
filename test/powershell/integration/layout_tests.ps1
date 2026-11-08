@@ -47,10 +47,11 @@ foreach($name in @('Setup-Result.json','Setup-Progress.json','Verification-Resul
 foreach($name in @('Display-Verification.json','Theme-Verification.json','IconLayout-Result.json')){
  Assert ((Resolve-NucPath $name) -match '\\modules\\') ('module output stays beside producer: '+$name)
 }
-Assert (Test-Path -LiteralPath (Join-Path $PackageRoot 'modules/drivers/manifests/nuc8.json')) 'driver manifest resolves after relocation'
-$driverManifest=[IO.File]::ReadAllText((Join-Path $PackageRoot 'modules/drivers/manifests/nuc8.json'))|ConvertFrom-Json
-Assert (@($driverManifest).Count -eq 4) 'driver manifest contains four expected payload entries'
-Assert (@($driverManifest.File|Select-Object -Unique).Count -eq 4) 'driver manifest filenames are unique'
+Assert (Test-Path -LiteralPath (Join-Path $PackageRoot 'drivers/nuc8i7hvk_hnk/manifest.json')) 'driver manifest resolves after relocation'
+$driverManifest=[IO.File]::ReadAllText((Join-Path $PackageRoot 'drivers/nuc8i7hvk_hnk/manifest.json'))|ConvertFrom-Json
+$driverManifest=@($driverManifest.Packages)
+Assert ($driverManifest.Count -eq 12) 'driver manifest contains twelve official payload entries'
+Assert (@($driverManifest.File|Select-Object -Unique).Count -eq 12) 'driver manifest filenames are unique'
 foreach($entry in $driverManifest){
  Assert ($entry.File -match '^[^\\/:]+\.zip$' -and $entry.File -notmatch '^\.\.') 'driver manifest filename is a local ZIP name'
  Assert ($entry.SHA256 -match '^[A-Fa-f0-9]{64}$') 'driver manifest SHA256 is valid metadata'

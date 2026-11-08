@@ -1,4 +1,4 @@
-﻿# 第三方來源與授權
+# 第三方來源與授權
 
 本文件列出工具包使用的第三方內容；各自的授權不代表本專案自有程式已採用相同授權。本專案自有程式目前尚未選定對外散布授權，公開發布前需由維護者決定，不能把下列 MIT 授權套用到整個工具包。
 
@@ -18,9 +18,9 @@
 
 ## 裝置驅動
 
-四個驅動封存檔保留於主程式之外的可選獨立包 `windows_driver_packages/nuc8`，不納入 Git。檔名及已核對的 SHA256 範本見 [nuc8.json](../modules/drivers/manifests/nuc8.json)；獨立包自身使用 `manifest.json` 核對完整性。
+十二個驅動封存檔保留於主程式之外的可選獨立包 `windows_driver_packages/nuc8`，不納入 Git。檔名及已核對的 SHA256 範本見 [manifest.json](../drivers/nuc8i7hvk_hnk/manifest.json)；獨立包自身使用 `manifest.json` 核對完整性。
 
-目前用途為晶片組、Serial IO、UCM 及 AMD 顯示驅動。這些檔案具有各供應商自己的授權，不能把本專案或 Win11Debloat 的授權視為驅動的散布許可。儲存庫只追蹤雜湊清單，不承諾第三方下載位置永久有效。
+目前涵蓋晶片組、Serial IO、UCM、AMD／Intel 顯示、Wi-Fi、藍牙、乙太網路、音效、MEI、SD 及 CIR；精確版本與來源見 [機型說明](../drivers/nuc8i7hvk_hnk/readme.md)。這些檔案具有各供應商自己的授權，不能把本專案或 Win11Debloat 的授權視為驅動的散布許可。儲存庫只追蹤雜湊清單，不承諾第三方下載位置永久有效。
 
 ## Windows 內建元件
 
