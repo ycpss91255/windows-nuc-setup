@@ -46,6 +46,13 @@ func ValidatePortal(read Reader, readme, sha, run, base string) (Report, error) 
 	if !strings.Contains(page.Visible, r.Commit[:7]) || !strings.Contains(page.Visible, stamp.UTC().Format("2006-01-02 15:04:05")+" UTC") {
 		return fail("R03 首頁提交或時間與本次報告不一致")
 	}
+	summary, e := read("main/summary.json")
+	if e != nil {
+		return r, e
+	}
+	if e = ValidatePortalCoverage(page.Visible, summary); e != nil {
+		return r, e
+	}
 	var versions []struct{ Version, Status, Path string }
 	b, e = read("versions.json")
 	if e != nil {
