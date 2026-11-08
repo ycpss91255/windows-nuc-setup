@@ -31,7 +31,7 @@ function Compare-TestSnapshots {
 }
 function Write-SnapshotView {
  param($Snapshot,[string]$OutputDirectory)
- Write-TestReports -Checks @($Snapshot.Checks) -OutputDirectory $OutputDirectory -Layer $Snapshot.RequestedLayer -Commit $Snapshot.Commit -RunUrl $Snapshot.RunUrl -SourceState $Snapshot.SourceState -Version $Snapshot.Version -Environment $Snapshot.Environment -RefType $Snapshot.RefType -RefName $Snapshot.RefName -MeasuredAt $Snapshot.MeasuredAt -Changes $Snapshot.Changes -GoCoverage $(if($Snapshot.PSObject.Properties['GoCoverage']){$Snapshot.GoCoverage}else{$null})|Out-Null
+ Write-TestReports -SchemaVersion $Snapshot.SchemaVersion -Checks @($Snapshot.Checks) -OutputDirectory $OutputDirectory -Layer $Snapshot.RequestedLayer -Commit $Snapshot.Commit -RunUrl $Snapshot.RunUrl -SourceState $Snapshot.SourceState -Version $Snapshot.Version -Environment $Snapshot.Environment -RefType $Snapshot.RefType -RefName $Snapshot.RefName -MeasuredAt $Snapshot.MeasuredAt -Changes $Snapshot.Changes -GoCoverage $(if($Snapshot.PSObject.Properties['GoCoverage']){$Snapshot.GoCoverage}else{$null})|Out-Null
 }
 function Test-PortalReleaseEvidence {
  param($Entry)
