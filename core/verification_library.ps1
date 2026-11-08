@@ -23,6 +23,13 @@ $ssh=Get-CimInstance Win32_Service -Filter "Name='sshd'"
 Add-Check 'SSH' ($ssh.State -eq 'Running' -and $ssh.StartMode -eq 'Auto') ($ssh.State+' / '+$ssh.StartMode)
 try{ & (Resolve-NucPath 'initialize_ssh_client.ps1') -VerifyOnly|Out-Null;Add-Check 'SSH 客戶端目錄' $true '目前使用者 .ssh/config、active-sites.conf、config.d 已存在' }catch{Add-Check 'SSH 客戶端目錄' $false $_.Exception.Message}
 try{ & (Resolve-NucPath 'apply_lan_ping_settings.ps1') -VerifyOnly|Out-Null;Add-Check '同網段 IPv4/IPv6 Ping' $true 'LocalSubnet 入站回應規則啟用' }catch{Add-Check '同網段 IPv4/IPv6 Ping' $false $_.Exception.Message}
+try{
+ $mdnsResults=@(& (Resolve-NucPath 'apply_mdns_settings.ps1') -VerifyOnly)
+ if($mdnsResults.Count -ne 1){throw 'mDNS公告唯讀驗證未回傳唯一結果。'}
+ $mdns=$mdnsResults[0];$publisherRun=[guid]::Empty
+ if($mdns.Success -isnot [bool] -or -not $mdns.Success -or $mdns.Status -cne 'Registered' -or $mdns.Name -isnot [string] -or $mdns.Name -ine ([Environment]::MachineName+'.local') -or $mdns.RemoteVerified -isnot [bool] -or $mdns.RemoteVerified -ne $false -or -not [guid]::TryParseExact([string]$mdns.RunId,'D',[ref]$publisherRun) -or $publisherRun -eq [guid]::Empty){throw 'mDNS公告結果的狀態、目前名稱或原生工作者識別不符。'}
+ Add-Check 'mDNS 持續公告' $true ('本機原生持續公告已註冊：'+$mdns.Name+'；跨機解析請在另一臺同網段電腦驗證。')
+}catch{Add-Check 'mDNS 持續公告' $false $_.Exception.Message}
 try{ & (Resolve-NucPath 'apply_hosts_sync.ps1') -VerifyOnly|Out-Null;Add-Check '依網路自動匯入框架' $true '各啟用輸出、目前帳號、背景程序及來源收斂均通過' }catch{Add-Check '依網路自動匯入框架' $false $_.Exception.Message}
 try{
  $privacy=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'apply_privacy_settings.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup/Privacy-Result.json') -Arguments @{VerifyOnly=$true}
