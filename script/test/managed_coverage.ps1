@@ -46,7 +46,12 @@ function Initialize-ManagedCoverageTool {
  $pin=Get-ManagedCoverageToolPin
  $feed=Join-Path $OutputDirectory 'tool-feed';New-Item -ItemType Directory -Path $feed|Out-Null
  $package=Join-Path $feed ('dotnet-coverage.'+$pin.Version+'.nupkg')
- Invoke-WebRequest -UseBasicParsing -Uri ('https://api.nuget.org/v3-flatcontainer/dotnet-coverage/'+$pin.Version+'/dotnet-coverage.'+$pin.Version+'.nupkg') -OutFile $package -ErrorAction Stop
+ if(-not [string]::IsNullOrWhiteSpace($env:WINDOWS_SETUP_MANAGED_PACKAGE_PATH)){
+  if(-not(Test-Path -LiteralPath $env:WINDOWS_SETUP_MANAGED_PACKAGE_PATH -PathType Leaf)){throw 'Supplied runner-local managed package is missing; no network fallback is allowed.'}
+  Copy-Item -LiteralPath $env:WINDOWS_SETUP_MANAGED_PACKAGE_PATH -Destination $package -ErrorAction Stop
+ }else{
+  Invoke-WebRequest -UseBasicParsing -Uri ('https://api.nuget.org/v3-flatcontainer/dotnet-coverage/'+$pin.Version+'/dotnet-coverage.'+$pin.Version+'.nupkg') -OutFile $package -ErrorAction Stop
+ }
  $sha=[Security.Cryptography.SHA512]::Create();try{$hash=[Convert]::ToBase64String($sha.ComputeHash([IO.File]::ReadAllBytes($package)))}finally{$sha.Dispose()}
  if($hash -cne $pin.PackageSHA512){throw 'Official NuGet package SHA512 differs; tool will not execute.'}
  $config=Join-Path $OutputDirectory 'nuget.config'
