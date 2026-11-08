@@ -12,12 +12,31 @@ function Get-SetupInitContext {
  $imageState=(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\State' -ErrorAction SilentlyContinue).ImageState
  $desktopOwned=$false
  if($context.Sid -ne 'S-1-5-18'){
-  $explorers=@(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'"|Where-Object {$_.SessionId -eq $context.SessionId})
-  foreach($process in $explorers){if((Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid).Sid -eq $context.Sid){$desktopOwned=$true}}
+  $explorers=@(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction Stop|Where-Object {$_.SessionId -eq $context.SessionId})
+  foreach($process in $explorers){$owner=Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop;if($owner.ReturnValue -eq 0 -and $owner.Sid -eq $context.Sid){$desktopOwned=$true}}
  }
  $context|Add-Member NoteProperty ImageState $imageState -Force
  $context|Add-Member NoteProperty DesktopOwned $desktopOwned -Force
+ $context|Add-Member NoteProperty ModeFacts (Get-SetupInitPreparationFacts -Identity $context) -Force
  return $context
+}
+function Get-SetupInitPreparationFacts {
+ param($Identity)
+ try{
+  $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+  $setup=Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\Setup' -ErrorAction Stop
+  $completion=Invoke-InitOobeCompleteNative
+  $profile=Get-ItemProperty -LiteralPath ('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\'+$Identity.Sid) -ErrorAction Stop
+  $registered=[Environment]::ExpandEnvironmentVariables([string]$profile.ProfileImagePath)
+  $nativeProfile=[Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile,[Environment+SpecialFolderOption]::DoNotVerify)
+  $profileMatches=($registered -and $nativeProfile -and [IO.Path]::GetFullPath($registered).TrimEnd('\') -ieq [IO.Path]::GetFullPath($nativeProfile).TrimEnd('\'))
+  $processes=@(Get-CimInstance Win32_Process -Filter "Name='msoobe.exe' OR Name='CloudExperienceHostBroker.exe' OR Name='CloudExperienceHostApp.exe' OR Name='oobenetworkconnectionflow.exe' OR Name='setup.exe' OR Name='setuphost.exe' OR Name='setupprep.exe' OR Name='sysprep.exe'" -ErrorAction Stop|Where-Object SessionId -eq $Identity.SessionId)
+  $oobe=@($processes|Where-Object {$_.Name -in @('msoobe.exe','CloudExperienceHostBroker.exe','CloudExperienceHostApp.exe','oobenetworkconnectionflow.exe')}).Count -gt 0
+  $setupBusy=@($processes|Where-Object {$_.Name -in @('setup.exe','setuphost.exe','setupprep.exe','sysprep.exe')}).Count -gt 0
+  $localBuiltin=$false
+  if($Identity.Sid -match '-500$'){$user=Get-LocalUser -SID $Identity.UserSID -ErrorAction Stop;$localBuiltin=([string]$user.SID -eq $Identity.Sid)}
+  return @{ReadSucceeded=$true;Build=[int]$os.BuildNumber;ProductType=[int]$os.ProductType;IsWinPE=[bool](Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT' -ErrorAction Stop);OobeApiSucceeded=$completion.Succeeded;OobeComplete=$completion.Complete;SetupInProgress=$setup.SystemSetupInProgress;OobeInProgress=$setup.OOBEInProgress;OobeProcessInSession=$oobe;SetupProcessInSession=$setupBusy;ProfileMatches=[bool]$profileMatches;LocalBuiltin=[bool]$localBuiltin}
+ }catch{return @{ReadSucceeded=$false}}
 }
 function Invoke-SetupInit {
  param([Parameter(Mandatory=$true)][string]$EntryPath,[Parameter(Mandatory=$true)][string]$ModuleRoot,[string]$SshScriptPath,[string]$ExpectedUserSID,[string]$ResumeStatePath)
@@ -31,7 +50,7 @@ $context=Get-SetupInitContext
 $sid=$context.Sid
 if($ExpectedUserSID -and $ExpectedUserSID -ne $sid){throw '提權後帳號已改變，請使用原帳號的管理員權限。'}
 $admin=$context.IsAdministrator;$imageState=$context.ImageState;$desktopOwned=$context.DesktopOwned
-$route=Get-InitRoute -Sid $sid -ImageState $imageState -IsAdministrator $admin -DesktopOwned $desktopOwned
+$route=Get-InitRoute -Sid $sid -ImageState $imageState -IsAdministrator $admin -DesktopOwned $desktopOwned -ModeFacts $context.ModeFacts
 Write-Host ('=== Init：Windows '+[Environment]::OSVersion.Version+'；階段 '+$route+' ===') -ForegroundColor Cyan
 if($route -eq 'ElevationRequired'){
  Write-Host '請允許目前帳號的管理員權限；不可輸入另一個管理員帳號。'
@@ -41,7 +60,7 @@ if($route -eq 'ElevationRequired'){
  return
 }
 if($route -eq 'RejectBuiltinAdministrator'){throw '目前是一般 Administrator 桌面，不是可確認的稽核模式。請登入正式的本機管理員帳號再執行 Init。'}
-if($route -eq 'RejectUnknownSetupState'){throw ('無法確認目前是稽核模式或正式使用者桌面，未變更設定。ImageState='+$imageState)}
+if($route -eq 'RejectUnknownSetupState'){throw ('無法確認帳號準備條件或正式使用者桌面；狀態未知、矛盾或仍忙碌，未變更設定。ImageState='+$imageState)}
 if(-not $context.Is64Bit -or $context.Architecture -ne 'AMD64'){throw '本入口僅支援 x64 Windows，請用 64 位元 Windows PowerShell。'}
 if($route -eq 'DesktopReady'){
  $user=Get-LocalUser -SID $context.UserSID -ErrorAction Stop
@@ -49,9 +68,8 @@ if($route -eq 'DesktopReady'){
  Write-Host ('目前正式帳號：'+$user.Name+'；帳號已就緒，不重設密碼。請直接執行 windows.cmd，SSH 由第 4 階段安裝。') -ForegroundColor Green
  return
 }
-# Audit is inferred conservatively. ImageState alone is not proof of audit mode.
+# Eligibility for controlled OOBE preparation is not proof of an official Audit mode API.
 if(-not $desktopOwned){throw '請在稽核模式 Administrator 桌面執行，不接受遠端或非桌面工作階段。'}
-if((Read-Host '僅供已由其他管理流程進入稽核模式的維護者：確認目前確為稽核模式請輸入 AUDIT') -cne 'AUDIT'){throw '未確認稽核模式，本次未更改設定。'}
 if(Get-Process sysprep -ErrorAction SilentlyContinue){throw 'Sysprep 對話框或程序仍開啟。請先按「取消」關閉，勿同時執行兩份，再重跑 init.cmd。'}
 $sMode=(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -ErrorAction SilentlyContinue).SkuPolicyRequired
 if($sMode -eq 1){throw 'S mode 不支援本工具使用的首次登入清理指令，本次未建立設定。'}
@@ -64,6 +82,8 @@ if($existingAnswer.Count){throw ('已有 Windows answer file 或快取設定，�
 $stage=Join-Path $env:ProgramData 'NUC-Init'
 Assert-InitPlainPath $stage
 if(Test-Path -LiteralPath $stage){throw ('已有 Init 暫存資料，請先查看 '+$stage+'，不要重複產生帳號設定。')}
+Write-Host '已自動確認可準備新帳號與 Windows 初始設定。'
+if((Read-Host '是否準備新本機帳號與 OOBE？將建立受保護的 answer file 並執行 Sysprep /oobe /quit，不自動重開；同意請輸入 YES') -cne 'YES'){throw '未同意帳號與 OOBE 準備，本次未更改設定。'}
 $existingNames=@((Get-LocalUser).Name)
 $name=Read-Host '新的本機管理員帳號（最多 20 字；不可使用現有帳號或 Windows 保留符號）'
 if(-not(Test-InitUserName -Name $name -ExistingNames $existingNames)){throw '帳號名稱無效、已存在或保留，請重新執行並使用另一個名稱。'}

@@ -100,6 +100,7 @@ function Confirm-InitAccountCheckpoint {
  param($State,[string]$StatePath,[hashtable]$Context,[string]$PackageHash)
  Assert-InitProvisioningState -State $State -MachineGuid $Context.MachineGuid -PackageHash $PackageHash
  if($State.Phase -notin @('AwaitingLogon','ApplyPending','SshPending','Complete','AccountConfirmed')){throw '帳號與 OOBE 尚未準備完成，不能進入 Windows 設定。'}
+ if($Context.OobeApiSucceeded -isnot [bool] -or -not $Context.OobeApiSucceeded -or $Context.OobeComplete -isnot [bool] -or -not $Context.OobeComplete){throw '原生 OOBE 狀態尚未確認完成；保留原狀態，停止 Windows 設定。'}
  if($Context.Sid -ne $State.TargetSid -or $Context.Sid -eq 'S-1-5-18' -or $Context.ImageState -ne 'IMAGE_STATE_COMPLETE' -or -not $Context.DesktopOwned -or -not $Context.IsAdministrator){throw '請以本輪建立的正式管理員帳號登入桌面。'}
  if([string]::IsNullOrWhiteSpace($Context.ProfilePath) -or [string]::IsNullOrWhiteSpace($Context.RegisteredProfile) -or [IO.Path]::GetFullPath($Context.ProfilePath).TrimEnd('\') -ine [IO.Path]::GetFullPath($Context.RegisteredProfile).TrimEnd('\')){throw '正式帳號 SID 與家目錄登錄不一致。'}
  $user=Get-LocalUser -SID $State.TargetSid -ErrorAction Stop
