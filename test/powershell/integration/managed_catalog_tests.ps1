@@ -14,8 +14,16 @@ $source=Join-Path $temp 'fixture.cs';$dll=Join-Path $temp 'fixture.dll';$pdb=Joi
 $compilerArgs=@($compiler,'/nologo','/noconfig','/nostdlib+','/target:library','/debug:portable','/optimize-',('/out:'+$dll),('/pdb:'+$pdb),('/reference:'+(Join-Path $refs 'mscorlib.dll')),('/reference:'+(Join-Path $refs 'System.dll')),$source)
 & $dotnet @compilerArgs
 if($LASTEXITCODE -ne 0){throw 'Fixture compiler failed'}
-& pwsh.exe -NoProfile -File $reader -SourceRoot $temp -AssemblyPath $dll -PDBPath $pdb -OutputPath $catalog
-Assert ($LASTEXITCODE -eq 0 -and (Test-Path $catalog)) 'reader validates PE and portable PDB without running assembly'
+if($PSVersionTable.PSVersion.Major -ge 7 -and [Environment]::Version.Major -ge 8){
+ . $reader
+ $result=Get-ManagedPortableCatalog -SourceRoot $temp -AssemblyPath $dll -PDBPath $pdb
+ [IO.File]::WriteAllText($catalog,($result|ConvertTo-Json -Depth 12))
+ $nativeExit=0
+}else{
+ $savedPreference=$ErrorActionPreference
+ try{$ErrorActionPreference='Continue';& pwsh.exe -NoProfile -File $reader -SourceRoot $temp -AssemblyPath $dll -PDBPath $pdb -OutputPath $catalog;$nativeExit=$LASTEXITCODE}finally{$ErrorActionPreference=$savedPreference}
+}
+Assert ($nativeExit -eq 0 -and (Test-Path $catalog)) 'reader validates PE and portable PDB without running assembly'
 $c=[IO.File]::ReadAllText($catalog)|ConvertFrom-Json
 Assert ($c.PDBContentID -ceq $c.PEPDBContentID -and $c.AssemblyMVID -match '^[a-f0-9-]{36}$') 'catalog binds exact PE debug identity and assembly MVID'
 Assert ($c.Documents.Count -eq 1 -and $c.Documents[0].Path -eq 'fixture.cs' -and $c.Documents[0].SHA256 -ieq (Get-FileHash $source).Hash) 'catalog binds compiler source checksum rather than re-derived lines'
@@ -29,6 +37,11 @@ $other=Join-Path $temp 'other.dll';$otherPdb=Join-Path $temp 'other.pdb'
 $compilerArgs=@($compiler,'/nologo','/noconfig','/nostdlib+','/target:library','/debug:portable','/optimize-',('/out:'+$other),('/pdb:'+$otherPdb),('/reference:'+(Join-Path $refs 'mscorlib.dll')),('/reference:'+(Join-Path $refs 'System.dll')),$source)
 & $dotnet @compilerArgs
 if($LASTEXITCODE -ne 0){throw 'Second fixture compiler failed'}
-& pwsh.exe -NoProfile -File $reader -SourceRoot $temp -AssemblyPath $dll -PDBPath $otherPdb -OutputPath (Join-Path $temp 'invalid.json') *> (Join-Path $temp 'mismatch.log')
-Assert ($LASTEXITCODE -ne 0 -and -not(Test-Path (Join-Path $temp 'invalid.json'))) 'swapped PDB cannot publish a valid source catalog'
+if($PSVersionTable.PSVersion.Major -ge 7 -and [Environment]::Version.Major -ge 8){
+ $rejected=$false;try{Get-ManagedPortableCatalog -SourceRoot $temp -AssemblyPath $dll -PDBPath $otherPdb|Out-Null}catch{$rejected=$true}
+}else{
+ $savedPreference=$ErrorActionPreference
+ try{$ErrorActionPreference='Continue';& pwsh.exe -NoProfile -File $reader -SourceRoot $temp -AssemblyPath $dll -PDBPath $otherPdb -OutputPath (Join-Path $temp 'invalid.json') *> (Join-Path $temp 'mismatch.log');$rejected=($LASTEXITCODE -ne 0)}finally{$ErrorActionPreference=$savedPreference}
+}
+Assert ($rejected -and -not(Test-Path (Join-Path $temp 'invalid.json'))) 'swapped PDB cannot publish a valid source catalog'
 Write-Host ('ALL PASS: '+$script:count+' actual PE/portable PDB catalog assertions; no assembly code invoked')
