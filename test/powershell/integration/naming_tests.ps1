@@ -3,6 +3,8 @@ $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Message}}
 . (Join-Path $root 'core/paths.ps1')
+. (Join-Path $root 'core/after_restart_library.ps1')
+Assert ([bool](Get-Command Invoke-SetupAfterRestart -ErrorAction SilentlyContinue)) '續跑具名正式來源可安全載入'
 $fixture=Join-Path $env:TEMP ('windows_setup_names_'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path (Join-Path $fixture 'core'),(Join-Path $fixture 'modules/debloat'),(Join-Path $fixture 'reports')|Out-Null
 $script:NucPackageRoot=$fixture
