@@ -3,9 +3,9 @@ package unit_test
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
-	"fmt"
 	"strings"
 	"testing"
 	rc "windows_setup/script/test/repo_coverage"
@@ -36,12 +36,21 @@ func TestManagedRangesRequireNativeMergeAndCompleteLines(t *testing.T) {
 	}
 }
 
-func TestManagedInventoryRecognizesExternalPathWithReferences(t *testing.T){
- root:=t.TempDir();os.MkdirAll(filepath.Join(root,"native"),0700);os.WriteFile(filepath.Join(root,"native","reader.cs"),[]byte("class X { static int Value(){return 1;} }"),0600)
- file:=filepath.Join(root,"reader.ps1");os.WriteFile(file,[]byte("Add-Type -ReferencedAssemblies 'System.dll','System.Core.dll' -Path (Join-Path $PSScriptRoot 'native/reader.cs')"),0600)
- inv,err:=rc.ScanInventory(root);if err!=nil || len(inv.Blockers)!=0 || len(inv.Sources)!=2{t.Fatalf("external owned CS hidden or falsely blocked: %+v %v",inv,err)}
- os.WriteFile(file,[]byte("Add-Type -TypeDefinition 'public class X { public string Run(){return \"-Path\";} }'"),0600)
- inv,err=rc.ScanInventory(root);if err!=nil || len(inv.Blockers)!=1{t.Fatal("embedded fake -Path suppressed blocker")}
+func TestManagedInventoryRecognizesExternalPathWithReferences(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, "native"), 0700)
+	os.WriteFile(filepath.Join(root, "native", "reader.cs"), []byte("class X { static int Value(){return 1;} }"), 0600)
+	file := filepath.Join(root, "reader.ps1")
+	os.WriteFile(file, []byte("Add-Type -ReferencedAssemblies 'System.dll','System.Core.dll' -Path (Join-Path $PSScriptRoot 'native/reader.cs')"), 0600)
+	inv, err := rc.ScanInventory(root)
+	if err != nil || len(inv.Blockers) != 0 || len(inv.Sources) != 2 {
+		t.Fatalf("external owned CS hidden or falsely blocked: %+v %v", inv, err)
+	}
+	os.WriteFile(file, []byte("Add-Type -TypeDefinition 'public class X { public string Run(){return \"-Path\";} }'"), 0600)
+	inv, err = rc.ScanInventory(root)
+	if err != nil || len(inv.Blockers) != 1 {
+		t.Fatal("embedded fake -Path suppressed blocker")
+	}
 }
 
 func TestManagedEvidenceRequiresNativeBinaryRosterAndHashes(t *testing.T) {

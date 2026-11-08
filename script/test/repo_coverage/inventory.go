@@ -37,6 +37,7 @@ var inlineLogic = regexp.MustCompile(`(?i)(\b(if|foreach|while|for|switch|try|ca
 var addType = regexp.MustCompile(`(?im)\bAdd-Type\b([^\r\n]*)`)
 var methodBody = regexp.MustCompile(`(?s)(\)\s*(\{|=>)|\b(get|set)\s*(\{|=>)|=>|=\s*new\b|=\s*[A-Za-z_]\w*\s*\()`)
 var javascriptPath = regexp.MustCompile(`(?i)\.js\b`)
+var externalAddType = regexp.MustCompile(`(?i)^(?:-ReferencedAssemblies\s+(?:'[^']+'|"[^"]+")(?:\s*,\s*(?:'[^']+'|"[^"]+"))*\s+)?-(?:Path|AssemblyName)\s+`)
 
 // Embedded C# is not considered covered when PowerShell executes Add-Type.
 // Only literal declaration-only snippets are classified here; unknown dynamic
@@ -44,7 +45,7 @@ var javascriptPath = regexp.MustCompile(`(?i)\.js\b`)
 func embeddedCSharp(text string) (managed, declared bool) {
 	for _, loc := range addType.FindAllStringSubmatchIndex(text, -1) {
 		tail := strings.TrimSpace(text[loc[2]:loc[3]])
-		if strings.HasPrefix(strings.ToLower(tail), "-assemblyname") || strings.HasPrefix(strings.ToLower(tail), "-path") {
+		if externalAddType.MatchString(tail) {
 			continue
 		}
 		tail = regexp.MustCompile(`(?i)^-TypeDefinition\s+`).ReplaceAllString(tail, "")
