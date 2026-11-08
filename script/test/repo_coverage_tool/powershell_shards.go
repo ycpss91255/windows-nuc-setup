@@ -322,7 +322,17 @@ func powershellShardPack(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	read := func(name string) ([]byte, error) { return readShardFile(o.evidence, name) }
+	cache := map[string][]byte{"evidence.json": proof}
+	read := func(name string) ([]byte, error) {
+		if b, ok := cache[name]; ok {
+			return b, nil
+		}
+		b, err := readShardFile(o.evidence, name)
+		if err == nil {
+			cache[name] = b
+		}
+		return b, err
+	}
 	validated, err := rc.ExportPowerShellRawEvidence(proof, read, inv)
 	if err != nil {
 		return fmt.Errorf("shard raw commands or denominator are invalid: %w", err)
@@ -332,8 +342,13 @@ func powershellShardPack(args []string, out io.Writer) error {
 		return fmt.Errorf("safe shard export contains unexpected files")
 	}
 	for _, entry := range entries {
-		if _, ok := validated[entry.Name()]; !ok || entry.IsDir() {
+		safe, ok := validated[entry.Name()]
+		if !ok || entry.IsDir() {
 			return fmt.Errorf("safe shard export contains an unapproved file")
+		}
+		actual, readErr := read(entry.Name())
+		if readErr != nil || !bytes.Equal(actual, safe) {
+			return fmt.Errorf("shard must retain exactly the validated typed safe-export bytes")
 		}
 	}
 	var raw struct {
@@ -382,6 +397,12 @@ func powershellShardPack(args []string, out io.Writer) error {
 	}
 	if _, _, _, err = trustedShardCatalog(o); err != nil {
 		return err
+	}
+	for name, captured := range cache {
+		actual, readErr := readShardFile(o.evidence, name)
+		if readErr != nil || !bytes.Equal(actual, captured) {
+			return fmt.Errorf("raw shard changed during validation")
+		}
 	}
 	if err = writeShardJSON(filepath.Join(o.evidence, "shard.json"), manifest); err != nil {
 		return err

@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	rc "windows_setup/script/test/repo_coverage"
 )
 
 func shardCLIFixture(t *testing.T) (string, string, string) {
@@ -191,6 +193,30 @@ func writeShardCLIProof(t *testing.T, root, dir string, pid int, hit bool) {
 	if err := os.WriteFile(filepath.Join(dir, "coverage.xml"), []byte(xml), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := canonicalizeShardCLIProof(root, dir); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func canonicalizeShardCLIProof(root, dir string) error {
+	inv, err := rc.ScanInventory(root)
+	if err != nil {
+		return err
+	}
+	proof, err := os.ReadFile(filepath.Join(dir, "evidence.json"))
+	if err != nil {
+		return err
+	}
+	files, err := rc.ExportPowerShellRawEvidence(proof, func(name string) ([]byte, error) { return os.ReadFile(filepath.Join(dir, name)) }, inv)
+	if err != nil {
+		return err
+	}
+	for name, b := range files {
+		if err = os.WriteFile(filepath.Join(dir, name), b, 0600); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func bindShardCLIProof(t *testing.T, root, dir, commit string, index, count, attempt int) {
@@ -214,6 +240,9 @@ func bindShardCLIProof(t *testing.T, root, dir, commit string, index, count, att
 		t.Fatal(err)
 	}
 	if err = os.WriteFile(path, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := canonicalizeShardCLIProof(root, dir); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -416,6 +445,7 @@ func TestPowerShellShardPackCannotRelabelActualNativeContext(t *testing.T) {
 				context["RunAttempt"] = 2
 			case "case":
 				context["GlobalIndex"] = 1
+				context["ShardIndex"] = 1
 				context["TestFile"] = "test/powershell/unit/side_1_tests.ps1"
 			case "pid":
 				context["ProcessId"] = 999
@@ -428,6 +458,9 @@ func TestPowerShellShardPackCannotRelabelActualNativeContext(t *testing.T) {
 			}
 			b, _ = json.Marshal(native)
 			_ = os.WriteFile(path, b, 0600)
+			if err := canonicalizeShardCLIProof(root, dir); err != nil && field != "pid" {
+				t.Fatal(err)
+			}
 			err := powershellShardPack(append(shardCLIArgs(root, manifest, sha), "--shard-index", "0", "--evidence-dir", dir), &bytes.Buffer{})
 			if err == nil {
 				t.Fatalf("actual native %s context was silently relabelled", field)
@@ -436,5 +469,27 @@ func TestPowerShellShardPackCannotRelabelActualNativeContext(t *testing.T) {
 				t.Fatal("invalid native context created successful shard envelope")
 			}
 		})
+	}
+}
+
+func TestPowerShellShardPackRejectsUnexportedPrivateXML(t *testing.T) {
+	root, manifest, sha := shardCLIFixture(t)
+	dir := filepath.Join(t.TempDir(), "proof")
+	writeShardCLIProof(t, root, dir, 123, true)
+	bindShardCLIProof(t, root, dir, sha, 0, 2, 1)
+	path := filepath.Join(dir, "coverage.xml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = bytes.Replace(b, []byte("<packages>"), []byte("<!-- C:/Users/private/never-public -->\n<packages>"), 1)
+	if err = os.WriteFile(path, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = powershellShardPack(append(shardCLIArgs(root, manifest, sha), "--shard-index", "0", "--evidence-dir", dir), &bytes.Buffer{}); err == nil {
+		t.Fatal("ignored XML comments must not leak private paths in an allegedly safe shard")
+	}
+	if _, err = os.Stat(filepath.Join(dir, "shard.json")); err == nil {
+		t.Fatal("private XML created a success envelope")
 	}
 }
