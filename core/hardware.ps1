@@ -73,7 +73,7 @@ function Get-SetupDriverManifestEntries {
    foreach($driver in $drivers){
     if($driver.DriverVersion -notmatch '^\d+(\.\d+){3}$' -or -not $driver.Provider -or $driver.Architecture -ne 'amd64' -or $driver.MinimumBuild -lt 10240 -or $driver.MinimumBuild -gt 99999){throw '驅動版本、架構或最低作業系統規格不合法。'}
     if(@($driver.HardwareIds).Count -lt 1){throw '驅動需要明確硬體 ID。'}
-    foreach($id in $driver.HardwareIds){if($id -notmatch '^(?:(PCI|ACPI|HDAUDIO|USB)\\[A-Z0-9_&]+|SWC\\[A-Z0-9_&.-]+)$'){throw '驅動硬體 ID 不合法。'}}
+    foreach($id in $driver.HardwareIds){if($id -notmatch '^(?:(PCI|ACPI|HDAUDIO|USB)\\[A-Z0-9_&]+|SWC\\[A-Z0-9_&.-]+|ROOT\\AMDLOG)$'){throw '驅動硬體 ID 不合法。'}}
     $inf=[string]$driver.InfPath
     if($inf -notmatch '^[a-zA-Z0-9_ .()/-]+\.inf$' -or $inf -match '(^|/)\.\.(/|$)' -or [IO.Path]::IsPathRooted($inf)){throw '驅動 INF 路徑必須是安全相對路徑。'}
    }
@@ -81,7 +81,25 @@ function Get-SetupDriverManifestEntries {
    if(@($named.Id|Select-Object -Unique).Count -ne $named.Count){throw '驅動目標識別重複。'}
    foreach($child in @($drivers|Where-Object ParentTarget)){
     $parent=@($drivers|Where-Object {$_.Id -and $_.Id -ceq $child.ParentTarget})
-    if(-not $child.Id -or $child.Id -ceq $child.ParentTarget -or $parent.Count -ne 1 -or $parent[0].ParentTarget -or $child.PreStage -ne $true){throw '驅動依賴需唯一父目標、單層無循環且明確預先加入。'}
+    if(-not $child.Id -or $child.Id -ceq $child.ParentTarget -or $parent.Count -ne 1 -or $parent[0].ParentTarget -or $child.PreStage -ne $true -or @($child.HardwareIds|Where-Object {$_ -notmatch '^SWC\\'}).Count){throw '驅動依賴需唯一父目標、單層無循環且明確預先加入 SWC。'}
+   }
+   if($entry.ScopeTarget -and @($drivers|Where-Object {$_.Id -ceq $entry.ScopeTarget}).Count -ne 1){throw '套件範圍目標不存在。'}
+   foreach($scoped in @($drivers|Where-Object ScopeParentTarget)){
+    if($scoped.Id -ceq $scoped.ScopeParentTarget -or @($drivers|Where-Object {$_.Id -ceq $scoped.ScopeParentTarget -and -not $_.ScopeParentTarget}).Count -ne 1){throw '驅動範圍父目標不存在或循環。'}
+   }
+   $extensions=@($entry.Extensions)
+   if(@($extensions|Where-Object {$null -ne $_}).Count){
+    if(@($extensions.Id|Select-Object -Unique).Count -ne $extensions.Count){throw 'Extension 識別重複。'}
+    foreach($extension in $extensions){
+     $guid=[guid]::Empty
+     if($extension.Kind -cne 'Extension' -or -not $extension.Id -or $extension.Id -in $named.Id -or @($drivers|Where-Object {$_.Id -ceq $extension.ParentTarget}).Count -ne 1 -or -not [guid]::TryParse([string]$extension.ExtensionId,[ref]$guid) -or $guid -eq [guid]::Empty -or $extension.ActiveAssociationRequired -ne $true){throw 'Extension 身分或父目標無效。'}
+     if($extension.DriverVersion -notmatch '^\d+(\.\d+){3}$' -or -not $extension.Provider -or $extension.Architecture -cne 'amd64' -or $extension.MinimumBuild -lt 10240 -or $extension.MinimumBuild -gt 99999 -or @($extension.HardwareIds).Count -lt 1){throw 'Extension 裝置規格無效。'}
+     foreach($id in $extension.HardwareIds){if($id -notmatch '^(PCI|ACPI|HDAUDIO|USB)\\[A-Z0-9_&]+$'){throw 'Extension 硬體 ID 無效。'}}
+     foreach($kind in @('Inf','Catalog')){
+      $relative=[string]$extension.($kind+'Path');$suffix=if($kind -eq 'Inf'){'inf'}else{'cat'}
+      if($relative -notmatch ('^[a-zA-Z0-9_ .()/-]+\.'+$suffix+'$') -or $relative -match '(^|/)\.\.(/|$)' -or [IO.Path]::IsPathRooted($relative) -or $extension.($kind+'SHA256') -notmatch '^[a-fA-F0-9]{64}$'){throw 'Extension 路徑或雜湊無效。'}
+     }
+    }
    }
   }
  }else{
