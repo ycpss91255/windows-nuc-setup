@@ -2,6 +2,8 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 . (Join-Path $root 'modules\init\provisioning_library.ps1')
+# CI models the real Server runner: this client-only API must not be used by source tests.
+function Get-ProvisioningPackage {throw (New-Object Management.Automation.CommandNotFoundException('Windows Server source test has no client provisioning API'))}
 $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 Assert ([bool](Get-Command Assert-InitProvisioningAsset -ErrorAction SilentlyContinue)) 'init validates static package before account creation'
