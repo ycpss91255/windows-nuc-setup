@@ -4,6 +4,7 @@ param([Parameter(Mandatory=$true)][ValidateSet('doctor','build','test','test-bui
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'library.ps1')
 $previous=@{}
+$runtimePath=$null
 try {
  $context=Get-ContainerContext -Root (Join-Path $PSScriptRoot '../..') -ReportDirectory $ReportDirectory -Isolation $Isolation
  if(-not(Get-Command docker.exe -ErrorAction SilentlyContinue)){throw 'Docker is not installed or not on PATH. No host configuration was changed.'}
@@ -23,7 +24,11 @@ try {
   # Run the inspected immutable ID, never re-resolve a mutable tag or rebuild.
   [Environment]::SetEnvironmentVariable('WINDOWS_SETUP_IMAGE',$imageId,'Process')
   $lockedConfiguration=(Invoke-ContainerDocker -Arguments ($compose+@('config','--format','json'))) -join "`n"
-  Assert-ContainerCompose -Configuration ($lockedConfiguration|ConvertFrom-Json) -Isolation $context.Isolation -Image $imageId
+  $runtime=New-ContainerRuntimeComposeFile -Context $context -Configuration ($lockedConfiguration|ConvertFrom-Json) -ImageId $imageId -Directory ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($BuildReceiptPath)))
+  $runtimePath=$runtime.Path
+  $compose=@('compose','--project-name',$context.Project,'--file',$runtimePath)
+  $runtimeConfiguration=(Invoke-ContainerDocker -Arguments ($compose+@('config','--format','json'))) -join "`n"
+  Assert-ContainerRuntimeCompose -Configuration ($runtimeConfiguration|ConvertFrom-Json) -ExpectedService $runtime.ExpectedService
  }
  else{Invoke-ContainerDocker -Arguments ($compose+@('build','--pull','tools'))}
  if($Action -eq 'build'){
@@ -35,7 +40,7 @@ try {
  Write-Host ('Container report directory: '+$context.Reports)
  if($Action -in @('test','test-built')){
   $run=@('run','--rm','--no-deps')
-  if($Action -eq 'test-built'){$run+=@('--no-build','--pull','never')}
+  if($Action -eq 'test-built'){$run+=@('--pull','never')}
   Invoke-ContainerDocker -Arguments ($compose+$run+@('-T','tools'))
  }else{
   Invoke-ContainerDocker -Arguments ($compose+@('run','--rm','--no-deps','tools','powershell.exe','-NoLogo','-NoProfile','-NoExit','-Command','git.exe config --global --add safe.directory C:/workspace; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; . C:/workspace/script/docker/acceptance.ps1; Initialize-ContainerGoEnvironment -SourceRoot C:/workspace -CacheRoot (Join-Path $env:TEMP (''container_go_''+[guid]::NewGuid().ToString(''N''))); Set-Location C:/workspace'))
@@ -46,5 +51,6 @@ try {
  if($_.Exception.Data.Contains('ExitCode')){exit ([int]$_.Exception.Data['ExitCode'])}
  exit 1
 }finally{
+ if($runtimePath -and (Test-Path -LiteralPath $runtimePath)){Remove-Item -LiteralPath $runtimePath -Force}
  foreach($key in $previous.Keys){[Environment]::SetEnvironmentVariable($key,$previous[$key],'Process')}
 }

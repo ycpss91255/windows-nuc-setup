@@ -42,5 +42,25 @@ foreach($change in @('commit','image','isolation','inputs','schema','missing','u
 Refuse {Save-ContainerBuildReceipt -Context $context -Path $receipt} 'existing receipts are never overwritten by another build'
 Refuse {Save-ContainerBuildReceipt -Context $context -Path (Join-Path $source 'receipt.json')} 'build receipt cannot dirty the source checkout'
 Refuse {Assert-ContainerBuildReceipt -Context $context -Path (Join-Path $fixture 'missing.json')} 'missing build receipt cannot bypass the build phase'
+$configuration=[pscustomobject]@{services=[pscustomobject]@{tools=[pscustomobject]@{image=$script:imageId;isolation=$context.Isolation;build=[pscustomobject]@{isolation=$context.Isolation};network_mode='none';command=@('powershell.exe','-File','C:/tools/container_test.ps1');environment=[pscustomobject]@{LITERAL='keep$unchanged'};volumes=@([pscustomobject]@{type='bind';source=$source;target='C:/workspace';read_only=$true})}}}
+$runtime=New-ContainerRuntimeComposeFile -Context $context -Configuration $configuration -ImageId $script:imageId -Directory $fixture
+$resolved=Get-Content -LiteralPath $runtime.Path -Raw|ConvertFrom-Json
+Assert-ContainerRuntimeCompose -Configuration $resolved -ExpectedService $runtime.ExpectedService
+Assert ($configuration.services.tools.PSObject.Properties.Name -ccontains 'build' -and $resolved.services.tools.PSObject.Properties.Name -cnotcontains 'build' -and $resolved.services.tools.environment.LITERAL -ceq 'keep$unchanged') 'private runtime copy removes only build and never mutates the original validated configuration'
+foreach($bad in @('build','extra','missing','readonly','command','image','isolation')){
+ $changed=[IO.File]::ReadAllText($runtime.Path)|ConvertFrom-Json
+ switch($bad){
+  build{$changed.services.tools|Add-Member build @{context='wrong'}}
+  extra{$changed.services|Add-Member other @{image='unexpected'}}
+  missing{$changed.services.tools.PSObject.Properties.Remove('command')}
+  readonly{$changed.services.tools.volumes[0].read_only=$false}
+  command{$changed.services.tools.command[0]='cmd.exe'}
+  image{$changed.services.tools.image='sha256:'+('e'*64)}
+  isolation{$changed.services.tools.isolation='hyperv'}
+ }
+ Refuse {Assert-ContainerRuntimeCompose -Configuration $changed -ExpectedService $runtime.ExpectedService} ('runtime resolution must preserve validated complete service: '+$bad)
+}
+Refuse {New-ContainerRuntimeComposeFile -Context $context -Configuration $configuration -ImageId 'mutable:tag' -Directory $fixture} 'runtime copy cannot use a mutable image tag'
+Refuse {New-ContainerRuntimeComposeFile -Context $context -Configuration $configuration -ImageId $script:imageId -Directory $source} 'private runtime copy cannot be created in the source checkout'
 function Invoke-ContainerDocker {param($Arguments);throw 'controlled inspect failure'}
 Refuse {Assert-ContainerBuildReceipt -Context $context -Path $receipt} 'image inspection failure is never converted to a successful test'
