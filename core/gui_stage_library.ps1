@@ -76,9 +76,29 @@ function New-SetupGuiProtectedDirectory {
  }
  Assert-SetupGuiProtectedPath -Path $Path -Directory -UserSid $UserSid
 }
+function Assert-SetupIconReference {
+ param($Reference)
+ if($null -eq $Reference -or $Reference.Width -isnot [int] -or $Reference.Height -isnot [int] -or $Reference.Width -le 0 -or $Reference.Height -le 0 -or @($Reference.Icons).Count -ne 4){throw '圖示範本必須包含有效尺寸與四個唯一圖示。'}
+ $names=@()
+ foreach($icon in $Reference.Icons){if($icon.Name -isnot [string] -or [string]::IsNullOrWhiteSpace($icon.Name) -or $icon.X -isnot [int] -or $icon.Y -isnot [int]){throw '圖示範本名稱或座標格式不符。'};$names+=@($icon.Name)}
+ if(@($names|Select-Object -Unique).Count -ne 4){throw '圖示範本名稱必須唯一。'}
+}
+function Write-SetupIconReference {
+ param([Parameter(Mandatory=$true)][string]$PackageRoot,$Reference)
+ Assert-SetupIconReference $Reference
+ $path=Join-Path ([IO.Path]::GetFullPath($PackageRoot)) 'modules/desktop/desktop_layout.json'
+ Assert-SetupGuiPlainPath $path
+ $temporary=Join-Path (Split-Path $path -Parent) ([guid]::NewGuid().ToString('N')+'.tmp')
+ try{
+  [IO.File]::WriteAllText($temporary,($Reference|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($true))
+  Assert-SetupGuiPlainPath $path
+  if(Test-Path -LiteralPath $path){[IO.File]::Replace($temporary,$path,[Management.Automation.Language.NullString]::Value)}else{[IO.File]::Move($temporary,$path)}
+ }finally{if(Test-Path -LiteralPath $temporary){[IO.File]::Delete($temporary)}}
+}
 function Get-SetupGuiStageFiles {
  param([string]$Role)
  if($Role -ceq 'Desktop'){return @('core/gui_stage_library.ps1','core/gui_worker.ps1','modules/desktop/desktop_settings_library.ps1','modules/desktop/desktop_safety.ps1')}
+ if($Role -ceq 'Icons'){return @('core/gui_stage_library.ps1','core/gui_worker.ps1','modules/desktop/icons_settings_library.ps1','modules/desktop/native/desktop_icons.cs')}
  if($Role -cnotin @('Explorer','Display','Theme')){throw 'GUI worker角色尚未核准。'}
  $leaf=$Role.ToLowerInvariant()
  return @('core/gui_stage_library.ps1','core/gui_worker.ps1',('modules/'+$leaf+'/'+$leaf+'_settings_library.ps1'),('modules/'+$leaf+'/native/'+$leaf+'.cs'))
@@ -109,7 +129,7 @@ function Write-SetupGuiAtomicJson {
 }
 function New-SetupGuiStage {
  param([Parameter(Mandatory=$true)][string]$SourceRoot,[Parameter(Mandatory=$true)][string]$CommonDataRoot,
- [string]$Role,[string]$UserSid,[int]$CallerSession,[int]$DesktopSession,[string]$Computer,[switch]$VerifyOnly,[string]$RunId=([guid]::NewGuid().ToString('D')))
+ [string]$Role,[string]$UserSid,[int]$CallerSession,[int]$DesktopSession,[string]$Computer,[switch]$VerifyOnly,[string]$RunId=([guid]::NewGuid().ToString('D')),[ValidateSet('Save','Load','Verify')][string]$IconMode='Load')
  $ErrorActionPreference='Stop'
  $manifest=@(Get-SetupGuiStageFiles $Role)
  Assert-SetupGuiCaller -UserSid $UserSid -CallerSession $CallerSession -DesktopSession $DesktopSession -Computer $Computer
@@ -140,7 +160,19 @@ function New-SetupGuiStage {
    $files+=@([pscustomobject]@{Name=$name;SHA256=$expected.ToLowerInvariant()})
   }
   $context=[pscustomobject][ordered]@{Schema=1;Role=$Role;RunId=(Split-Path $paths.RunRoot -Leaf);Computer=$Computer;CallerSID=$UserSid;CallerSession=$CallerSession;UserSID=$UserSid;DesktopSession=$DesktopSession;VerifyOnly=[bool]$VerifyOnly;Files=$files}
-  if($Role -ceq 'Desktop'){$context|Add-Member SourcePackageRoot ([IO.Path]::GetFullPath($SourceRoot))}
+  if($Role -cin @('Desktop','Icons')){$context|Add-Member SourcePackageRoot ([IO.Path]::GetFullPath($SourceRoot))}
+  if($Role -ceq 'Icons'){
+   if($VerifyOnly){$IconMode='Verify'}elseif($IconMode -ceq 'Verify'){throw '圖示 Verify 必須使用唯讀驗收模式。'}
+   $context|Add-Member IconMode $IconMode
+   if($IconMode -cne 'Save'){
+    $referencePath=Join-Path $SourceRoot 'modules/desktop/desktop_layout.json';Assert-SetupGuiPlainPath $referencePath
+    $digest=(Get-FileHash -LiteralPath $referencePath -Algorithm SHA256).Hash
+    $reference=Get-Content -LiteralPath $referencePath -Raw -Encoding UTF8|ConvertFrom-Json
+    if((Get-FileHash -LiteralPath $referencePath -Algorithm SHA256).Hash -cne $digest){throw '圖示來源範本讀取期間改變。'}
+    Assert-SetupIconReference $reference
+    $context|Add-Member IconReference $reference
+   }
+  }
   Write-SetupGuiAtomicJson -Path (Join-Path $paths.CodeRoot 'context.json') -Value $context
   $verified=Read-SetupGuiContext -CodeRoot $paths.CodeRoot -CommonDataRoot $CommonDataRoot -Role $Role -RunId $context.RunId
   [pscustomobject]@{CodeRoot=$paths.CodeRoot;DataRoot=$paths.DataRoot;CommonDataRoot=$CommonDataRoot;Lock=$lock;Context=$verified}
@@ -159,7 +191,11 @@ function Read-SetupGuiContext {
  $context=Get-Content -LiteralPath $path -Raw -Encoding UTF8|ConvertFrom-Json
  if($context.Schema -ne 1 -or $context.Role -cne $Role -or $context.RunId -cne $RunId -or $context.CallerSID -cne $context.UserSID -or $context.VerifyOnly -isnot [bool] -or $context.CallerSession -isnot [int] -or $context.DesktopSession -isnot [int]){throw 'GUI worker context身分或格式不符。'}
  Assert-SetupGuiCaller -UserSid $context.UserSID -CallerSession $context.CallerSession -DesktopSession $context.DesktopSession -Computer $context.Computer
- if($Role -ceq 'Desktop'){if([string]::IsNullOrWhiteSpace($context.SourcePackageRoot) -or [IO.Path]::GetFullPath($context.SourcePackageRoot) -cne $context.SourcePackageRoot){throw 'GUI worker原始套件來源格式不符。'};Assert-SetupGuiPlainPath $context.SourcePackageRoot}
+ if($Role -cin @('Desktop','Icons')){if([string]::IsNullOrWhiteSpace($context.SourcePackageRoot) -or [IO.Path]::GetFullPath($context.SourcePackageRoot) -cne $context.SourcePackageRoot){throw 'GUI worker原始套件來源格式不符。'};Assert-SetupGuiPlainPath $context.SourcePackageRoot}
+ if($Role -ceq 'Icons'){
+  if($context.IconMode -cnotin @('Save','Load','Verify') -or ($context.VerifyOnly -ne ($context.IconMode -ceq 'Verify'))){throw 'GUI worker圖示模式不符。'}
+  if($context.IconMode -cne 'Save'){Assert-SetupIconReference $context.IconReference}elseif($context.PSObject.Properties['IconReference']){throw '圖示 Save 不可載入 staged 範本。'}
+ }
  $expected=@(Get-SetupGuiStageFiles $Role|Sort-Object)
  if(@($context.Files).Count -ne $expected.Count -or (@($context.Files|ForEach-Object Name|Sort-Object) -join '|') -cne ($expected -join '|')){throw 'GUI worker context來源清單不符。'}
  foreach($file in $context.Files){
@@ -244,13 +280,14 @@ function Invoke-SetupGuiScheduledWorker {
  }
 }
 function Invoke-SetupGuiRole {
- param([Parameter(Mandatory=$true)][string]$PackageRoot,[string]$Role,[switch]$Worker,[switch]$VerifyOnly,[string]$VerificationRunId)
+ param([Parameter(Mandatory=$true)][string]$PackageRoot,[string]$Role,[switch]$Worker,[switch]$VerifyOnly,[string]$VerificationRunId,[ValidateSet('Save','Load','Verify')][string]$IconMode='Load')
  $ErrorActionPreference='Stop'
  $null=Get-SetupGuiStageFiles $Role
  $scope=Get-SetupGuiIdentity
  if($Worker -and $scope.SessionId -eq 0){throw 'GUI -Worker不能在session 0繞過原使用者桌面身分。'}
  $desktop=Get-SetupGuiDesktopSession $scope
  $creation=@{SourceRoot=$PackageRoot;CommonDataRoot=$scope.CommonDataRoot;Role=$Role;UserSid=$scope.UserSID;CallerSession=$scope.SessionId;DesktopSession=$desktop;Computer=$scope.Computer;VerifyOnly=[bool]$VerifyOnly}
+ if($Role -ceq 'Icons'){$creation.IconMode=$IconMode}
  if($VerificationRunId){$requested=[guid]::Empty;if(-not [guid]::TryParse($VerificationRunId,[ref]$requested)){throw 'GUI 驗證本輪ID格式不符。'};$creation.RunId=$requested.ToString('D')}
  $stage=New-SetupGuiStage @creation
  try{
@@ -259,11 +296,12 @@ function Invoke-SetupGuiRole {
   if($scope.SessionId -eq 0){Invoke-SetupGuiScheduledWorker -Stage $stage -Scope $scope}else{Invoke-SetupGuiLocalWorker -Stage $stage -Scope $scope}
   $result=Read-SetupGuiResult -Stage $stage
   if(-not $result.Success){throw $result.Error}
+  if($Role -ceq 'Icons' -and $stage.Context.IconMode -ceq 'Save'){Write-SetupIconReference -PackageRoot $stage.Context.SourcePackageRoot -Reference $result.Reference}
   return $result
  }finally{$stage.Lock.Dispose()}
 }
 function Invoke-SetupGuiFreshVerification {
- param([Parameter(Mandatory=$true)][string]$PackageRoot,[Parameter(Mandatory=$true)][ValidateSet('Display','Theme','Desktop')][string]$Role)
+ param([Parameter(Mandatory=$true)][string]$PackageRoot,[Parameter(Mandatory=$true)][ValidateSet('Display','Theme','Desktop','Icons')][string]$Role)
  $scope=Get-SetupGuiIdentity
  $run=[guid]::NewGuid().ToString('D')
  $result=Invoke-SetupGuiRole -PackageRoot $PackageRoot -Role $Role -VerifyOnly -VerificationRunId $run
@@ -292,10 +330,10 @@ function Invoke-SetupGuiWorker {
  try{
   $lease=Open-SetupGuiExecutionLock -Paths $paths
   # Role and all executable file hashes were validated before importing this fixed library.
-  $module=Join-Path $CodeRoot ('modules/'+$Role.ToLowerInvariant())
-  $library=switch -CaseSensitive ($Role){Explorer{'explorer_settings_library.ps1'} Display{'display_settings_library.ps1'} Theme{'theme_settings_library.ps1'} Desktop{'desktop_settings_library.ps1'} default{throw 'GUI worker角色尚未核准。'}}
+  $module=Join-Path $CodeRoot ('modules/'+$(if($Role -ceq 'Icons'){'desktop'}else{$Role.ToLowerInvariant()}))
+  $library=switch -CaseSensitive ($Role){Explorer{'explorer_settings_library.ps1'} Display{'display_settings_library.ps1'} Theme{'theme_settings_library.ps1'} Desktop{'desktop_settings_library.ps1'} Icons{'icons_settings_library.ps1'} default{throw 'GUI worker角色尚未核准。'}}
   . (Join-Path $module $library)
-  $result=switch -CaseSensitive ($Role){Explorer{Invoke-SetupExplorerSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Display{Invoke-SetupDisplaySettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Theme{Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Desktop{Invoke-SetupDesktopSettings -ModuleRoot $module -SourcePackageRoot $context.SourcePackageRoot -DesktopRoots @(Get-SetupDesktopRoots) -VerifyOnly:$context.VerifyOnly}}
+  $result=switch -CaseSensitive ($Role){Explorer{Invoke-SetupExplorerSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Display{Invoke-SetupDisplaySettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Theme{Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly:$context.VerifyOnly} Desktop{Invoke-SetupDesktopSettings -ModuleRoot $module -SourcePackageRoot $context.SourcePackageRoot -DesktopRoots @(Get-SetupDesktopRoots) -VerifyOnly:$context.VerifyOnly} Icons{Invoke-SetupIconsSettings -ModuleRoot $module -Mode $context.IconMode -Reference $context.IconReference}}
   if($result.Success -isnot [bool]){throw 'GUI worker葉節點未提供有效成功狀態。'}
   $details=[ordered]@{};foreach($property in $result.PSObject.Properties){$details[$property.Name]=$property.Value}
   Write-SetupGuiResult -DataRoot $paths.DataRoot -Context $context -Result $details
