@@ -1,7 +1,6 @@
 package repo_coverage
 
 import (
-	"encoding/base64"
 	"fmt"
 	"reflect"
 	"sort"
@@ -42,8 +41,7 @@ func NormalizePowerShell(data []byte, read func(string) ([]byte, error), invento
 	if err := strictJSON(data, &evidence); err != nil {
 		return r, nil, err
 	}
-	packageHash, err := base64.StdEncoding.DecodeString(evidence.PackageSHA512)
-	if err != nil || len(packageHash) != 64 || evidence.SchemaVersion != 1 || evidence.PesterVersion == "" || evidence.Metric != "FullyCoveredCommandStartLines" || len(evidence.Sources) == 0 || len(evidence.Workers) == 0 {
+	if evidence.PackageSHA512 != "AHIAm7QW11As3sjMayo1rPU4JVIEfBL+ZILAyTyDnMPxMwLFQ3VeAA0prFTx+Y4DgZCUnH2N4+Xb0HDQua2EKA==" || evidence.SchemaVersion != 1 || evidence.PesterVersion != "6.0.0" || evidence.Metric != "FullyCoveredCommandStartLines" || len(evidence.Sources) == 0 || len(evidence.Workers) == 0 {
 		return r, nil, fmt.Errorf("invalid PowerShell collector identity")
 	}
 	scope := map[string]Source{}
