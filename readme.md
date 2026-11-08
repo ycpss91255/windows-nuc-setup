@@ -324,6 +324,31 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 
 四個桌面圖示的排列範本以繁體中文 Windows、1920×1080、100% 縮放為準。自動檢查不能取代上述登入與畫面觀察。
 
+## 非必要資料分享與隱私設定
+
+`windows.cmd` 會在原本的 Win11Debloat 清理階段末端套用下列隱私政策，主流程仍是 19 個階段。也可在工具包根目錄單獨執行；CMD 會沿用目前帳號並要求必要的管理員權限：
+
+```powershell
+.\modules\privacy\apply_privacy_settings.cmd
+.\modules\privacy\apply_privacy_settings.cmd -VerifyOnly
+```
+
+| 項目 | 套用結果 |
+| --- | --- |
+| Windows 診斷資料 | Pro／Pro for Workstations 使用最低支援的「必要」級別 1；Enterprise／Education 使用支援的關閉級別 0 |
+| 廣告識別碼 | 停用跨應用程式廣告 ID |
+| 診斷資料個人化推薦 | 對目前執行帳號停用以診斷資料提供個人化推薦 |
+| 活動歷程 | 停用活動摘要、發布及上傳 |
+| 回饋提示 | 不顯示 Microsoft 回饋邀請 |
+| 線上語音辨識 | 停用 Microsoft 雲端語音辨識，因此 **Win + H 雲端聽寫也會受影響**；不是禁止所有麥克風使用 |
+| 手寫與輸入改善 | 不傳送手寫及打字資料供改善辨識服務 |
+
+Home 或無法辨識／未支援的版本會明確回報 `Unsupported`，不寫入政策，也不會標為通過。每次會逐項核對九個登錄政策值及 DWORD 型別；讀回不符、權限錯誤或寫入未生效均視為失敗。結果保存於 `%ProgramData%\NUC8-Setup\Privacy-Result.json`。`-VerifyOnly` 只讀政策並更新診斷結果，不重新寫入政策；`windows.cmd -VerifyOnly` 也會檢查本輪隱私結果，不能拿舊報告代替。
+
+這些設定不代表電腦完全不傳送資料：專業版仍有必要診斷，Windows Update、安全服務，以及 Edge、Office 或其他應用程式也各有自己的資料控制。本模組不關閉 Defender、Windows Update、防火牆，不加入安全例外，不封鎖遙測網域，也不一概停用相機、麥克風等應用程式權限。
+
+政策與支援範圍依 Microsoft 官方文件：[Windows 診斷資料級別](https://learn.microsoft.com/en-us/windows/privacy/configure-windows-diagnostic-data-in-your-organization)、[廣告 ID／語音／活動政策](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy)、[個人化推薦與回饋提示](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience)、[手寫及輸入資料分享](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-textinput#allowlinguisticdatacollection)。這是政策設定與讀回檢查，並非封包監測結果。
+
 ## 19 個模組的執行順序
 
 | 順序 | 處理內容 |
