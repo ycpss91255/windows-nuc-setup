@@ -20,7 +20,12 @@ function Invoke-SetupDriverVerification {param($DriverRoot,$VerificationRunId) [
 '@|Set-Content -LiteralPath (Join-Path $script:fixtureScripts 'driver_installation_library.ps1') -Encoding UTF8
 function Resolve-NucPath {param($Name) if($Name -eq 'debloat_apps.txt'){return $script:fixtureApps};if($Name -eq 'Verification-Result.json'){return Join-Path $env:ProgramData 'aggregate.json'};return Join-Path $script:fixtureScripts $Name}
 function Read-SetupUpdateResult {param($CommonDataRoot,$LegacyRoot,$UserSid,$Computer) Get-Content (Join-Path $env:ProgramData 'NUC8-Setup/WindowsUpdate/WindowsUpdate-Result.json') -Raw|ConvertFrom-Json}
-function Invoke-SetupGuiFreshVerification {param($PackageRoot,$Role) if($Role -notin @('Display','Theme','Icons')){throw 'unexpected fixture role'};Invoke-FreshVerification -ScriptPath (Resolve-NucPath $(if($Role -eq 'Icons'){'desktop_icon_layout.ps1'}else{'apply_'+$Role.ToLowerInvariant()+'_settings.ps1'})) -ReportPath (Join-Path $env:ProgramData $(if($Role -eq 'Icons'){'NUC8-Setup/IconLayout-Result.json'}else{'NUC8-Setup/'+$Role+'-Verification.json'})) -Arguments @{VerifyOnly=$true}}
+function Invoke-SetupGuiFreshVerification {param($PackageRoot,$Role)
+ if($Role -eq 'Taskbar'){return [pscustomobject]@{Success=($global:AggregateFixtureMode -ne 'Throw');Configured=($global:AggregateFixtureMode -ne 'Throw');BindingMatches=$true;RequiresNextSignIn=($global:AggregateFixtureMode -eq 'Throw');Status=$(if($global:AggregateFixtureMode -eq 'Throw'){'PendingSignIn'}else{'Confirmed'})}}
+ if($Role -eq 'Start'){return (& (Resolve-NucPath 'apply_start_menu_settings.ps1') -VerifyOnly)}
+ if($Role -notin @('Display','Theme','Icons')){throw 'unexpected fixture role'}
+ Invoke-FreshVerification -ScriptPath (Resolve-NucPath $(if($Role -eq 'Icons'){'desktop_icon_layout.ps1'}else{'apply_'+$Role.ToLowerInvariant()+'_settings.ps1'})) -ReportPath (Join-Path $env:ProgramData $(if($Role -eq 'Icons'){'NUC8-Setup/IconLayout-Result.json'}else{'NUC8-Setup/'+$Role+'-Verification.json'})) -Arguments @{VerifyOnly=$true}
+}
 function Get-CimInstance {param($ClassName,$Filter) [pscustomobject]@{State=$(if($global:AggregateFixtureMode -eq 'Throw'){'Stopped'}else{'Running'});StartMode='Auto'}}
 function Get-SetupSSHFirewallStatus {[pscustomobject]@{Passed=($global:AggregateFixtureMode -ne 'Throw');Detail='fixture'}}
 function powercfg.exe {'AC Power Setting Index: 0x00000000'}
