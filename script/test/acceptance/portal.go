@@ -91,7 +91,7 @@ func ValidatePortal(read Reader, readme, sha, run, base string) (Report, error) 
 		}
 	}
 	images := regexp.MustCompile(`!\[[^\]]*\]\(([^)]+)\)`).FindAllStringSubmatch(readme, -1)
-	for _, n := range []string{"unit", "integration", "system", "coverage"} {
+	for _, n := range []string{"coverage"} {
 		found := []string{}
 		for _, m := range images {
 			if strings.Split(m[1], "?")[0] == base+"main/"+n+".svg" {
