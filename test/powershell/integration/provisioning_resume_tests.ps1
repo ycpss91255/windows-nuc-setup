@@ -7,6 +7,8 @@ Assert ([bool](Get-Command Invoke-InitSshContinuation -ErrorAction SilentlyConti
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('init_resume_'+[guid]::NewGuid().ToString('N'));New-Item -ItemType Directory -Path $temp|Out-Null
 $ssh=Join-Path $temp 'ssh.ps1'
 [IO.File]::WriteAllText($ssh,'$global:initSshCalls++; if($global:initSshFail){throw "synthetic offline"}')
+[IO.File]::WriteAllText((Join-Path $temp 'ssh_firewall.ps1'),'function Get-SetupSSHFirewallStatus { [pscustomobject]@{Passed=$global:initFirewallPass;Detail="synthetic firewall"} }')
+$global:initFirewallPass=$true
 $global:initSshCalls=0;$global:initSshFail=$false
 function Save-InitProvisioningState {param($State,$StatePath) $script:lastPhase=$State.Phase}
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) [pscustomobject]@{State='Running';StartMode='Auto'}}
@@ -25,5 +27,8 @@ $global:initSshFail=$false
 Invoke-InitSshContinuation $state 'unused' $context $ssh
 Assert ($global:initSshCalls -eq 2 -and $state.Phase -eq 'Complete') 'retry invokes module again and completes only after Running Auto service'
 Assert ($state.SourceRoot -eq 'Z:\removed_usb') 'continuation does not read original USB source'
-Remove-Variable initSshCalls,initSshFail -Scope Global
+$global:initFirewallPass=$false
+$rejected=$false;try{Invoke-InitSshContinuation $state 'unused' $context $ssh}catch{$rejected=$true}
+Assert ($rejected -and $state.Phase -eq 'SshPending') 'Running Auto with failed firewall cannot report Complete'
+Remove-Variable initSshCalls,initSshFail,initFirewallPass -Scope Global
 Write-Host ('ALL PASS: '+$script:count+' safe continuation assertions')
