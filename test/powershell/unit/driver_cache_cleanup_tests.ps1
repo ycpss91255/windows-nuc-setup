@@ -4,6 +4,7 @@ $ErrorActionPreference='Stop'
 function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Value}|ConvertTo-Json -Compress));if(-not $Value){throw $Name}}
 Assert ([bool](Get-Command Register-SetupDriverExtractionLease -ErrorAction SilentlyContinue) -and [bool](Get-Command Remove-SetupDriverExtractionRoot -ErrorAction SilentlyContinue)) '本輪驅動解壓有記憶體lease與安全清理入口'
 $fixture=[IO.Path]::GetFullPath((Join-Path $env:TEMP ('driver_cleanup_'+[guid]::NewGuid().ToString('N'))));[void][IO.Directory]::CreateDirectory($fixture)
+$fixture=[IO.Path]::GetFullPath($fixture)
 $parent=Join-Path $fixture 'windows_setup_driver_cache';[void][IO.Directory]::CreateDirectory($parent)
 function Get-SetupDriverCacheParent {$parent}
 function Assert-SetupUpdateProtectedPath {param($Path,[switch]$Directory) if($script:denyAcl){throw 'fixture owner/acl rejected'}}
