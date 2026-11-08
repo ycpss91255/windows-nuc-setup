@@ -20,9 +20,11 @@ Assert ($markdown.Contains('Go 程式敘述覆蓋率：80.0%；範圍為全部�
 $badge=[IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'go_coverage.svg'))
 Assert ($badge.Contains('go coverage branch: 80.0%') -and $badge.Contains('#97ca00')) 'Go badge identifies scope and actual passing percentage with base 80 percent colour'
 [xml]$goSvg=$badge
-Assert ($goSvg.svg.g.text[0].InnerText -eq 'go coverage' -and $goSvg.svg.'aria-label'.Contains('branch')) 'Go badge uses short visible label and retains branch scope accessibly'
+Assert ($goSvg.SelectSingleNode('//*[local-name()="text"]').InnerText -eq 'go coverage' -and $goSvg.svg.'aria-label'.Contains('branch')) 'Go badge uses short visible label and retains branch scope accessibly'
 [xml]$psSvg=Get-Content (Join-Path $arguments.OutputDirectory 'coverage.svg') -Raw
-Assert ($psSvg.svg.g.text[0].InnerText -eq 'ps coverage' -and $psSvg.svg.'aria-label'.Contains('branch')) 'PowerShell badge visibly identifies its unmeasured language without duplicate branch text'
+Assert ($psSvg.SelectSingleNode('//*[local-name()="text"]').InnerText -eq 'ps coverage' -and $psSvg.svg.'aria-label'.Contains('branch')) 'PowerShell badge visibly identifies its unmeasured language without duplicate branch text'
+Assert ($goSvg.svg.defs.clipPath.rect.rx -eq '3' -and $goSvg.svg.defs.linearGradient.id -eq 's' -and $goSvg.svg.g[0].'clip-path' -eq 'url(#r)' -and @($goSvg.svg.g[1].text).Count -eq 4) 'Go coverage uses flat rounded clip gradient and shadow text'
+Assert ($psSvg.svg.defs.clipPath.rect.rx -eq '3' -and @($psSvg.svg.g[1].text).Count -eq 4) 'PowerShell coverage uses the same portable flat SVG template'
 foreach($case in @(@(79.9,'#a4a61d'),@(80,'#97ca00'),@(89.9,'#97ca00'),@(90,'#4c1'))){Assert ((Get-GoCoverageColor ([double]$case[0])) -eq $case[1]) ('base palette boundary '+$case[0])}
 Assert (([IO.File]::ReadAllText((Join-Path $arguments.OutputDirectory 'coverage.svg'))).Contains('not measured')) 'existing coverage badge never changes into an overall Go percentage'
 Assert ((Get-Content (Join-Path $arguments.OutputDirectory 'go_coverage.json') -Raw|ConvertFrom-Json).Commit -eq $arguments.Commit) 'Go sidecar retains measured source identity'
