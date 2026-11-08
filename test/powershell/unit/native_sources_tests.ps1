@@ -5,7 +5,7 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 $cases=@(
- @{Native='modules/desktop/native/desktop_icons.cs';Script='modules/desktop/desktop_icon_layout.ps1';Type='NUC8Icons.Desktop';Methods='Capture,Position';Key='desktop_icons.cs'},
+ @{Native='modules/desktop/native/desktop_icons.cs';Script='modules/desktop/icons_settings_library.ps1';Type='NUC8Icons.Desktop';Methods='Capture,Position';Key='desktop_icons.cs'},
  @{Native='modules/display/native/display.cs';Script='modules/display/display_settings_library.ps1';Type='NUC8Display.Display';Methods='Read,Apply,NativeScales,GetDpiForSystem';Key='display.cs'},
  @{Native='modules/explorer/native/explorer.cs';Script='modules/explorer/explorer_settings_library.ps1';Type='NucExplorerLiveV2';Methods='Options';Key='explorer.cs'},
  @{Native='modules/theme/native/theme.cs';Script='modules/theme/theme_settings_library.ps1';Type='NUC8Theme';Methods='TaskbarColor,SetSysColors,ReadWallpaper,GetSysColor,SystemParametersInfo';Key='theme.cs'},

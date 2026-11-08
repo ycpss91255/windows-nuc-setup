@@ -72,7 +72,7 @@ try{
 $layoutDecision=Get-SetupModuleDecision -Module 'desktop_icon_layout.ps1' -Hardware $hardware
 if($layoutDecision.Applicable){
 try{
- $fresh=Invoke-FreshVerification -ScriptPath (Resolve-NucPath 'desktop_icon_layout.ps1') -ReportPath (Join-Path $env:ProgramData 'NUC8-Setup\IconLayout-Result.json') -Arguments @{Mode='Verify'}
+ $fresh=Invoke-SetupGuiFreshVerification -PackageRoot $script:NucPackageRoot -Role Icons
  Add-Check '四個圖示的實際排列座標' ([bool]$fresh.Success) ('本輪即時結果：'+($fresh|ConvertTo-Json -Compress -Depth 5))
 }catch{Add-Check '四個圖示的實際排列座標' $false $_.Exception.Message}
 }else{$checks.Add((New-SetupSkippedCheck -Name '四個圖示的實際排列座標' -Reason $layoutDecision.Reason));Write-Host ('[略過] '+$layoutDecision.Reason)}

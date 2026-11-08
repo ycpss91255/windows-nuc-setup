@@ -112,22 +112,15 @@ foreach($role in @('Display','Theme')){
  $identityParameters=@($call.CommandElements|Where-Object {$_ -is [Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -in @('UserSID','Computer','SessionId','ScriptPath')})
  Assert ($script:capturedGuiCall.Root -ieq $root -and $script:capturedGuiCall.Role -ceq $role -and $identityParameters.Count -eq 0) ('private GUI role preserves portable package root and delegates current identity to fixed protected controller: '+$relative)
 }
-foreach($relative in @('modules/desktop/desktop_icon_layout.ps1')){
- $source=[IO.File]::ReadAllText((Join-Path $root $relative))
- $VerificationRunId=[guid]::NewGuid().ToString();$VerifyOnly=$true;$Mode='Verify';$workerPath='C:\fixture\worker.ps1'
- if($relative -notmatch 'desktop_icon_layout'){
-  $start=$source.IndexOf(" `$workerArgs=");$end=$source.IndexOf(" `$principal=",$start)
-  . ([scriptblock]::Create($source.Substring($start,$end-$start)))
- }else{
-  $line=($source -split "`n"|Where-Object {$_ -match '^\s*\$action=New-ScheduledTaskAction'})
-  . ([scriptblock]::Create($line))
- }
- Assert ($action.Arguments.Contains('-VerificationRunId '+$VerificationRunId)) ('desktop worker receives exact run ID: '+$relative)
- if($relative -notmatch 'desktop_icon_layout'){Assert ($action.Arguments.Contains('-VerifyOnly')) ('desktop worker preserves VerifyOnly: '+$relative)}
- $line=($source -split "`n"|Where-Object {$_ -match '^\s*\$principal=New-ScheduledTaskPrincipal'})
- . ([scriptblock]::Create($line))
- Assert ($principal.UserId -eq [Security.Principal.WindowsIdentity]::GetCurrent().Name) ('desktop worker uses invoking identity: '+$relative)
-}
+$relative='modules/desktop/desktop_icon_layout.ps1';$tokens=$null;$errors=$null
+$layoutAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root $relative),[ref]$tokens,[ref]$errors)
+$call=$layoutAst.Find({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Invoke-SetupGuiRole'},$true)
+function Invoke-SetupGuiRole {param($PackageRoot,$Role,[switch]$Worker,[switch]$VerifyOnly,$VerificationRunId,$IconMode);$script:capturedGuiCall=[pscustomobject]@{Root=$PackageRoot;Role=$Role;Worker=[bool]$Worker;VerifyOnly=[bool]$VerifyOnly;RunId=$VerificationRunId;IconMode=$IconMode}}
+$VerificationRunId=[guid]::NewGuid().ToString();$Mode='Verify';$Worker=$true
+$moduleLiteral="'"+(Split-Path (Join-Path $root $relative) -Parent).Replace("'","''")+"'"
+& ([scriptblock]::Create($call.Extent.Text.Replace('$PSScriptRoot',$moduleLiteral)))|Out-Null
+Assert ($script:capturedGuiCall.RunId -ceq $VerificationRunId -and $script:capturedGuiCall.VerifyOnly -and $script:capturedGuiCall.IconMode -ceq 'Verify') 'Icons public entry carries exact fresh ID and finite verification mode'
+Assert ($script:capturedGuiCall.Worker -and $script:capturedGuiCall.Root -ieq $root -and $script:capturedGuiCall.Role -ceq 'Icons') 'Icons Worker delegates current invoking SID to same private scoped controller'
 # Execute the actual Verify-Only finalization and AfterRestart acceptance tail.
 $verifyTokens=$null;$verifyErrors=$null
 $verifyAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/verification_library.ps1'),[ref]$verifyTokens,[ref]$verifyErrors)
