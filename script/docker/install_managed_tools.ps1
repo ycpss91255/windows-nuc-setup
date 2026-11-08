@@ -8,6 +8,10 @@ function Get-ContainerManagedToolArtifacts {
   [pscustomobject]@{Name='dotnet-coverage.17.14.1.nupkg';Version='17.14.1';Uri='https://api.nuget.org/v3-flatcontainer/dotnet-coverage/17.14.1/dotnet-coverage.17.14.1.nupkg';Algorithm='SHA512';Hash='860cda1be73b2ed2aea7a1d98b1bd7b67de5e0f6bc54adb76ccf6f2c7bde0f722ad979732eeeefa8c670b558d076ca1ff37c31e4ecd8d2da43877f9845d3958c';Kind='File';Destination='C:/tools/cache/dotnet-coverage.17.14.1.nupkg'}
  )
 }
+function Get-ContainerWorkflowLintArtifact {
+ # Official release: https://github.com/rhysd/actionlint/releases/tag/v1.7.12
+ [pscustomobject]@{Name='actionlint_1.7.12_windows_amd64.zip';Version='1.7.12';Uri='https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_windows_amd64.zip';Algorithm='SHA256';Hash='6e7241b51e6817ea6a047693d8e6fed13b31819c9a0dd6c5a726e1592d22f6e9';Kind='Zip';Destination='C:/actionlint'}
+}
 function Install-ContainerToolArtifact {
  param([Parameter(Mandatory=$true)]$Artifact,[Parameter(Mandatory=$true)][string]$Destination,[Parameter(Mandatory=$true)][string]$ArchiveDirectory)
  [void][IO.Directory]::CreateDirectory($ArchiveDirectory)
@@ -22,5 +26,5 @@ function Install-ContainerToolArtifact {
 if($MyInvocation.InvocationName -ne '.'){
  [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
  $archives=Join-Path $env:TEMP ('container_managed_'+[guid]::NewGuid().ToString('N'))
- foreach($artifact in @(Get-ContainerManagedToolArtifacts)){Install-ContainerToolArtifact -Artifact $artifact -Destination $artifact.Destination -ArchiveDirectory $archives}
+ foreach($artifact in @(@(Get-ContainerManagedToolArtifacts)+@(Get-ContainerWorkflowLintArtifact))){Install-ContainerToolArtifact -Artifact $artifact -Destination $artifact.Destination -ArchiveDirectory $archives}
 }
