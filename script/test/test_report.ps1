@@ -68,7 +68,7 @@ function Write-TestReports {
  foreach($check in $display){$passed=@($check.Assertions|Where-Object Passed).Count;$md+='| '+$check.Layer+' | '+$check.Name.Replace('|','/')+' | '+$check.Status+' | '+$passed+'/'+$check.Assertions.Count+' | '+$check.DurationSeconds+' |'}
  $md+=@('',('整體程式碼覆蓋率：'+(Get-RepoCoverageSummary $RepoCoverage)))
  $md+=@(Get-RepoCoverageLanguages $RepoCoverage)
- if($null -ne $GoCoverage){$md+=@('',('Go 程式敘述覆蓋率（分項）：'+(Get-GoCoveragePercentText $GoCoverage)+'；'+$GoCoverage.Covered+'/'+$GoCoverage.TotalStatements+' statements；全部自有 Go 工具含 CLI，不等於整體覆蓋率。'))}
+ if($null -ne $GoCoverage){$md+=@('',('Go 程式敘述覆蓋率（分項）：'+(Get-GoCoveragePercentText $GoCoverage)+'；'+$GoCoverage.Covered+'/'+$GoCoverage.TotalStatements+' statements；全部自有 Go 工具含 CLI，不含 PowerShell 或第三方程式，不等於整體覆蓋率。'))}
  if($report.RunUrl){$md+=@('',('[GitHub Actions 執行紀錄]('+$report.RunUrl+')'))}
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'summary.md'),($md -join "`n"),$encoding)
  $body='<h1>Windows 設定工具｜測試結果</h1><h2>'+[Net.WebUtility]::HtmlEncode($conclusion)+'</h2>'
