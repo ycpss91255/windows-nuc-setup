@@ -1,6 +1,7 @@
 ﻿#Requires -Version 5.1
-param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL,[string]$DriverAssetManifestPath=(Join-Path $PSScriptRoot '../release/driver_release_assets.json'))
+param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL,[string]$DriverAssetManifestPath)
 $ErrorActionPreference='Stop'
+if(-not $DriverAssetManifestPath){$DriverAssetManifestPath=Join-Path $PSScriptRoot '../release/driver_release_assets.json'}
 . (Join-Path $PSScriptRoot '../test/test_report.ps1')
 . (Join-Path $PSScriptRoot 'portal.ps1')
 . (Join-Path $PSScriptRoot '../release/driver_release_library.ps1')
