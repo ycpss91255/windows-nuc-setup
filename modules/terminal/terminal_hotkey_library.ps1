@@ -1,12 +1,8 @@
 ﻿#Requires -Version 5.1
 # Named runtime implementation: dot-sourcing defines functions without changing Windows.
-function Get-SetupTerminalKnownFolder {
- param([Environment+SpecialFolder]$Folder,[Environment+SpecialFolderOption]$Option=[Environment+SpecialFolderOption]::None)
- [Environment]::GetFolderPath($Folder,$Option)
-}
 function Get-SetupTerminalContext {
  $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
- [pscustomobject]@{Folder=(Join-Path $env:LOCALAPPDATA 'NUC8-Setup\TerminalHotkey');Startup=(Join-Path (Get-SetupTerminalKnownFolder -Folder Startup) 'Terminal Hotkey.lnk');IdentityName=$identity.Name;UserSID=$identity.User.Value;UserHome=$env:USERPROFILE;PowerShell=(Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe');ReportPath=(Join-Path $env:ProgramData 'NUC8-Setup/TerminalHotkey-Result.json')}
+ [pscustomobject]@{Folder=(Join-Path $env:LOCALAPPDATA 'NUC8-Setup\TerminalHotkey');Startup=(Join-Path ([Environment]::GetFolderPath('Startup')) 'Terminal Hotkey.lnk');IdentityName=$identity.Name;UserSID=$identity.User.Value;UserHome=$env:USERPROFILE;PowerShell=(Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe');ReportPath=(Join-Path $env:ProgramData 'NUC8-Setup/TerminalHotkey-Result.json')}
 }
 function New-SetupTerminalShell {New-Object -ComObject WScript.Shell}
 function Copy-SetupTerminalFiles {
