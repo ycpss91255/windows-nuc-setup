@@ -25,7 +25,8 @@ function Invoke-SetupIconsSettings {
    Start-Sleep -Milliseconds 500
   }
   $after=[NUC8Icons.Desktop]::Capture()
-  foreach($expected in $reference.Icons){$actual=@($after.Icons|Where-Object Name -eq $expected.Name);if($actual.Count -eq 1 -and ([math]::Abs($actual[0].X-$expected.X) -gt 2 -or [math]::Abs($actual[0].Y-$expected.Y) -gt 2)){$differences+=('位置不符：'+$expected.Name)}}
+  if(@($after.Icons).Count -ne 4){$differences+='結果不是四個系統圖示'}
+  foreach($expected in $reference.Icons){$actual=@($after.Icons|Where-Object Name -eq $expected.Name);if($actual.Count -ne 1){$differences+=('找不到唯一圖示：'+$expected.Name)}elseif([math]::Abs($actual[0].X-$expected.X) -gt 2 -or [math]::Abs($actual[0].Y-$expected.Y) -gt 2){$differences+=('位置不符：'+$expected.Name)}}
   $result=[ordered]@{Success=($differences.Count -eq 0);Mode=$Mode;Differences=$differences;Actual=@($after.Icons|Select-Object Name,X,Y);Error=($differences -join '；')}
  }
  return [pscustomobject]$result
