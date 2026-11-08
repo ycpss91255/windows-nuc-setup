@@ -8,6 +8,7 @@ function Reject([scriptblock]$Action,[string]$Expected,[string]$Name){$f=$null;t
 function Clone($v){$v|ConvertTo-Json -Depth 12|ConvertFrom-Json}
 $fixture=Join-Path $env:TEMP ('stage_gaps_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
 $fixture=[IO.Path]::GetFullPath($fixture)
+$script:guiCaseIndex=0
 $nativeScope=Get-SetupGuiIdentity
 Assert ([bool]$nativeScope.UserSID -and [bool]$nativeScope.Computer) '原生身分僅唯讀觀測，不作為互動案例的帳號假設'
 $script:controlledGuiScope=[pscustomobject]@{UserSID='S-1-5-21-1-2-3-1001';Computer='stage-fixture';SessionId=1;CommonDataRoot=$fixture;PowerShell='powershell.exe'}
@@ -38,7 +39,7 @@ foreach($kind in @('inherited','missing','inherit')){$a=New-SetupUpdateDirectory
 Reject {Assert-SetupGuiCaller -UserSid 'invalid' -CallerSession 1 -DesktopSession 1 -Computer fixture} '身分格式' 'GUI拒絕未知呼叫SID'
 Reject {Assert-SetupGuiCaller -UserSid $user -CallerSession 1 -DesktopSession 1 -Computer ''} '身分格式' 'GUI拒絕空機器名稱'
 function GuiCase([string]$Role,[switch]$VerifyOnly,[string]$IconMode='Load'){
- $base=Join-Path $fixture ([guid]::NewGuid().ToString('N'));$source=Join-Path $base 'source';$common=Join-Path $base 'common';$run=[guid]::NewGuid().ToString('D');$paths=Get-SetupGuiRunPaths $common $Role $run
+ $script:guiCaseIndex++;$base=Join-Path $fixture ('c'+$script:guiCaseIndex);$source=Join-Path $base 'source';$common=Join-Path $base 'common';$run=[guid]::NewGuid().ToString('D');$paths=Get-SetupGuiRunPaths $common $Role $run
  foreach($p in @($common,(Split-Path $paths.RoleRoot -Parent),$paths.RoleRoot,$paths.RunRoot,$paths.CodeRoot,$paths.DataRoot)){[void][IO.Directory]::CreateDirectory($p)}
  foreach($name in @(Get-SetupGuiStageFiles $Role)){$to=Join-Path $source $name;[void][IO.Directory]::CreateDirectory((Split-Path $to -Parent));Microsoft.PowerShell.Management\Copy-Item -LiteralPath (Join-Path $root $name) -Destination $to;[void][IO.Directory]::CreateDirectory((Split-Path (Join-Path $paths.CodeRoot $name) -Parent))}
  if($Role -eq 'Icons'){$to=Join-Path $source 'modules/desktop/desktop_layout.json';Microsoft.PowerShell.Management\Copy-Item -LiteralPath (Join-Path $root 'modules/desktop/desktop_layout.json') -Destination $to}
