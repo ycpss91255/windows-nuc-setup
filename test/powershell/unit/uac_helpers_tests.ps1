@@ -1,4 +1,5 @@
 ﻿#Requires -Version 5.1
+param([switch]$DiagnosticProbe)
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
@@ -7,7 +8,7 @@ function Reject([scriptblock]$Action,[string]$Name,[string]$Expected,[int]$Expec
  $beforeWrites=$script:writes.Count;$statePath=$call.StatePath;$beforeState=if(Test-Path $statePath){[IO.File]::ReadAllText($statePath)}else{$null}
  $failure=$null;try{& $Action|Out-Null}catch{$failure=$_}
  Assert ($null -ne $failure -and -not ($failure.Exception -is [Management.Automation.ParameterBindingException])) ($Name+'：確實進入原函式')
- Assert ($failure.Exception.Message.Contains($Expected)) ($Name+'：符合預期錯誤')
+ Assert ($failure.Exception.Message.Contains($Expected)) ($Name+'：符合預期錯誤；預期='+$Expected+'；實際='+$failure.Exception.Message)
  Assert ($script:writes.Count -eq $beforeWrites+$ExpectedWrites) ($Name+'：符合registry寫入次數')
  $afterState=if(Test-Path $statePath){[IO.File]::ReadAllText($statePath)}else{$null}
  Assert ($beforeState -ceq $afterState) ($Name+'：保留首份原值狀態')
@@ -22,6 +23,7 @@ function New-ItemProperty {param($LiteralPath,$Name,$Value,$PropertyType,[switch
 function Remove-ItemProperty {param($LiteralPath,$Name,$ErrorAction) if($Name -ne 'ConsentPromptBehaviorAdmin'){throw '禁止移除其他政策'};$script:writes+=@($Name);$script:values.Remove($Name);$script:kinds.Remove($Name)}
 $dir=Join-Path ([IO.Path]::GetTempPath()) ('uac_test_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($dir)
 $call=@{StatePath=(Join-Path $dir 'original.json');ReportPath=(Join-Path $dir 'result.json');MachineId='machine-a';UserSid='test-sid';Computer='test-pc'}
+if($DiagnosticProbe){Reject {throw 'fixture actual message'} '診斷probe' 'fixture expected message';throw 'probe unexpectedly passed'}
 Reject {Invoke-SetupUac @call -VerifyOnly} '未設定時驗證必失敗' 'UAC政策讀回'
 Assert ($script:writes.Count -eq 0 -and -not(Test-Path $call.StatePath)) '驗證不寫registry或原值快照'
 Invoke-SetupUac @call|Out-Null
@@ -36,7 +38,8 @@ Assert ($script:values.ConsentPromptBehaviorAdmin -eq 5) '還原原始DWORD5'
 $call.MachineId='machine-b';Reject {Invoke-SetupUac @call} '不同機器不可使用原快照' 'UAC原值快照';$call.MachineId='machine-a'
 $script:values.EnableLUA=0;$n=$script:writes.Count;Reject {Invoke-SetupUac @call} '已停用UAC不能假稱正常' '目前EnableLUA';Assert ($script:writes.Count -eq $n) '不自行修改EnableLUA';$script:values.EnableLUA=1
 $script:drop=$true;Reject {Invoke-SetupUac @call} '政策寫入被覆蓋讀回必失敗' 'UAC政策讀回' 1;$script:drop=$false
-$script:kinds.ConsentPromptBehaviorAdmin='String';Reject {Invoke-SetupUac @call -VerifyOnly} '錯誤registry型別拒絕' 'UAC政策讀回';$script:kinds.ConsentPromptBehaviorAdmin='DWord'
+$script:kinds.ConsentPromptBehaviorAdmin='String';
+Reject {Invoke-SetupUac @call -VerifyOnly} '錯誤registry型別拒絕' 'UAC政策讀回';$script:kinds.ConsentPromptBehaviorAdmin='DWord'
 $call.StatePath=Join-Path $dir 'missing_original.json';$script:values.Remove('ConsentPromptBehaviorAdmin');Invoke-SetupUac @call|Out-Null;Invoke-SetupUac @call -Restore|Out-Null
 Assert (-not $script:values.ContainsKey('ConsentPromptBehaviorAdmin')) '原值不存在則還原為不存在'
 Reject {Invoke-SetupUac @call -VerifyOnly -Restore} '拒絕互斥模式' 'VerifyOnly與Restore'
