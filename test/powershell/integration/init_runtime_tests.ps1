@@ -33,10 +33,12 @@ function Start-SshService {throw 'Init must not install SSH'}
 function RunInit {param([string]$ExpectedUserSID='');Invoke-SetupInit -EntryPath $entry -ModuleRoot $module -ExpectedUserSID $ExpectedUserSID}
 function AuditCase {ResetCase;$script:native.Sid='S-1-5-21-1-2-3-500';$script:native.UserSID=$script:native.Sid;$script:image='IMAGE_STATE_UNDEPLOYABLE'}
 function Passwords([string]$Second='fixture&<密碼'){$script:first=ConvertTo-SecureString 'fixture&<密碼' -AsPlainText -Force;$script:second=ConvertTo-SecureString $Second -AsPlainText -Force;foreach($item in @('AUDIT','fixture_user',$script:first,$script:second)){$script:queue.Enqueue($item)}}
-function Disposed($Value){try{$null=$Value.Length;return $false}catch{return $true}}
+function Disposed($Value){try{$copy=$Value.Copy();$copy.Dispose();return $false}catch{return $true}}
 try{
  ResetCase;$script:handled=$true;RunInit
  Assert ($script:provisioning.SourceRoot -eq (Join-Path $fixture 'source') -and -not $script:starts.Count) 'ShiftF10 provisioning fastpath保留且不進legacy提示'
+ Invoke-SetupInit -EntryPath $entry -ModuleRoot $module -ResumeStatePath (Join-Path $fixture 'resume.json') -ExpectedUserSID fixture_expected
+ Assert ($script:provisioning.ResumeStatePath -eq (Join-Path $fixture 'resume.json') -and $script:provisioning.ExpectedUserSID -eq 'fixture_expected') 'F10續跑狀態及預期SID原樣傳遞'
  ResetCase;RunInit;Assert (-not $script:starts.Count -and -not(Test-Path $env:ProgramData)) '正式桌面不重設帳號、不需第二Init或SSH'
  ResetCase;Reject {RunInit -ExpectedUserSID 'other'} 'ExpectedSID變更立即拒絕'
  ResetCase;$script:native.IsAdministrator=$false;RunInit
@@ -46,10 +48,15 @@ try{
  AuditCase;$script:image='IMAGE_STATE_COMPLETE';Reject {RunInit} '一般內建Administrator桌面拒絕'
  ResetCase;$script:image='UNKNOWN';Reject {RunInit} '未知setup state拒絕'
  ResetCase;$script:native.Is64Bit=$false;Reject {RunInit} '非x64流程拒絕'
+ ResetCase;$script:native.Sid='S-1-5-18';Reject {RunInit} 'SYSTEM不從失敗F10路線落入Audit寫入'
  AuditCase;$script:desktop=$false;Reject {RunInit} 'Audit不是目前桌面owner拒絕'
  AuditCase;$script:queue.Enqueue('no');Reject {RunInit} '未明確AUDIT確認零寫入'
  AuditCase;$script:queue.Enqueue('AUDIT');$script:runningSysprep=$true;Reject {RunInit} '既有Sysprep程序拒絕'
  AuditCase;$script:queue.Enqueue('AUDIT');$script:sMode=1;Reject {RunInit} 'SMode拒絕'
+ AuditCase;$script:queue.Enqueue('AUDIT');Move-Item -LiteralPath $sysprep -Destination ($sysprep+'.disabled')
+ try{Reject {RunInit} '缺少Sysprep不建立設定'}finally{Move-Item -LiteralPath ($sysprep+'.disabled') -Destination $sysprep}
+ AuditCase;$script:queue.Enqueue('AUDIT');$oem=Join-Path $fakeWindows 'Panther/unattend.xml';[void][IO.Directory]::CreateDirectory((Split-Path $oem -Parent));[IO.File]::WriteAllText($oem,'OEM fixture')
+ try{Reject {RunInit} '既有answer檔案不覆寫'}finally{Remove-Item -LiteralPath $oem}
  AuditCase;$script:queue.Enqueue('AUDIT');$script:registryAnswer=Join-Path $fixture 'OEM.xml';Reject {RunInit} '既有answer registry拒絕'
  AuditCase;$script:queue.Enqueue('AUDIT');[void][IO.Directory]::CreateDirectory((Join-Path $env:ProgramData 'NUC-Init'));Reject {RunInit} '既有安全stage不覆寫'
  AuditCase;foreach($i in @('AUDIT','existing')){$script:queue.Enqueue($i)};Reject {RunInit} '既有帳號名稱拒絕'
