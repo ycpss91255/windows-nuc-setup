@@ -22,7 +22,7 @@ if(Test-Path $resultPath){
  $previous=Get-Content $resultPath -Raw|ConvertFrom-Json
  $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
  if($previous.Computer -eq $env:COMPUTERNAME -and $previous.UserSID -eq $sid){
-  $config=[IO.File]::ReadAllText((Resolve-NucPath 'configure_nuc.ps1'))
+  $config=[IO.File]::ReadAllText((Resolve-NucPath 'configuration_library.ps1'))
   $allowed=@([regex]::Matches($config,"File='([^']+\.ps1)'" )|ForEach-Object {$_.Groups[1].Value})
   foreach($file in @($previous.FailedModules|ForEach-Object {Resolve-NucModuleName $_}|Where-Object {$_ -and $_ -ne 'install_windows_updates.ps1'})){
    if($file -notin $allowed){throw ('未知的失敗模組：'+$file)}

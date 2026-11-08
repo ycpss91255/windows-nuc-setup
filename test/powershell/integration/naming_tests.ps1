@@ -6,7 +6,7 @@ function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{N
 $fixture=Join-Path $env:TEMP ('windows_setup_names_'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path (Join-Path $fixture 'core'),(Join-Path $fixture 'modules/debloat'),(Join-Path $fixture 'reports')|Out-Null
 $script:NucPackageRoot=$fixture
-[IO.File]::WriteAllText((Join-Path $fixture 'core/configure_nuc.ps1'),"File='apply_debloat.ps1'")
+[IO.File]::WriteAllText((Join-Path $fixture 'core/configuration_library.ps1'),"File='apply_debloat.ps1'")
 $marker=Join-Path $fixture 'invoked.txt'
 [IO.File]::WriteAllText((Join-Path $fixture 'modules/debloat/apply_debloat.ps1'),"[IO.File]::WriteAllText('$marker','called')")
 Assert ((Resolve-NucPath 'Apply-Debloat.ps1') -eq (Join-Path $fixture 'modules/debloat/apply_debloat.ps1')) 'legacy source alias resolves to new physical filename'

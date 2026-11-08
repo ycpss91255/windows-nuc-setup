@@ -37,7 +37,7 @@ foreach($property in $script:NucPathMap.PSObject.Properties){
  Assert ([IO.Path]::GetFullPath($resolved).StartsWith($root,[StringComparison]::OrdinalIgnoreCase)) ('mapped path stays inside package: '+$property.Name)
  if($property.Name -notmatch '(Result|Verification)\.json$' -and -not ($SourceOnly -and $property.Name -eq 'Autologon64.exe')){Assert (Test-Path -LiteralPath $resolved) ('mapped source exists: '+$property.Name)}
 }
-$config=[IO.File]::ReadAllText((Resolve-NucPath 'configure_nuc.ps1'))
+$config=[IO.File]::ReadAllText((Resolve-NucPath 'configuration_library.ps1'))
 $modules=@('apply_autologon_settings.ps1')+@([regex]::Matches($config,"File='([^']+\.ps1)'" )|ForEach-Object {$_.Groups[1].Value})
 Assert ($modules.Count -eq 19 -and @($modules|Select-Object -Unique).Count -eq 19) 'all 19 stages remain unique'
 foreach($name in $modules){Assert (Test-Path -LiteralPath (Resolve-NucPath $name) -PathType Leaf) ('stage resolves: '+$name)}
