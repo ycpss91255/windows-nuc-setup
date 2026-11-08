@@ -1,17 +1,29 @@
 ﻿#Requires -Version 5.1
-param([Parameter(Mandatory=$true)][string]$SourceDirectory,[Parameter(Mandatory=$true)][string]$OutputDirectory)
+param([Parameter(Mandatory=$true)][string]$SourceDirectory,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$ProfileId='nuc8i7hvk_hnk',[string]$ProfilesRoot='')
 $ErrorActionPreference='Stop'
 $packageRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 . (Join-Path $packageRoot 'core/hardware.ps1')
 $source=(Resolve-Path -LiteralPath $SourceDirectory).Path
 $output=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 if(Test-Path -LiteralPath $output){throw '輸出目錄已存在，未覆寫；請選擇新目錄。'}
-$null=Test-SetupDriverPayload -Hardware (Get-SetupHardwareProfile -BoardProduct 'NUC8i7HVB') -DriverPackagePath $source -AllowLegacyManifest
+$profile=Get-SetupDriverProfile -ProfileId $ProfileId -ProfilesRoot $ProfilesRoot
+if(-not $profile){throw '找不到指定的驅動設定檔。'}
+$hardware=Get-SetupHardwareProfile -BoardProduct $profile.SupportedBoards[0] -ProfilesRoot $ProfilesRoot
+$null=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $source -AllowLegacyManifest
+$sourceManifest=Get-Content -LiteralPath (Join-Path $source 'manifest.json') -Raw|ConvertFrom-Json
 $manifest=@(Get-SetupDriverManifestEntries -Manifest (Get-Content -LiteralPath (Join-Path $source 'manifest.json') -Raw|ConvertFrom-Json))
 New-Item -ItemType Directory -Path (Join-Path $output 'core'),(Join-Path $output 'modules\drivers') -Force|Out-Null
 foreach($entry in $manifest){Copy-Item -LiteralPath (Join-Path $source $entry.File) -Destination $output}
 Copy-Item -LiteralPath (Join-Path $source 'manifest.json') -Destination $output
-@{SchemaVersion=1;HardwareProfile='NUC8';Architecture='x64';SupportedBoards=@('NUC8i7HVB','NUC8i7HNB')}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $output 'package.json') -Encoding UTF8
+$profileDirectory=Join-Path $output ('drivers/'+$profile.ProfileId)
+[void][IO.Directory]::CreateDirectory($profileDirectory)
+Copy-Item -LiteralPath $profile.ProfilePath -Destination (Join-Path $profileDirectory 'profile.json')
+if($sourceManifest.SchemaVersion -eq 2){
+ @{SchemaVersion=2;ProfileId=$profile.ProfileId;ProfileSHA256=$profile.ProfileSHA256;Architecture=$profile.Architecture;SupportedBoards=@($profile.SupportedBoards)}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $output 'package.json') -Encoding UTF8
+}else{
+ if($profile.ProfileId -cne 'nuc8i7hvk_hnk'){throw '舊四檔格式僅適用原 NUC 設定檔。'}
+ @{SchemaVersion=1;HardwareProfile='NUC8';Architecture='x64';SupportedBoards=@('NUC8i7HVB','NUC8i7HNB')}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $output 'package.json') -Encoding UTF8
+}
 Copy-Item -LiteralPath (Join-Path $packageRoot 'core/hardware.ps1') -Destination (Join-Path $output 'core')
 Copy-Item -LiteralPath (Join-Path $packageRoot 'modules\drivers\install_drivers.ps1') -Destination (Join-Path $output 'modules\drivers')
 foreach($helper in @('driver_archive_library.ps1','driver_plan_library.ps1','driver_installation_library.ps1')){Copy-Item -LiteralPath (Join-Path $packageRoot ('modules/drivers/'+$helper)) -Destination (Join-Path $output 'modules/drivers')}
@@ -38,5 +50,5 @@ $readme=@"
 可由 Windows 設定工具的 DriverPackagePath 選擇本目錄；此包不需要原主包路徑。安裝日誌位於 modules/drivers/driver_logs；既有 ProgramData NUC8-Setup 快取識別保留。獨立包不依賴 script/test/.github。完整性檢查會核對 package.json 的型號／架構與 manifest.json 的所有封存檔雜湊。
 "@
 [IO.File]::WriteAllText((Join-Path $output 'readme.md'),$readme,(New-Object Text.UTF8Encoding($true)))
-$null=Test-SetupDriverPayload -Hardware (Get-SetupHardwareProfile -BoardProduct 'NUC8i7HVB') -DriverPackagePath $output
+$null=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $output
 [pscustomobject]@{OutputDirectory=$output;Count=$manifest.Count;Status='Passed'}
