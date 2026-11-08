@@ -55,8 +55,10 @@ CI 的 oobe_payload_inspection 獨立使用 script/test/verify_oobe_payload.ps1�
 
 ## 自動判斷的範圍
 
-此入口判斷的是受控帳號／OOBE 準備條件，並非呼叫 Windows 的正式 Audit 模式識別 API。它同時要求 Windows 11 client x64、非 WinPE、原生 OOBEComplete 成功且未完成、目前啟用的本機內建 Administrator SID500、同工作階段桌面擁有權與原生／登錄家目錄一致、已知未完成 ImageState、沒有同工作階段 OOBE 畫面及安裝忙碌旗標。ImageState 不單獨證明目前模式，也不使用猜測的 AuditBoot registry 結構。未知、讀取失敗或矛盾會於帳密與任何寫入前停止。
+此入口判斷的是受控帳號／OOBE 準備條件，並非呼叫 Windows 的正式 Audit 模式識別 API。它同時要求 Windows 11 client x64、非 WinPE、原生 OOBEComplete 成功且未完成、目前管理員 token 對應的本機內建 Administrator SID500（不要求 SAM 帳號 Enabled；稽核登入後帳號可能停用）、同工作階段桌面擁有權與原生／登錄家目錄一致、已知未完成 ImageState、沒有同工作階段 OOBE／Setup／Sysprep 程序。ImageState 不單獨證明目前模式，也不使用猜測的 AuditBoot registry 結構。未公開文件定義的 Setup registry 旗標只保留原型別作診斷，不把缺省值轉成 0 或當成模式證明。未知、讀取失敗或矛盾會於帳密與任何寫入前停止。
 
 完成 OOBE 的正式帳號桌面只提示執行 windows.cmd，不重新準備帳號。受控準備仍保留現有 answer file、Sysprep 程序、S mode、暫存擁有權及清理防護；同意後只執行 /oobe /quit，不執行 generalize 或自動重開。
 
 依據：[OOBEComplete](https://learn.microsoft.com/en-us/windows/win32/api/oobenotification/nf-oobenotification-oobecomplete)、[Windows Setup States](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/windows-setup-states?view=windows-11)、[Sysprep 選項](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/sysprep-command-line-options?view=windows-11)。此路線用於全新安裝前置，不用來修復已交付或損壞的 Windows。
+
+原生帳號狀態依據：[Microsoft KB3141410](https://learn.microsoft.com/en-us/troubleshoot/windows-client/setup-upgrade-and-drivers/fail-to-turn-off-computer-from-audit-mode)，Audit 的內建 Administrator 可於登入後立即停用；本工具不因此啟用它。

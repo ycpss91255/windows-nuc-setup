@@ -18,7 +18,7 @@ function ResetCase {
  $script:ownerExit=0;$script:image='IMAGE_STATE_COMPLETE';$script:desktop=$true;$script:handled=$false;$script:sMode=0;$script:registryAnswer='';$script:runningSysprep=$false;$script:processExit=0;$script:copyFailure=$false;$script:userEnabled=$true;$script:queue=New-Object 'Collections.Generic.Queue[object]';$script:starts=@();$global:initCleanupCalls=0
 }
 function Get-SetupInitNativeIdentity {return $script:native}
-function Get-SetupInitPreparationFacts {param($Identity);return @{ReadSucceeded=$true;Build=26200;ProductType=1;IsWinPE=$false;OobeApiSucceeded=$true;OobeComplete=($script:image -eq 'IMAGE_STATE_COMPLETE');SetupInProgress=0;OobeInProgress=0;OobeProcessInSession=$false;ProfileMatches=$true;LocalBuiltin=($script:native.Sid -match '-500$')}}
+function Get-SetupInitPreparationFacts {param($Identity);return @{ReadSucceeded=$true;Build=26200;ProductType=1;IsWinPE=$false;OobeApiSucceeded=$true;OobeComplete=($script:image -eq 'IMAGE_STATE_COMPLETE');SetupInProgress=0;OobeInProgress=0;OobeProcessInSession=$false;SetupProcessInSession=$false;ProfileMatches=$true;LocalBuiltin=($script:native.Sid -match '-500$')}}
 function Get-ItemProperty {param($Path,$ErrorAction);switch -Wildcard ($Path){'*Setup\State'{[pscustomobject]@{ImageState=$script:image}} '*CI\Policy'{[pscustomobject]@{SkuPolicyRequired=$script:sMode}} default{[pscustomobject]@{UnattendFile=$script:registryAnswer}}}}
 function Get-CimInstance {param($ClassName,$Filter);@([pscustomobject]@{SessionId=44;ProcessId=1},[pscustomobject]@{SessionId=99;ProcessId=2})}
 function Invoke-CimMethod {param($InputObject,$MethodName);[pscustomobject]@{ReturnValue=$script:ownerExit;Sid=$(if($script:desktop){$script:native.Sid}else{'other'})}}
