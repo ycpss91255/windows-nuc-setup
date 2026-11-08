@@ -238,14 +238,16 @@ windows_setup\
 └─ doc\changelog\            版本摘要與紀錄規範
 ```
 
-驅動包獨立於主程式。執行 `windows.cmd` 時可輸入獨立包目錄，直接 Enter 預設略過驅動；也可明確傳入：
+驅動包獨立於主程式。執行 `windows.cmd` 先顯示偵測主機板：一般電腦自動略過 NUC 驅動；支援 NUC 才提示選包。找到相鄰 `windows_driver_packages/nuc8` 時，輸入 Y 才選用，P 可指定其他位置，Enter 略過。找不到包或包校驗失敗時，可輸入正確目錄或 Enter 略過；也可明確傳入：
 
 ```powershell
 $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不用加引號）'
 .\windows.cmd -DriverPackagePath $driverPath
 ```
 
-也可直接執行 `.\windows.cmd`，依畫面輸入這次的驅動包路徑，或按 Enter 略過。獨立包可自行執行 `install.cmd`；只核對完整性用 `install.cmd -PackageOnly`。安裝器自行檢查 NUC8i7HVB／NUC8i7HNB，其他機型略過，不能拿 NUC 驅動套用其他硬體。續跑只沿用同一電腦與使用者先前明確選擇的驅動包，並核對 package.json／manifest.json 的雜湊；同 USB 相對位置可隨盤符變動解析，包身分變更則拒絕。整包複製至其他電腦不沿用舊選擇。
+偵測失敗或板號空白／明確未知時，選 R 重新偵測、G 或 Enter 使用通用設定，或依下表選擇實際 NUC 整機，再輸入完整板號確認。回報已知其他板號、同時回報多塊板，或重新偵測與確認不符時，不允許強制套用 NUC 驅動。手動確認只影響驅動；AMD 位置設定仍只依自動偵測。原始板號、偵測錯誤與確認值分開保存在該機 reports。獨立包可自行執行 `install.cmd`；只核對完整性用 `install.cmd -PackageOnly`。獨立安裝器使用相同偵測與未知型號確認流程；已知其他機型略過，不能拿 NUC 驅動套用其他硬體。`-PackageOnly` 是離線驗包，不可與手動確認參數混用。續跑只沿用同一電腦與使用者先前明確選擇的驅動包，並核對 package.json／manifest.json 的雜湊；同 USB 相對位置可隨盤符變動解析，包身分變更則拒絕。整包複製至其他電腦不沿用舊選擇。
+
+`-NonInteractive` 僅關閉驅動選擇的詢問，並不代表 Windows 全流程無人值守；自動登入等模組仍可能詢問密碼。無互動主控台時也不等待驅動輸入，未選包即略過。需自動化處理「未知」且已人工確認的實機時，可明確傳入 `-ConfirmedBoard NUC8i7HVB -ConfirmationComputer $env:COMPUTERNAME -DriverPackagePath $driverPath -NonInteractive`（HNK 使用 HNB）；已知其他機型仍拒絕。`windows.cmd -VerifyOnly`／`-AfterRestart` 不接受新的型號或包選擇，只恢復同機同帳號紀錄；重新選擇請走一般入口。明確傳入空路徑表示略過，未提供路徑才允許互動選包。
 
 不要只複製單一 `.cmd`／`.ps1`；主程式與獨立驅動包各自保留完整結構。`.git` 僅在維護版本時需要，執行設定與獨立驅動包不依賴它。
 工具包不要放在桌面或其子資料夾內，以免桌面清理刪到工具包。直接使用 USB 時，USB 必須可寫入且本輪全程保持連接；下一輪仍從同一完整副本續跑。若自行改用本機完整副本，才改從本機該份執行。
@@ -261,7 +263,7 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 | Intel NUC8i7HVK（同板整機：NUC8i7HVKVA、NUC8i7HVKVAW） | NUC8i7HVB | `NUC8i7HVB` |
 | Intel NUC8i7HNK（同板整機：NUC8i7HNKQC） | NUC8i7HNB | `NUC8i7HNB` |
 
-型號對照依 [ASUS 官方 NUC 規格索引](https://zentalk.asus.com/t5/faq/nuc-technical-product-specifications-for-nuc-products/ta-p/451363)；HVK／HVB 亦見 [Intel 技術規格](https://www.intel.com/content/dam/support/us/en/documents/mini-pcs/nuc-kits/NUC8i7HVK_TechProdSpec.pdf)。官方表列的是 BIOS 識別，腳本實際讀取 SMBIOS 主機板 Product，去除首尾空白後比對白名單；不依外殼貼紙猜型號，也不表示所有 NUC8 都支援。可先執行 `(Get-CimInstance Win32_BaseBoard).Product` 查看。若 OEM 回報不同值，會安全略過，請勿為了安裝自行繞過檢查。
+型號對照依 [ASUS 官方 NUC 規格索引](https://zentalk.asus.com/t5/faq/nuc-technical-product-specifications-for-nuc-products/ta-p/451363)；HVK／HVB 亦見 [Intel 技術規格](https://www.intel.com/content/dam/support/us/en/documents/mini-pcs/nuc-kits/NUC8i7HVK_TechProdSpec.pdf)。官方表列的是 BIOS 識別，腳本實際讀取 SMBIOS 主機板 Product，去除首尾空白後比對白名單；不依外殼貼紙猜型號，也不表示所有 NUC8 都支援。可先執行 `(Get-CimInstance Win32_BaseBoard).Product` 查看。已知非白名單值會安全略過；只有空白／明確未知或讀取失敗才提供受控手動確認，確認不會覆寫報告中的原始偵測值。
 
 這是型號對照與安裝條件，不代表每個整機變體已實測。四個封存檔不是完整的所有裝置驅動集；仍須依裝置管理員與 Windows Update 檢查其他驅動。AMD 封存檔 GFX-Radeon-Win10-23.10.01.46.zip 在官方列為 Windows 10 64-bit，不能宣稱 Windows 11 官方認證；本工具在 Windows 11 的結果須逐機驗證。 驅動來源見 [ASUS NUC8i7HVK 下載頁](https://www.asus.com/uk/supportonly/nuc8i7hvk/helpdesk_download/)。
 
@@ -440,7 +442,7 @@ Hosts／SSH 獨立入口為 `modules\ssh\apply_hosts_sync.cmd`、`sync_hosts.cmd
 
 ### 主程式與可選驅動包
 
-主程式 `windows_setup` 與 `windows_driver_packages/nuc8` 是兩個獨立資料夾。只做一般 Windows 設定時帶主程式即可；需要 NUC 驅動才另帶驅動包。主程式不搜尋或偷偷使用旁邊的舊驅動，必須明確選擇。
+主程式 `windows_setup` 與 `windows_driver_packages/nuc8` 是兩個獨立資料夾。只做一般 Windows 設定時帶主程式即可；需要 NUC 驅動才另帶驅動包。主程式只提示相鄰標準目錄，仍須明確選擇才使用，並核對包身分與四個封存檔雜湊。
 
 ### 從原始碼準備完整工具包
 

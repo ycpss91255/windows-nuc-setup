@@ -85,6 +85,17 @@ Assert ($exportResult.Count -eq 4 -and (Test-Path (Join-Path $exported 'install.
 $standalone=& (Join-Path $exported 'modules\drivers\install_drivers.ps1') -DriverPackagePath $exported -PackageOnly
 Assert ($standalone.Status -eq 'Passed') '獨立包只用自身 helper 完成唯讀驗證'
 Assert (-not(Test-Path (Join-Path $exported 'script')) -and -not(Test-Path (Join-Path $exported 'test')) -and -not(Test-Path (Join-Path $exported '.github'))) '獨立包不攜帶維護工具且已獨立執行驗證'
+# Exercise the exported installer's actual pre-install selection and payload checks.
+$exportSource=[IO.File]::ReadAllText((Join-Path $exported 'modules/drivers/install_drivers.ps1'))
+$exportPrefix=$exportSource.Substring(0,$exportSource.IndexOf('$principal='))
+$tokens=$null;$errors=$null;$exportAst=[Management.Automation.Language.Parser]::ParseInput($exportPrefix,[ref]$tokens,[ref]$errors)
+$exportBody=$exportPrefix.Remove($exportAst.ParamBlock.Extent.StartOffset,$exportAst.ParamBlock.Extent.Text.Length).Replace('$PSScriptRoot','$exportScriptRoot')
+$exportScriptRoot=Join-Path $exported 'modules/drivers';$DriverPackagePath=$exported;$PackageOnly=$false;$NonInteractive=$true;$ConfirmedBoard='NUC8i7HNB';$ConfirmationComputer=$env:COMPUTERNAME
+function Get-CimInstance {param($ClassName,$ErrorAction);[pscustomobject]@{Product=''}}
+$bound=@{DriverPackagePath=$exported}
+. ([scriptblock]::Create($exportBody.Replace('$PSBoundParameters','$bound')))
+Assert ($hardware.DriverBoard -eq 'NUC8i7HNB' -and $hardware.BoardProduct -eq '' -and $payload.Status -eq 'Passed') '匯出包真安裝前綴可獨立選型並驗包，不呼叫安裝或UAC'
+Remove-Item Function:Get-CimInstance
 @{SchemaVersion=1;HardwareProfile='Other';Architecture='x64';SupportedBoards=@('Other')}|ConvertTo-Json|Set-Content (Join-Path $exported 'package.json') -Encoding UTF8
 $caught=$false;try{Test-SetupDriverPayload $hv $exported|Out-Null}catch{$caught=$true}
 Assert $caught '其他型號的獨立包被拒絕'
