@@ -35,6 +35,20 @@ function Assert-GoCoverageProfile {
  param($Coverage,[string]$Directory)
  $profile=Join-Path $Directory 'go_coverage.out'
  if(-not(Test-Path -LiteralPath $profile -PathType Leaf) -or (Get-FileHash -LiteralPath $profile -Algorithm SHA256).Hash.ToLowerInvariant() -cne $Coverage.ProfileSHA256){throw 'Go 原始覆蓋率 profile 缺少或 SHA256 不符。'}
+ $lines=[IO.File]::ReadAllLines($profile)
+ if($lines.Count -lt 2 -or $lines[0] -cnotmatch '^mode: (set|count|atomic)$'){throw 'Go profile 模式或內容不合法。'}
+ $total=0L;$covered=0L;$seen=@{};$packages=@{}
+ foreach($line in $lines[1..($lines.Count-1)]){
+  $m=[regex]::Match($line,'^(windows_setup/script/test/(?:[a-z0-9_]+/)+[a-z0-9_]+\.go):([0-9]+\.[0-9]+,[0-9]+\.[0-9]+) ([0-9]+) ([0-9]+)$')
+  $statements=0L;$hits=0L
+  if(-not $m.Success -or $m.Groups[1].Value.EndsWith('_test.go') -or -not [long]::TryParse($m.Groups[3].Value,[ref]$statements) -or $statements -le 0 -or -not [long]::TryParse($m.Groups[4].Value,[ref]$hits)){throw 'Go profile 含私人路徑、非自有來源或不合法區塊。'}
+  $id=$m.Groups[1].Value+':'+$m.Groups[2].Value
+  if($seen.ContainsKey($id)){throw 'Go profile 區塊重複。'};$seen[$id]=$true
+  $package=$m.Groups[1].Value.Substring(0,$m.Groups[1].Value.LastIndexOf('/'))
+  if(@($Coverage.Packages) -cnotcontains $package){throw 'Go profile 含未量測套件。'};$packages[$package]=$true
+  $total+=$statements;if($hits -gt 0){$covered+=$statements}
+ }
+ if($total -ne $Coverage.TotalStatements -or $covered -ne $Coverage.Covered -or $packages.Count -ne @($Coverage.Packages).Count){throw 'Go profile 原始計數或套件與量測不符。'}
 }
 function Get-GoCoverageColor {
  param([double]$Percent)

@@ -2,6 +2,7 @@
 $ErrorActionPreference='Stop'
 # Reuse the real complete-coverage CLI fixture and mock publish/download flow.
 . (Join-Path $PSScriptRoot 'repo_publication_tests.ps1')
+Assert ((Get-FileHash (Join-Path $downloaded.AssetDirectory 'go_coverage.out')).Hash -eq (Get-FileHash (Join-Path $public 'go_coverage.out')).Hash) '實際publisher附件經下載後仍保留同一Go原始profile'
 function New-GoVersionEvidence {
  param([string]$Directory,$Snapshot,[switch]$WithProfile)
  New-Item -ItemType Directory $Directory|Out-Null
@@ -31,7 +32,7 @@ Refuse {Test-PortalReleaseEvidence -Entry $current -CoverageToolPath $tool} '已
 Refuse {Test-PortalReleaseEvidence -Entry $current -CoverageToolPath $tool} '原始profile被篡改時不得產生可下載結論'
 [IO.File]::WriteAllText($rawPath,$original,$utf8)
 $originalHash=$report.GoCoverage.ProfileSHA256
-foreach($bad in @('C:/Users/private/file.go:1.1,1.2 10 1','windows_setup/script/test/../private.go:1.1,1.2 10 1','https://example.invalid/private.go:1.1,1.2 10 1','<script>alert(1)</script>','windows_setup/script/test/example/value.go:1.1,1.2 10 1')){
+foreach($bad in @('C:/Users/private/file.go:1.1,1.2 10 1','windows_setup/script/test/../private.go:1.1,1.2 10 1','https://example.invalid/private.go:1.1,1.2 10 1','<script>alert(1)</script>','windows_setup/script/test/example/value.go:1.1,1.2 10 1','windows_setup/script/test/other/value.go:1.1,1.2 10 1','windows_setup/script/test/example/value_test.go:1.1,1.2 10 1','windows_setup/script/test/example/value.go:1.1,1.2 0 1',"windows_setup/script/test/example/value.go:1.1,1.2 10 1`nwindows_setup/script/test/example/value.go:1.1,1.2 10 1")){
  $badText="mode: set`n$bad`n";[IO.File]::WriteAllText($rawPath,$badText,$utf8)
  $badCoverage=$report.GoCoverage|ConvertTo-Json -Depth 8|ConvertFrom-Json;$badCoverage.ProfileSHA256=(Get-FileHash $rawPath).Hash.ToLowerInvariant()
  Refuse {Assert-GoCoverageProfile -Coverage $badCoverage -Directory $current.AssetDirectory} '即使hash同步也拒絕私人路徑、注入或與真量測計數矛盾的profile'
@@ -62,4 +63,26 @@ $profile=Join-Path $public 'go_coverage.out';$savedProfile=[IO.File]::ReadAllTex
 Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool} '現版publisher缺原始profile時不能採legacy路徑發布'
 Assert (-not $global:repoPublicationRemoteCalled) '缺profile在任何遠端操作前停止'
 [IO.File]::WriteAllText($profile,$savedProfile,$utf8)
+Remove-Item Function:\gh
+$noGo=Join-Path $versionFixture 'current_without_go';New-Item -ItemType Directory $noGo|Out-Null
+foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml')){Copy-Item -LiteralPath (Join-Path $public $name) -Destination $noGo}
+$noGoReport=$report|ConvertTo-Json -Depth 20|ConvertFrom-Json;$noGoReport.PSObject.Properties.Remove('GoCoverage');Write-SnapshotView $noGoReport $noGo
+$global:repoPublicationRemoteCalled=$false
+function gh {$global:repoPublicationRemoteCalled=$true;throw 'unexpected remote call'}
+Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $noGo -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $noGo 'summary.md') -Repository example/repo -CoverageToolPath $tool} '現版publisher缺Go量測不得藉歷史相容降級'
+Assert (-not $global:repoPublicationRemoteCalled) '缺Go來源量測在任何遠端操作前停止'
+Remove-Item Function:\gh
+$lowGoDirectory=Join-Path $versionFixture 'low_go';New-Item -ItemType Directory $lowGoDirectory|Out-Null
+$lowGoProfile="mode: set`nwindows_setup/script/test/example/value.go:1.1,1.2 7 1`nwindows_setup/script/test/example/value.go:2.1,2.2 3 0`n"
+[IO.File]::WriteAllText((Join-Path $lowGoDirectory 'go_coverage.out'),$lowGoProfile,$utf8)
+$lowGoReport=$report|ConvertTo-Json -Depth 20|ConvertFrom-Json;$lowGoReport.GoCoverage.Covered=7;$lowGoReport.GoCoverage.Percent=70;$lowGoReport.GoCoverage.ProfileSHA256=(Get-FileHash (Join-Path $lowGoDirectory 'go_coverage.out')).Hash.ToLowerInvariant()
+Assert-GoCoverageProfile -Coverage $lowGoReport.GoCoverage -Directory $lowGoDirectory
+Assert $true '原始profile讀取保留低於八成的真量測，發布政策另行執行'
+foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml')){Copy-Item -LiteralPath (Join-Path $public $name) -Destination $lowGoDirectory}
+Write-SnapshotView $lowGoReport $lowGoDirectory
+$global:repoPublicationRemoteCalled=$false
+function gh {$global:repoPublicationRemoteCalled=$true;throw 'unexpected remote call'}
+$lowRefused=$false
+try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $lowGoDirectory -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $lowGoDirectory 'summary.md') -Repository example/repo -CoverageToolPath $tool}catch{$lowRefused=$_.Exception.Message -like '*Go 覆蓋率不得低於精確八成*'}
+Assert ($lowRefused -and -not $global:repoPublicationRemoteCalled) '整體八成仍不得代替Go獨立八成，發布前明確拒絕'
 Remove-Item Function:\gh
