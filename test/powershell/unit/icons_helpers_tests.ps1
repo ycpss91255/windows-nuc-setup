@@ -30,3 +30,6 @@ function Get-SetupSystemIconNames {@('控制台','本機','網路','資源回收
 [NUC8Icons.Desktop]::Frames.Enqueue((Frame -names @('a','b','c','d')));$failure=''
 try{Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Save|Out-Null}catch{$failure=$_.Exception.Message}
 Assert (-not [string]::IsNullOrWhiteSpace($failure)) 'Save refuses four arbitrary icons instead of the four system CLSIDs'
+[NUC8Icons.Desktop]::Frames.Enqueue((Frame))
+$r=Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Save
+Assert ($r.Success -and @($r.Reference.Icons).Count -eq 4 -and $r.Reference.Width -eq 1920) 'Save returns the validated reference without writing mutable staged input'
