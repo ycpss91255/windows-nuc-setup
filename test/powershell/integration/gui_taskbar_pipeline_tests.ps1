@@ -14,11 +14,11 @@ function New-SetupGuiProtectedDirectory {param($Path,$UserSid) if(-not $Path.Sta
 function Assert-SetupGuiProtectedPath {param($Path,[switch]$Directory,$UserSid) if(-not $Path.StartsWith($temp) -or -not(Microsoft.PowerShell.Management\Test-Path -LiteralPath $Path)){throw 'outside protected fixture'}}
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) if($ClassName -ne 'Win32_Process' -or $Filter -ne "Name='explorer.exe'"){throw 'unexpected process query'};[pscustomobject]@{SessionId=$script:desktopSession}}
 function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) [pscustomobject]@{ReturnValue=0;Sid=$script:sid}}
-function New-ScheduledTaskAction {param($Execute,$Argument) if($Execute -cne $ps){throw 'non-OS PowerShell task executable'};[pscustomobject]@{Argument=$Argument}}
-function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel) if($UserId -cne $script:sid -or $LogonType -cne 'Interactive' -or $RunLevel -cne 'Highest'){throw 'wrong task principal'};[pscustomobject]@{UserId=$UserId}}
-function Get-ScheduledTask {param($TaskName,$ErrorAction) if($script:tasks.ContainsKey($TaskName)){[pscustomobject]@{State='Ready'}}}
+function New-ScheduledTaskAction {param($Execute,$Argument) if($Execute -cne $ps){throw 'non-OS PowerShell task executable'};[pscustomobject]@{Execute=$Execute;Argument=$Argument;Arguments=$Argument}}
+function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel) if($UserId -cne $script:sid -or $LogonType -cne 'Interactive' -or $RunLevel -cne 'Highest'){throw 'wrong task principal'};[pscustomobject]@{UserId=$UserId;LogonType=$LogonType;RunLevel=$RunLevel}}
+function Get-ScheduledTask {param($TaskName,$ErrorAction) if($script:tasks.ContainsKey($TaskName)){[pscustomobject]@{State='Ready';Actions=@([pscustomobject]@{Execute=$script:tasks[$TaskName].Execute;Arguments=$script:tasks[$TaskName].Argument});Principal=$script:tasks[$TaskName].Principal}}}
 function Get-ScheduledTaskInfo {param($TaskName,$ErrorAction) $script:nativeInfo++;[pscustomobject]@{LastTaskResult=0}}
-function Register-ScheduledTask {param($TaskName,$Action,$Principal,$ErrorAction) if($script:tasks.ContainsKey($TaskName)){throw 'task overwrite'};$script:tasks[$TaskName]=$Action;$script:registered+=@($TaskName)}
+function Register-ScheduledTask {param($TaskName,$Action,$Principal,$ErrorAction) if($script:tasks.ContainsKey($TaskName)){throw 'task overwrite'};$Action|Add-Member -NotePropertyName Principal -NotePropertyValue $Principal -Force;$script:tasks[$TaskName]=$Action;$script:registered+=@($TaskName)}
 function Unregister-ScheduledTask {param($TaskName,[switch]$Confirm,$ErrorAction) $script:tasks.Remove($TaskName)}
 function Start-ScheduledTask {param($TaskName,$ErrorAction)
  if($script:tasks[$TaskName].Argument -notmatch '-File "([^"]+)" -Role (Taskbar|TaskbarFinalize) -RunId ([a-f0-9-]{36})$'){throw 'unexpected worker command'}
