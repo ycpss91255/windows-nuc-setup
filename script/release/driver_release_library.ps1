@@ -44,6 +44,11 @@ function Assert-LocalDriverReleaseAsset {
  Add-Type -AssemblyName System.IO.Compression,System.IO.Compression.FileSystem
  $archive=[IO.Compression.ZipFile]::OpenRead($file)
  try{
+  $licenses=@($archive.Entries|Where-Object FullName -ieq 'license')
+  if($licenses.Count -ne 1 -or $licenses[0].FullName -cne 'license' -or $licenses[0].Length -ne 11358){throw 'Driver archive must contain exactly one canonical root license.'}
+  $licenseStream=$licenses[0].Open();$licenseSHA=[Security.Cryptography.SHA256]::Create()
+  try{$licenseHash=([BitConverter]::ToString($licenseSHA.ComputeHash($licenseStream))).Replace('-','').ToLowerInvariant()}finally{$licenseStream.Dispose();$licenseSHA.Dispose()}
+  if($licenseHash -cne 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30'){throw 'Driver archive own-code Apache-2.0 license is missing or modified.'}
   foreach($name in @('manifest.json','package.json')){
    $entries=@($archive.Entries|Where-Object FullName -ceq $name)
    if($entries.Count -ne 1 -or $entries[0].Length -gt 10485760){throw 'Driver archive identity entry missing or oversized.'}

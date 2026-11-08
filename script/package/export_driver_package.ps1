@@ -2,6 +2,8 @@
 param([Parameter(Mandatory=$true)][string]$SourceDirectory,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$ProfileId='nuc8i7hvk_hnk',[string]$ProfilesRoot='')
 $ErrorActionPreference='Stop'
 $packageRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$license=Join-Path $packageRoot 'license'
+if(-not(Test-Path -LiteralPath $license -PathType Leaf)){throw '缺少來源自有授權本文，未產生不完整驅動包。'}
 . (Join-Path $packageRoot 'core/hardware.ps1')
 $source=(Resolve-Path -LiteralPath $SourceDirectory).Path
 $output=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
@@ -15,6 +17,7 @@ $manifest=@(Get-SetupDriverManifestEntries -Manifest (Get-Content -LiteralPath (
 New-Item -ItemType Directory -Path (Join-Path $output 'core'),(Join-Path $output 'modules\drivers') -Force|Out-Null
 foreach($entry in $manifest){Copy-Item -LiteralPath (Join-Path $source $entry.File) -Destination $output}
 Copy-Item -LiteralPath (Join-Path $source 'manifest.json') -Destination $output
+Copy-Item -LiteralPath $license -Destination (Join-Path $output 'license')
 $profileDirectory=Join-Path $output ('drivers/'+$profile.ProfileId)
 [void][IO.Directory]::CreateDirectory($profileDirectory)
 Copy-Item -LiteralPath $profile.ProfilePath -Destination (Join-Path $profileDirectory 'profile.json')
@@ -43,9 +46,14 @@ $readme=@"
 唯讀檢查包完整性：install.cmd -PackageOnly。此結果不能當成目前主機可安裝的證明。版本 2 package.json 以原始 SHA256 綁定 drivers/$($profile.ProfileId)/profile.json；manifest.json 記錄全部來源、封存檔及 payload 雜湊。完整性驗證不等於目前每個裝置皆已安裝。
 
 日誌位於 modules/drivers/driver_logs。可從主 Windows 工具的 DriverPackagePath 選擇本目錄，或獨立使用；不依賴 script、test 或 .github。不執行來源安裝 EXE 或韌體工具。詳細官方來源及每個 INF 版本見 manifest.json。
+
+本包自有腳本採用 [Apache-2.0](license)，完整本文隨包提供。第三方驅動與其他原廠內容維持各自原授權及必要聲明；本專案授權不改變第三方條款，也不據此推定二進位重新散布許可。
 "@
 if(Test-Path -LiteralPath (Join-Path (Split-Path $profile.ProfilePath -Parent) 'readme.md')){
- Copy-Item -LiteralPath (Join-Path (Split-Path $profile.ProfilePath -Parent) 'readme.md') -Destination (Join-Path $profileDirectory 'readme.md')
+ $profileReadme=[IO.File]::ReadAllText((Join-Path (Split-Path $profile.ProfilePath -Parent) 'readme.md'))
+ # The source keeps a sibling manifest; the standalone package keeps it at root.
+ $profileReadme=$profileReadme.Replace('](manifest.json)','](../../manifest.json)')
+ [IO.File]::WriteAllText((Join-Path $profileDirectory 'readme.md'),$profileReadme,[Text.UTF8Encoding]::new($true))
 }
 [IO.File]::WriteAllText((Join-Path $output 'readme.md'),$readme,(New-Object Text.UTF8Encoding($true)))
 $null=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $output

@@ -35,3 +35,11 @@ foreach($mode in @('missing','tampered')){
  Reject {Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $bad)} ('即使重算外層size/hash仍拒絕缺失或篡改授權：'+$mode)
  [IO.File]::WriteAllBytes($license,$saved)
 }
+foreach($mode in @('wrongcase','duplicate')){
+ $bad=Join-Path $temp ($mode+'.zip')
+ $base=if($mode -eq 'wrongcase'){Join-Path $temp 'missing.zip'}else{$good}
+ Copy-Item -LiteralPath $base -Destination $bad
+ $archive=[IO.Compression.ZipFile]::Open($bad,[IO.Compression.ZipArchiveMode]::Update)
+ try{$entry=$archive.CreateEntry('LICENSE');$stream=$entry.Open();try{$stream.Write($saved,0,$saved.Length)}finally{$stream.Dispose()}}finally{$archive.Dispose()}
+ Reject {Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $bad)} ('Windows解壓不得接受大小寫衝突或重複的授權入口：'+$mode)
+}
