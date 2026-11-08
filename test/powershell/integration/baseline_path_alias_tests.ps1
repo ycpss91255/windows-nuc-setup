@@ -24,4 +24,9 @@ foreach($path in $inputs){
  $baseline+=@($m)
 }
 Assert ($baseline.Count -eq $inputs.Count) '可用原生8.3別名均實際驗證，不修改OS短檔名設定'
+$literal=Join-Path $fixture 'source [literal] 中文';Copy-Item -LiteralPath $long -Destination $literal -Recurse
+$literalOutput=Join-Path $fixture 'literal.json'
+& (Join-Path $root 'test/powershell/coverage/create_baseline_manifest.ps1') -SourceRoot $literal -OutputPath $literalOutput
+$literalManifest=Get-Content -LiteralPath $literalOutput -Raw -Encoding UTF8|ConvertFrom-Json
+Assert (($literalManifest.Tests -join ',') -ceq ($baseline[0].Tests -join ',') -and ($literalManifest.Sources -join ',') -ceq ($baseline[0].Sources -join ',')) '字面括號、中文及空白來源路徑仍完整枚舉，不把名稱當wildcard'
 $global:LASTEXITCODE=0
