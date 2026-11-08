@@ -5,9 +5,11 @@ function Invoke-SetupAfterRestart {
 $errors=@();$remaining=@()
 $resultPath=Resolve-NucPath 'Setup-Result.json'
 $retryFiles=@()
+if(-not(Test-Path $resultPath)){throw '找不到續跑紀錄，請先執行 windows.cmd。'}
 if(Test-Path $resultPath){
  $previous=Get-Content $resultPath -Raw|ConvertFrom-Json
  $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+ if($previous.Computer -cne $env:COMPUTERNAME -or $previous.UserSID -cne $sid){throw '續跑紀錄不是同機、同帳號的結果，未執行更新。'}
  if($previous.Computer -eq $env:COMPUTERNAME -and $previous.UserSID -eq $sid){
   $config=[IO.File]::ReadAllText((Resolve-NucPath 'configuration_library.ps1'))
   $allowed=@([regex]::Matches($config,"File='([^']+\.ps1)'" )|ForEach-Object {$_.Groups[1].Value})
@@ -20,7 +22,23 @@ if(Test-Path $resultPath){
 }
 Write-Host '重新掃描更新；完成後再次清理預載程式並驗證。' -ForegroundColor Cyan
 try{ & (Resolve-NucPath 'install_windows_updates.ps1') }catch{$errors+=('install_windows_updates.ps1：'+$_.Exception.Message);$remaining+='install_windows_updates.ps1';Write-Warning $errors[-1]}
+$driverReady=$true
+$driverDecision=Get-SetupModuleDecision -Module 'install_drivers.ps1' -Hardware $hardware
+if($DriverPackagePath -and $driverDecision.Applicable){
+ try{
+  $null=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $DriverPackagePath
+  . (Resolve-NucPath 'verification_library.ps1')
+  $snapshot=Invoke-SetupDriverFreshVerification -DriverPackagePath $DriverPackagePath -VerificationRunId ([guid]::NewGuid().ToString())
+  if(@($snapshot.Targets|Where-Object Status -eq 'UpdateRequired').Count){
+   & (Resolve-NucPath 'install_drivers.ps1') -NonInteractive -DriverPackagePath $DriverPackagePath @confirmation
+  }elseif(-not $snapshot.Success){throw '已選驅動目前仍有未驗證目標；未強行安裝，請查看唯讀盤點。'}
+  else{Write-Host '已選驅動符合已核官方目標，未重新解壓及安裝。' -ForegroundColor Green}
+ }catch{$driverReady=$false;$errors+=('install_drivers.ps1：'+$_.Exception.Message);$remaining+='install_drivers.ps1';Write-Warning $errors[-1]}
+}else{Write-Host '未選獨立驅動包或機型不適用，略過驅動續跑。'}
+$guiModules=@('apply_amd_privacy_settings.ps1','apply_taskbar_settings.ps1','apply_start_menu_settings.ps1','apply_display_settings.ps1','apply_desktop_settings.ps1','apply_theme_settings.ps1','desktop_icon_layout.ps1')
 foreach($file in $retryFiles){
+   if($file -eq 'install_drivers.ps1'){continue}
+   if(-not $driverReady -and $file -in $guiModules){$remaining+=$file;Write-Warning ('驅動未完成，保留畫面設定待續跑：'+$file);continue}
    $decision=Get-SetupModuleDecision -Module $file -Hardware $hardware
    if(-not $decision.Applicable){Write-Host ('[略過] '+$decision.Reason);continue}
    Write-Host ('重試未完成模組：'+$file) -ForegroundColor Cyan
@@ -42,7 +60,7 @@ for($i=0;$i -lt 12;$i++){
  Write-Host '等待登入後的工作列配置收尾…';Start-Sleep -Seconds 5
 }
 $layoutDecision=Get-SetupModuleDecision -Module 'desktop_icon_layout.ps1' -Hardware $hardware
-if($layoutDecision.Applicable){try{ & (Resolve-NucPath 'desktop_icon_layout.ps1') -Mode Load }catch{$errors+=$_.Exception.Message}}else{Write-Host ('[略過] '+$layoutDecision.Reason)}
+if($layoutDecision.Applicable -and $driverReady){try{ & (Resolve-NucPath 'desktop_icon_layout.ps1') -Mode Load }catch{$errors+=$_.Exception.Message}}else{Write-Host ('[略過] 桌面排列：'+$layoutDecision.Reason)}
 $verificationRunId=[guid]::NewGuid().ToString()
 $verification=$null
 try{ & (Resolve-NucPath 'verify_only.ps1') -VerificationRunId $verificationRunId }catch{$errors+=('本輪驗證：'+$_.Exception.Message)}
