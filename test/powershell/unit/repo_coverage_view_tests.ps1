@@ -11,6 +11,11 @@ Assert ($r.Coverage -ceq 'Measured' -and $r.RepoCoverage.Result.Covered -eq 8) '
 foreach($file in @('index.html','summary.md','coverage.svg')){$text=[IO.File]::ReadAllText((Join-Path $fixture $file));Assert ($text.Contains('80.0%')) ('整體覆蓋率顯示真實合計：'+$file)}
 $md=[IO.File]::ReadAllText((Join-Path $fixture 'summary.md'))
 Assert ($md.Contains('Go') -and $md.Contains('3/4') -and $md.Contains('PowerShell') -and $md.Contains('5/6')) 'Actions文字摘要含語言分項原始計數'
+. (Join-Path $root 'script/report/portal.ps1')
+$replay=Join-Path $fixture 'replay'
+Write-SnapshotView -Snapshot $r -OutputDirectory $replay
+$replayed=Get-Content (Join-Path $replay 'summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
+Assert ($replayed.Coverage -ceq 'Measured' -and $replayed.RepoCoverage.Result.Covered -eq 8 -and ([IO.File]::ReadAllText((Join-Path $replay 'coverage.svg'))).Contains('80.0%')) '重繪與附加分項時保留既有整體覆蓋率身份計數和徽章'
 $c.Result.Percent=99
 $rejected=$false;try{Write-TestReports -Checks $checks -OutputDirectory (Join-Path $fixture 'wrong') -Commit $c.Commit -RunUrl $c.RunUrl -MeasuredAt $c.MeasuredAt -SourceState Clean -RepoCoverage $c|Out-Null}catch{$rejected=$true}
 Assert $rejected '拒絕與原始計數不同的總率'
