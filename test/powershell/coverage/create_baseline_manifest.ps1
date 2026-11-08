@@ -13,6 +13,9 @@ $tracked=@(& git -C $source ls-files '*.ps1')
 if($LASTEXITCODE -ne 0){throw '無法取得版本控制來源清單。'}
 $sources=@($tracked|Where-Object {$_ -match '^(core|modules|script)/' -and $_ -notmatch '^modules/debloat/win11debloat/'}|Sort-Object)
 if(-not $sources.Count){throw '正式 PowerShell 來源清單為空。'}
-$manifest=[ordered]@{SourceRoot=$source;Sources=$sources;Tests=$tests;Wrapper='test/powershell/coverage/safe_suite.ps1'}
+$testEngines=[ordered]@{}
+$metadataSuite='test/powershell/integration/managed_catalog_tests.ps1'
+if($metadataSuite -cin $tests){$testEngines[$metadataSuite]='pwsh'}
+$manifest=[ordered]@{SourceRoot=$source;Sources=$sources;Tests=$tests;TestEngines=$testEngines;Wrapper='test/powershell/coverage/safe_suite.ps1'}
 [IO.File]::WriteAllText([IO.Path]::GetFullPath($OutputPath),($manifest|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
 Write-Host ('已準備 '+$sources.Count+' 個正式來源與 '+$tests.Count+' 個獨立安全 suite。')
