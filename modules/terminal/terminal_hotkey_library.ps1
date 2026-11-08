@@ -1,8 +1,19 @@
 ﻿#Requires -Version 5.1
 # Named runtime implementation: dot-sourcing defines functions without changing Windows.
+function Get-SetupTerminalKnownFolder {
+ param([Environment+SpecialFolder]$Folder,[Environment+SpecialFolderOption]$Option=[Environment+SpecialFolderOption]::None)
+ [Environment]::GetFolderPath($Folder,$Option)
+}
 function Get-SetupTerminalContext {
  $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
- [pscustomobject]@{Folder=(Join-Path $env:LOCALAPPDATA 'NUC8-Setup\TerminalHotkey');Startup=(Join-Path ([Environment]::GetFolderPath('Startup')) 'Terminal Hotkey.lnk');IdentityName=$identity.Name;UserSID=$identity.User.Value;UserHome=$env:USERPROFILE;PowerShell=(Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe');ReportPath=(Join-Path $env:ProgramData 'NUC8-Setup/TerminalHotkey-Result.json')}
+ $startupRoot=Get-SetupTerminalKnownFolder -Folder Startup
+ if([string]::IsNullOrWhiteSpace($startupRoot)){$startupRoot=Get-SetupTerminalKnownFolder -Folder Startup -Option DoNotVerify}
+ if([string]::IsNullOrWhiteSpace($startupRoot)){
+  $appData=Get-SetupTerminalKnownFolder -Folder ApplicationData -Option DoNotVerify
+  if([string]::IsNullOrWhiteSpace($appData)){throw '無法解析目前使用者的啟動目錄。'}
+  $startupRoot=Join-Path $appData 'Microsoft/Windows/Start Menu/Programs/Startup'
+ }
+ [pscustomobject]@{Folder=(Join-Path $env:LOCALAPPDATA 'NUC8-Setup\TerminalHotkey');Startup=(Join-Path $startupRoot 'Terminal Hotkey.lnk');IdentityName=$identity.Name;UserSID=$identity.User.Value;UserHome=$env:USERPROFILE;PowerShell=(Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe');ReportPath=(Join-Path $env:ProgramData 'NUC8-Setup/TerminalHotkey-Result.json')}
 }
 function New-SetupTerminalShell {New-Object -ComObject WScript.Shell}
 function Copy-SetupTerminalFiles {
@@ -21,6 +32,7 @@ $argsText='-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File 
 if(-not $VerifyOnly){
  if(-not(Get-Command wt.exe -ErrorAction SilentlyContinue)){throw '找不到 Windows Terminal，請先安裝。'}
  New-Item -ItemType Directory $folder -Force|Out-Null
+ New-Item -ItemType Directory (Split-Path -Parent $startup) -Force|Out-Null
  Copy-SetupTerminalFiles -ModuleRoot $ModuleRoot -DestinationRoot $folder
  $shell=New-SetupTerminalShell
  $link=$shell.CreateShortcut($startup)
