@@ -45,9 +45,22 @@ foreach($mode in @('success','module-fail','device-fail')){
   Assert ((Get-Content (Join-Path $dir 'executed.txt')) -contains 'desktop_icon_layout.ps1') 'later stages execute before aggregate failure'
  }
 }
-# Load real cache/extraction functions only, never the installer or pnputil.
-$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'modules/drivers/install_drivers.ps1'),[ref]$tokens,[ref]$errors)
-foreach($name in @('Expand-DriverArchive','Expand-CachedDriverArchive')){$fn=$ast.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true);. ([scriptblock]::Create($fn.Extent.Text))}
+# Load the original file using its explicit no-package/PackageOnly early return.
+# Any accidental installation path fails before native commands or system queries.
+function Start-Process {throw 'fixture forbids installer processes'}
+function pnputil.exe {throw 'fixture forbids pnputil'}
+function Add-WindowsDriver {throw 'fixture forbids driver installation'}
+function Get-CimInstance {throw 'fixture forbids device queries during safe loading'}
+function Get-PnpDevice {throw 'fixture forbids driver device queries during safe loading'}
+$previousSystemRoot=$env:SystemRoot
+try{
+ $env:SystemRoot=Join-Path $fixture 'blocked_native_root'
+ $loaded=@(. (Join-Path $root 'modules/drivers/install_drivers.ps1') -PackageOnly -DriverPackagePath '')
+ Assert ($loaded.Count -eq 1 -and $loaded[0].Status -eq 'Skipped') 'real driver source takes no-package PackageOnly return without installer commands'
+}finally{
+ $env:SystemRoot=$previousSystemRoot
+ foreach($name in @('Start-Process','pnputil.exe','Add-WindowsDriver','Get-CimInstance','Get-PnpDevice')){Remove-Item -LiteralPath ('Function:\'+$name)}
+}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $cache=Join-Path $fixture 'cache';$archive=Join-Path $fixture 'same.zip'
 $one=Join-Path $fixture 'one';$two=Join-Path $fixture 'two';New-Item -ItemType Directory $one,$two|Out-Null
