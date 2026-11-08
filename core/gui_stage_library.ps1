@@ -97,7 +97,7 @@ function Write-SetupIconReference {
 }
 function Get-SetupGuiStageFiles {
  param([string]$Role)
- if($Role -cin @('Taskbar','TaskbarFinalize')){return @('core/gui_stage_library.ps1','core/gui_worker.ps1','modules/taskbar/taskbar_stage_library.ps1','modules/taskbar/taskbar_settings_library.ps1')}
+ if($Role -cin @('Taskbar','TaskbarFinalize')){return @('core/gui_stage_library.ps1','core/gui_worker.ps1','modules/taskbar/taskbar_stage_library.ps1','modules/taskbar/taskbar_settings_library.ps1','modules/taskbar/native/taskbar.cs')}
  if($Role -ceq 'Start'){return @('core/gui_stage_library.ps1','core/gui_worker.ps1','modules/start_menu/start_menu_settings_library.ps1','modules/start_menu/start_pins_policy_library.ps1','modules/start_menu/start_pins_asset_library.ps1','modules/start_menu/assets/empty_start.xml','modules/start_menu/assets/empty_start.ppkg','modules/start_menu/assets/provenance.json')}
  if($Role -ceq 'Desktop'){return @('core/gui_stage_library.ps1','core/gui_worker.ps1','modules/desktop/desktop_settings_library.ps1','modules/desktop/desktop_safety.ps1')}
  if($Role -ceq 'Icons'){return @('core/gui_stage_library.ps1','core/gui_worker.ps1','modules/desktop/icons_settings_library.ps1','modules/desktop/native/desktop_icons.cs')}

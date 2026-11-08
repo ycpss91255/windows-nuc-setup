@@ -315,7 +315,8 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 - 解析度為 `1920×1080`，縮放為 Windows 標準 `100%`，不是自訂縮放。
 - Windows 與應用程式使用深色模式，桌面背景是純黑色。
 - 桌面只顯示控制台、本機、網路、資源回收筒，位置符合範本。
-- 工作列只釘選 Edge，搜尋欄、天氣／小工具與工作檢視按鈕隱藏。執行中的其他程式仍可能顯示在工作列。
+- 工作列啟用自動隱藏，只釘選 Edge，搜尋欄、天氣／小工具與工作檢視按鈕隱藏。執行中的其他程式仍可能顯示在工作列。
+  自動隱藏使用 [Windows AppBar API](https://learn.microsoft.com/en-us/windows/win32/shell/abm-setstate)，在目前互動使用者的工作階段立即套用及讀回；獨立執行 `modules\taskbar\apply_taskbar_settings.cmd` 也會套用，`-VerifyOnly`／重開後檢查會重新讀取目前狀態。找不到該工作階段的工作列或讀回不符時明確失敗，不覆寫整段登錄資料。
 - 開始選單釘選清空；按 Windows 鍵仍可搜尋程式。
 - 檔案總管顯示一般隱藏項目與副檔名；受保護的系統檔仍保持隱藏。
 - 預設輸入為英文美式鍵盤，需要中文時按 `Win+Space` 切換。
@@ -420,7 +421,7 @@ modules\start_menu\apply_start_menu_settings.cmd -ApplyPolicy
 | 07 | NUC8 拒絕 AMD Software 位置存取；Generic 顯示略過 |
 | 08 | Win11Debloat、OneDrive 與可移除的預裝 App 清理 |
 | 09 | 獨立版 Copilot 清理 |
-| 10 | 工作列顯示與 Edge 釘選 |
+| 10 | 工作列自動隱藏、顯示與 Edge 釘選 |
 | 11 | 開始選單釘選與推薦清理 |
 | 12 | 1920×1080、原生 100% 縮放 |
 | 13 | 桌面清理與四個系統圖示 |
