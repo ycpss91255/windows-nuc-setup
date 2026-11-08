@@ -18,6 +18,11 @@ Assert ($main.MainRunId -eq '42' -and $main.Repository -eq 'example/repo') 'main
 $tag=Get-CIPortalParameters -Repository 'example/repo' -OutputDirectory 'out' -EventRef 'refs/tags/v1.0.0' -RunId '42'
 Assert (-not $tag.ContainsKey('MainRunId')) 'tag不得冒用main執行'
 function Invoke-CINative {param($File,$Arguments) $script:lastCommand=@($File)+$Arguments;if($script:probeCode -ne 0){$e=[Exception]::new('fixture');$e.Data['ExitCode']=$script:probeCode;throw $e}}
+$script:probeCode=0;$script:resolved=@()
+function Get-Command {param($Name,$CommandType,$ErrorAction) $script:resolved+=@($Name);[pscustomobject]@{Name=$Name}}
+Assert-CIRequiredTools
+Assert (($script:resolved -join '|') -eq 'powershell.exe|cmd.exe|git.exe|go.exe' -and ($script:lastCommand -join '|') -eq 'go.exe|version') '必要工具清單與版本命令完整傳遞'
+Remove-Item Function:/Get-Command
 $script:probeCode=23
 Assert-CIDockerFailure -Image 'example:test'
 Assert ($script:lastCommand[0] -eq 'docker.exe' -and ($script:lastCommand -contains '--network') -and $script:lastCommand[-1] -eq 'exit 23') '容器退出probe不開啟網路'
