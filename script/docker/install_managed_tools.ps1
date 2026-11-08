@@ -1,5 +1,6 @@
 ﻿#Requires -Version 5.1
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'download_library.ps1')
 function Get-ContainerManagedToolArtifacts {
  # Microsoft release metadata: PowerShell/PowerShell v7.6.9, dotnet release-metadata/10.0/releases.json.
  @(
@@ -20,14 +21,15 @@ function Install-ContainerToolArtifact {
  param([Parameter(Mandatory=$true)]$Artifact,[Parameter(Mandatory=$true)][string]$Destination,[Parameter(Mandatory=$true)][string]$ArchiveDirectory)
  [void][IO.Directory]::CreateDirectory($ArchiveDirectory)
  $archive=Join-Path $ArchiveDirectory $Artifact.Name
- Invoke-WebRequest -UseBasicParsing -Uri $Artifact.Uri -OutFile $archive -ErrorAction Stop
+ Invoke-ContainerOfficialDownload -Uri $Artifact.Uri -OutFile $archive
+ try{
  $expected=$Artifact.Hash
  if($Artifact.HashFormat -eq 'Base64'){$expected=([BitConverter]::ToString([Convert]::FromBase64String($expected))).Replace('-','')}
  if((Get-FileHash -LiteralPath $archive -Algorithm $Artifact.Algorithm).Hash -ine $expected){throw ('Container tool digest mismatch: '+$Artifact.Name)}
  if($Artifact.Kind -eq 'Zip'){Expand-Archive -LiteralPath $archive -DestinationPath $Destination}
  elseif($Artifact.Kind -eq 'File'){[void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Destination));Copy-Item -LiteralPath $archive -Destination $Destination}
  else{throw ('Unsupported container artifact kind: '+$Artifact.Kind)}
- Remove-Item -LiteralPath $archive
+ }finally{if(Test-Path -LiteralPath $archive){Remove-Item -LiteralPath $archive -Force}}
 }
 if($MyInvocation.InvocationName -ne '.'){
  [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12

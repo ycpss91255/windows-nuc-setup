@@ -9,9 +9,10 @@ class DownloadFixtureResponse : System.Net.WebResponse {
  DownloadFixtureResponse([int]$Code){$this.StatusCode=$Code}
 }
 $temp=Join-Path $env:TEMP ('download_fixture_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
+$script:expectedUri='https://example.invalid/official.zip'
 function Invoke-WebRequest {
  param($Uri,$OutFile,[switch]$UseBasicParsing,$ErrorAction,$TimeoutSec)
- $script:calls++;Assert ($Uri -ceq 'https://example.invalid/official.zip' -and $TimeoutSec -eq 120 -and $UseBasicParsing -and $ErrorAction -ceq 'Stop') '相同HTTPS來源與明確timeout保持'
+ $script:calls++;Assert ($Uri -ceq $script:expectedUri -and $TimeoutSec -eq 120 -and $UseBasicParsing -and $ErrorAction -ceq 'Stop') '相同HTTPS來源與明確timeout保持'
  [IO.File]::WriteAllText($OutFile,'partial-or-complete')
  $code=$script:codes[[Math]::Min($script:calls-1,$script:codes.Count-1)]
  if($code -eq -1){throw [Net.WebException]::new('fixture timeout',$null,[Net.WebExceptionStatus]::Timeout,$null)}
@@ -40,4 +41,15 @@ Assert ($accepted -and $script:calls -eq 2 -and (Get-FileHash $target).Hash -ceq
 $artifact.Name='bad.zip';$artifact.Hash='0'*64;$script:calls=0;$script:codes=@(0);$accepted=$true
 try{Install-ContainerToolArtifact -Artifact $artifact -Destination (Join-Path $temp 'bad.bin') -ArchiveDirectory $stage}catch{$accepted=$false}
 Assert (-not $accepted -and $script:calls -eq 1 -and -not(Test-Path (Join-Path $stage 'bad.zip')) -and -not(Test-Path (Join-Path $temp 'bad.bin'))) '雜湊失敗不重試、不安裝且不保留未信任cache'
+function Expand-Archive {param($LiteralPath,$DestinationPath);$script:expansions++;throw 'untrusted data must not be extracted'}
+$oldTemp=$env:TEMP
+try{
+ $env:TEMP=Join-Path $temp 'installer_temp';[void][IO.Directory]::CreateDirectory($env:TEMP)
+ foreach($installer in @('install_min_git.ps1','install_go.ps1')){
+  $script:calls=0;$script:codes=@(0);$script:expansions=0
+  $script:expectedUri=if($installer -eq 'install_go.ps1'){'https://go.dev/dl/go1.27.3.windows-amd64.zip'}else{'https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.4/MinGit-2.56.0.4-64-bit.zip'}
+  $message='';try{. (Join-Path $root ('script/docker/'+$installer))}catch{$message=$_.Exception.Message}
+  Assert ($message -like '*SHA256 mismatch*' -and $script:calls -eq 1 -and $script:expansions -eq 0 -and @(Get-ChildItem $env:TEMP -File).Count -eq 0) ('正式入口錯hash不解壓或保留cache '+$installer)
+ }
+}finally{$env:TEMP=$oldTemp}
 Write-Host 'ALL PASS: bounded official downloads; TEMP and mocked HTTP only'
