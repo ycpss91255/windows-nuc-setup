@@ -23,7 +23,7 @@ function Get-CimInstance {param($ClassName,$Filter,$ErrorAction)
  [pscustomobject]@{Name='msoobe.exe';SessionId=$(if($script:otherSession){8}else{7})}
  [pscustomobject]@{Name='explorer.exe';SessionId=7}
 }
-function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) [pscustomobject]@{Sid=$script:sid}}
+function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) [pscustomobject]@{ReturnValue=0;Sid=$script:sid}}
 $context=Get-InitProvisioningContext
 Assert ($context.OobeProcessInSession -and $context.MachineGuid -eq 'fixture-machine' -and $context.Sid -eq 'S-1-5-18') 'collector correlates OOBE process with current session'
 Assert (-not $context.DesktopOwned -and -not $context.RegisteredProfile) 'SYSTEM never becomes a formal user profile'

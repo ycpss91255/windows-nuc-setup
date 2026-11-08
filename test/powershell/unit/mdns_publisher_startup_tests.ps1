@@ -10,7 +10,7 @@ function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Na
 $realPaths=(Get-Command Get-SetupMdnsPaths).ScriptBlock
 $failed=$false;try{Get-SetupMdnsPaths '../escape'|Out-Null}catch{$failed=$true};Assert $failed 'startup worker RunId不接受任意路徑'
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('mdns_startup_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
-$script:task=$null;$script:starts=0;$script:stops=0;$script:registers=0;$script:processPresent=$true;$script:ownerSid='S-1-5-18';$script:protected=@{}
+$script:ownerCode=0;$script:ownerMissing=$false;$script:ownerThrows=$false;$script:task=$null;$script:starts=0;$script:stops=0;$script:registers=0;$script:processPresent=$true;$script:ownerSid='S-1-5-18';$script:protected=@{}
 $script:facts=[pscustomobject]@{ComputerName='FIXTURE-PC';Addresses=@([pscustomobject]@{InterfaceIndex=7;IPAddress='192.0.2.9'});PolicyAllowed=$true;DnsClientRunning=$true;SshdRunning=$true;DnsClientProcessId=42}
 function Get-SetupMdnsPaths {param($RunId) $p=& $realPaths $RunId;$p.Common=$temp;$p.Root=Join-Path $temp 'windows_setup_mdns';$p.Runs=Join-Path $p.Root 'runs';$p.Current=Join-Path $p.Root 'current.json';if($RunId){$p.RunRoot=Join-Path $p.Runs $RunId;$p.CodeRoot=Join-Path $p.RunRoot 'code';$p.Context=Join-Path $p.RunRoot 'context.json';$p.Status=Join-Path $p.RunRoot 'status.json'};return $p}
 function Get-SetupMdnsMachineGuid {return '11111111-2222-3333-4444-555555555555'}
@@ -29,7 +29,7 @@ function Start-ScheduledTask {
  Write-SetupMdnsAtomicJson -Path $paths.Status -Value $value
 }
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) if($ClassName -cne 'Win32_Process' -or $Filter -cne 'ProcessId=731'){throw 'unexpected native process query'};if($script:processPresent){$ctx=Read-SetupMdnsCurrent;$paths=Get-SetupMdnsPaths $ctx.RunId;[pscustomobject]@{SessionId=0;ExecutablePath=$paths.PowerShell;CommandLine=('"'+$paths.PowerShell+'" '+(Get-SetupMdnsTaskArguments $ctx.RunId));CreationDate=[datetime]::UtcNow.AddMinutes(-1)}}}
-function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) if($MethodName -cne 'GetOwnerSid'){throw 'unexpected native owner query'};[pscustomobject]@{ReturnValue=0;Sid=$script:ownerSid}}
+function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) if($MethodName -cne 'GetOwnerSid'){throw 'unexpected native owner query'};if($script:ownerThrows){throw [IO.IOException]::new('controlled native owner failure')};$r=[pscustomobject]@{Sid=$script:ownerSid};if(-not $script:ownerMissing){$r|Add-Member NoteProperty ReturnValue $script:ownerCode};return $r}
 function Start-Sleep {param($Seconds,$Milliseconds) throw 'positive fixture must be immediately ready, not timeout'}
 foreach($name in @('Register-ScheduledTask','Start-ScheduledTask','Stop-ScheduledTask','Get-ScheduledTask','Unregister-ScheduledTask')){if((Get-Command $name).CommandType -ne 'Function' -or (Get-Command $name).ModuleName){throw 'Unsafe native task boundary escaped fixture: '+$name}}
 # The real Task constructors only allocate CIM descriptions; registration/start/stop are isolated above.
@@ -53,6 +53,15 @@ foreach($case in @('wrong_plans','wrong_working_directory','stale','wrong_name',
  $script:task.Actions[0].Arguments=$oldArg;$script:task.Actions[0].WorkingDirectory=$oldDirectory;$script:processPresent=$true;$script:ownerSid='S-1-5-18'
 }
 [IO.File]::WriteAllText($paths.Status,$original,[Text.UTF8Encoding]::new($true))
+foreach($ownerCase in @(@{Name='native-error';Code=[uint32]5},@{Name='string-zero';Code='0'},@{Name='bool-false';Code=$false},@{Name='null-code';Code=$null},@{Name='missing-code';Missing=$true},@{Name='native-throw';Throws=$true})){
+ $script:ownerCode=$ownerCase.Code;$script:ownerMissing=[bool]$ownerCase.Missing;$script:ownerThrows=[bool]$ownerCase.Throws
+ $before=@(Get-ChildItem -LiteralPath (Get-SetupMdnsPaths).Root -Recurse -File|ForEach-Object {(Get-FileHash -LiteralPath $_.FullName).Hash}) -join '|';$ready=$false
+ try{$ready=(Invoke-SetupMdnsPublisher -SourceRoot $root -VerifyOnly).Success}catch{}
+ $after=@(Get-ChildItem -LiteralPath (Get-SetupMdnsPaths).Root -Recurse -File|ForEach-Object {(Get-FileHash -LiteralPath $_.FullName).Hash}) -join '|'
+ Assert (-not $ready -and $before -ceq $after -and $script:registers -eq 1 -and $script:starts -eq 1 -and $script:stops -eq 0) ('原publisher不信任失敗或非整數owner碼且VerifyOnly零變更 '+$ownerCase.Name)
+}
+$script:ownerMissing=$false;$script:ownerThrows=$false
+foreach($code in @([int]0,[uint32]0)){$script:ownerCode=$code;Assert ((Invoke-SetupMdnsPublisher -SourceRoot $root -VerifyOnly).Success) ('原publisher接受真整數成功碼 '+$code.GetType().Name)}
 $foreign=$script:task;$script:task.Principal.UserId='S-1-5-21-1-2-3-1001';$failed=$false
 try{Invoke-SetupMdnsPublisher -SourceRoot $root|Out-Null}catch{$failed=$true}
 Assert ($failed -and $script:stops -eq 0 -and $script:registers -eq 1) '既有同名foreign principal不接管不停止不Force覆寫'
