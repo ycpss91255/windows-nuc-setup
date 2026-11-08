@@ -80,7 +80,8 @@ Assert (@(($wrappedXml.coverage.packages.package.classes.class|Where-Object file
 $baselinePath=Join-Path $fixture 'baseline.json'
 & $baseline -SourceRoot $root -OutputPath $baselinePath
 $baselineInput=Get-Content $baselinePath -Raw|ConvertFrom-Json
-Assert ($baselineInput.Tests.Count -eq 23 -and @($baselineInput.Tests|Where-Object {$_ -match 'powershell_coverage|report_scope|simple_portal'}).Count -eq 0) '既有23套安全測試明列且不遞迴收集器'
+$expectedSuites=@(Get-ChildItem (Join-Path $root 'test/powershell/unit'),(Join-Path $root 'test/powershell/integration') -File -Filter '*_tests.ps1'|ForEach-Object {$_.FullName.Substring($root.Length+1).Replace('\','/')}|Sort-Object)
+Assert (($baselineInput.Tests -join ',') -ceq ($expectedSuites -join ',')) '全部安全 unit/integration suite 都列入正式基線，不漏新增測試'
 $expectedSources=@(git -C $root ls-files '*.ps1'|Where-Object {$_ -match '^(core|modules|script)/' -and $_ -notmatch '^modules/debloat/win11debloat/'})
 Assert (($baselineInput.Sources -join ',') -ceq (($expectedSources|Sort-Object) -join ',')) '基線涵蓋全部已追蹤正式PowerShell來源'
 Assert ($baselineInput.Wrapper -ceq 'test/powershell/coverage/safe_suite.ps1') '正式基線使用具名原檔 wrapper'
