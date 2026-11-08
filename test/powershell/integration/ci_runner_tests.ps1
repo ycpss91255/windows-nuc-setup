@@ -2,6 +2,9 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Message}}
+function Test-CICliDelegation($Called,[string]$Root,[string]$Output){
+ return ($Called.Layer -ceq 'Integration' -and $Called.Output -ceq $Output -and [IO.Path]::GetFullPath([string]$Called.Root).TrimEnd('\','/') -ieq [IO.Path]::GetFullPath($Root).TrimEnd('\','/'))
+}
 $library=Join-Path $root 'script/test/ci_runner_library.ps1'
 Assert (Test-Path -LiteralPath $library) 'CI 提供可由安全來源套件呼叫的具名函式'
 . $library
@@ -68,14 +71,22 @@ try{
  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $cli 'run_ci.ps1') -Layer Integration -ReportDirectory $cliOut
  Assert ($LASTEXITCODE -eq 0) 'CLI 真子程序委派成功'
  $called=Get-Content -LiteralPath $cliOut -Raw|ConvertFrom-Json
- Assert ($called.Layer -eq 'Integration' -and $called.Output -eq $cliOut -and $called.Root -eq (Join-Path $temp 'cli')) 'CLI 動態套件根與參數完整委派'
- # Reproduce equivalent directory spelling independently of runner TEMP naming.
- $aliasRoot=Join-Path $temp 'cli\.'
- $aliasOut=Join-Path $temp 'alias_cli.json'
- & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aliasRoot 'script/test/run_ci.ps1') -Layer Integration -ReportDirectory $aliasOut
- Assert ($LASTEXITCODE -eq 0) '等價路徑 CLI 真子程序委派成功'
- $aliasCalled=Get-Content -LiteralPath $aliasOut -Raw|ConvertFrom-Json
- Assert ($aliasCalled.Layer -ceq 'Integration' -and $aliasCalled.Output -ceq $aliasOut -and $aliasCalled.Root -ieq $aliasRoot) ('等價路徑 CLI 動態套件根與參數完整委派；actualRoot='+$aliasCalled.Root+';expectedRoot='+$aliasRoot+';actualOutput='+$aliasCalled.Output+';expectedOutput='+$aliasOut+';actualLayer='+$aliasCalled.Layer)
+ Assert (Test-CICliDelegation $called (Join-Path $temp 'cli') $cliOut) ('CLI 動態套件根與參數完整委派；actualRoot='+$called.Root+';expectedRoot='+(Join-Path $temp 'cli')+';actualOutput='+$called.Output+';expectedOutput='+$cliOut+';actualLayer='+$called.Layer)
+ # Exercise real equivalent directory spellings, including actual 8.3 alias when available.
+ $aliases=@((Join-Path $temp 'cli\.'),(Join-Path $temp 'cli\'))
+ $fso=New-Object -ComObject Scripting.FileSystemObject
+ $shortRoot=[string]$fso.GetFolder((Join-Path $temp 'cli')).ShortPath
+ if($shortRoot -ine (Join-Path $temp 'cli')){$aliases+=@($shortRoot)}
+ foreach($aliasRoot in $aliases){
+  $aliasOut=Join-Path $temp 'alias_cli.json'
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aliasRoot 'script/test/run_ci.ps1') -Layer Integration -ReportDirectory $aliasOut
+  Assert ($LASTEXITCODE -eq 0) '等價路徑 CLI 真子程序委派成功'
+  $aliasCalled=Get-Content -LiteralPath $aliasOut -Raw|ConvertFrom-Json
+  Assert (Test-CICliDelegation $aliasCalled $aliasRoot $aliasOut) ('等價路徑 CLI 動態套件根與參數完整委派；actualRoot='+$aliasCalled.Root+';expectedRoot='+$aliasRoot+';actualOutput='+$aliasCalled.Output+';expectedOutput='+$aliasOut+';actualLayer='+$aliasCalled.Layer)
+ }
+ Assert (-not(Test-CICliDelegation $called (Join-Path $temp 'different_root') $cliOut)) '不同目錄即使存在共同祖先也拒絕'
+ Assert (-not(Test-CICliDelegation ([pscustomobject]@{Root=$called.Root;Output=$cliOut;Layer='Unit'}) (Join-Path $temp 'cli') $cliOut)) 'Layer仍須精確Integration'
+ Assert (-not(Test-CICliDelegation ([pscustomobject]@{Root=$called.Root;Output=($cliOut+'.wrong');Layer='Integration'}) (Join-Path $temp 'cli') $cliOut)) 'Output仍須精確原參數'
 }finally{
  foreach($key in $keys){[Environment]::SetEnvironmentVariable($key,$saved[$key],'Process')}
  # Only this test-created absolute TEMP tree can be removed.
