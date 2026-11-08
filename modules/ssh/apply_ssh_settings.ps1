@@ -21,6 +21,7 @@ Write-Host 'SSH 已啟動、設為自動啟動，防火牆僅允許本機子網�
 
 
 & (Join-Path $PSScriptRoot 'apply_lan_ping_settings.ps1')
+& (Join-Path $PSScriptRoot 'apply_mdns_settings.ps1')|Out-Null
 
 
 & (Join-Path $PSScriptRoot 'apply_hosts_sync.ps1')
