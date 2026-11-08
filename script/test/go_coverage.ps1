@@ -27,7 +27,7 @@ function Write-GoCoverageView {
  $label='go coverage';$value=Get-GoCoveragePercentText $Coverage
  $color=Get-GoCoverageColor (100.0*$Coverage.Covered/$Coverage.TotalStatements)
  $left=$label.Length*7+12;$right=$value.Length*7+12;$title=$label+' '+$RefType.ToLowerInvariant()+': '+$value
- $svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+($left+$right)+'" height="20" role="img" aria-label="'+$title+'"><title>'+$title+'</title><rect width="'+$left+'" height="20" fill="#555"/><rect x="'+$left+'" width="'+$right+'" height="20" fill="'+$color+'"/><g fill="#fff" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11" text-anchor="middle"><text x="'+[Math]::Floor($left/2)+'" y="14">'+$label+'</text><text x="'+($left+[Math]::Floor($right/2))+'" y="14">'+$value+'</text></g></svg>'
+ $svg=New-CoverageBadgeSvg -Label $label -Value $value -Color $color -Scope $RefType.ToLowerInvariant()
  [IO.File]::WriteAllText((Join-Path $OutputDirectory 'go_coverage.svg'),$svg,$encoding)
 }
 
@@ -44,4 +44,12 @@ function Get-GoCoverageColor {
  if($Percent -ge 60){return '#dfb317'}
  if($Percent -ge 50){return '#fe7d37'}
  return '#e05d44'
+}
+function New-CoverageBadgeSvg {
+ param([string]$Label,[string]$Value,[string]$Color,[string]$Scope)
+ $left=$Label.Length*7+12;$right=$Value.Length*7+12;$width=$left+$right
+ $title=[Security.SecurityElement]::Escape($Label+' '+$Scope+': '+$Value)
+ $labelText=[Security.SecurityElement]::Escape($Label);$valueText=[Security.SecurityElement]::Escape($Value)
+ $x1=[Math]::Floor($left/2);$x2=$left+[Math]::Floor($right/2)
+ return '<svg xmlns="http://www.w3.org/2000/svg" width="'+$width+'" height="20" role="img" aria-label="'+$title+'"><title>'+$title+'</title><defs><linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="r"><rect width="'+$width+'" height="20" rx="3" fill="#fff"/></clipPath></defs><g clip-path="url(#r)"><rect width="'+$left+'" height="20" fill="#555"/><rect x="'+$left+'" width="'+$right+'" height="20" fill="'+$Color+'"/><rect width="'+$width+'" height="20" fill="url(#s)"/></g><g fill="#fff" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11" text-anchor="middle"><text x="'+$x1+'" y="15" fill="#010101" fill-opacity=".3">'+$labelText+'</text><text x="'+$x1+'" y="14">'+$labelText+'</text><text x="'+$x2+'" y="15" fill="#010101" fill-opacity=".3">'+$valueText+'</text><text x="'+$x2+'" y="14">'+$valueText+'</text></g></svg>'
 }

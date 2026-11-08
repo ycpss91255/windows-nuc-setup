@@ -2,16 +2,14 @@
 
 [![Windows CI](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml/badge.svg)](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
 
-[![Unit](https://ycpss91255.github.io/windows_setup/main/unit.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
-[![Integration](https://ycpss91255.github.io/windows_setup/main/integration.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
-[![System 狀態](https://ycpss91255.github.io/windows_setup/main/system.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
-[![PowerShell Coverage 狀態](https://ycpss91255.github.io/windows_setup/main/coverage.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
-
-[![Go statement coverage](https://ycpss91255.github.io/windows_setup/main/go_coverage.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/main/index.html)
+![Language](https://img.shields.io/badge/Language-Go%20%2F%20PowerShell-blue?style=flat)
+![Testing](https://img.shields.io/badge/Testing-Go%20test%20%2F%20PS5.1-orange?style=flat)
+[![Go coverage](https://ycpss91255.github.io/windows_setup/main/go_coverage.svg?style=flat-v2)](https://ycpss91255.github.io/windows_setup/main/index.html)
+[![PowerShell coverage](https://ycpss91255.github.io/windows_setup/main/coverage.svg?style=flat-v2)](https://ycpss91255.github.io/windows_setup/main/index.html)
 
 [最新已發布 main 報表](https://ycpss91255.github.io/windows_setup/) · [Actions 與七天報告附件](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
 
-上方分層徽章取自最近一次成功部署的 main 報表；報表標示提交與時間。若部署失敗，請以 Windows CI 徽章及 Actions 的最新執行結果為準。PR 不更新公開報表。
+上方 Go／PowerShell 覆蓋率徽章取自最近一次成功部署的 main 報表；Go 顯示實測值，PowerShell 尚未量測。System／完整 E2E 尚未執行；報表標示提交與時間。若部署失敗，請以 Windows CI 徽章及 Actions 的最新執行結果為準。PR 不更新公開報表。
 Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、模組設定與後續驗收。本文以繁體中文提供完整操作說明；版本摘要見 [變更紀錄](doc/changelog/changelog.md)，實作與驗證細節以中文 Git 提交及 GitHub Release 為準。
 
 ## 快速開始
@@ -522,7 +520,7 @@ Go 徽章顯示最近一次成功部署 main 的實際 **statement coverage**，
 
 [Go 量測 JSON](https://ycpss91255.github.io/windows_setup/main/go_coverage.json)與[原始合併 profile](https://ycpss91255.github.io/windows_setup/main/go_coverage.out)可下載核對數量、套件範圍、提交、執行來源、量測時間及 SHA256。徽章數值、來源提交與時間以已部署產物為準，不能代表尚未部署的修改。歷史 Release 沒有 Go 量測時維持未量測，不回填目前結果；既有不可變 Release 附件格式不變。
 
-PowerShell `Coverage` 與既有 `coverage.svg` 仍顯示 `NotMeasured`：目前沒有對 PowerShell 原始碼作行／分支執行量測，斷言數不是覆蓋率。沿用 base 由真實量測產生徽章的原則及 flat-square 外觀，不把 Go 百分比套用為 PowerShell 或整體覆蓋率。System／完整 E2E 保持 `Deferred / NotRun`，不計入已通過項目。
+PowerShell `Coverage` 與既有 `coverage.svg` 仍顯示 `NotMeasured`：目前沒有對 PowerShell 原始碼作行／分支執行量測，斷言數不是覆蓋率。沿用 base 由真實量測產生徽章的原則；覆蓋率採與上方原生 CI 相近的 flat 圓角外觀，不把 Go 百分比套用為 PowerShell 或整體覆蓋率。System／完整 E2E 保持 `Deferred / NotRun`，不計入已通過項目。
 
 ### 測試分層與本機入口
 

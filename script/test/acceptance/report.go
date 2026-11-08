@@ -93,12 +93,17 @@ func ValidateSVG(data []byte, r Report, name string) error {
 	if e := ValidateXMLNamespace(data, "http://www.w3.org/2000/svg"); e != nil {
 		return e
 	}
+	var normalizeError error
+	data, normalizeError = normalizeFlatBadge(data)
+	if normalizeError != nil {
+		return normalizeError
+	}
 	var s struct {
 		XMLName xml.Name
 		Height  string `xml:"height,attr"`
 		Width   string `xml:"width,attr"`
-        Aria string `xml:"aria-label,attr"`
-        Title string `xml:"title"`
+		Aria    string `xml:"aria-label,attr"`
+		Title   string `xml:"title"`
 		Rects   []struct {
 			Width string `xml:"width,attr"`
 			Fill  string `xml:"fill,attr"`
@@ -113,11 +118,13 @@ func ValidateSVG(data []byte, r Report, name string) error {
 	}
 	label := name + " " + strings.ToLower(r.RefType)
 	status := BadgeStatus(r, name)
- if name=="coverage" && len(s.Group.Texts)==2 && s.Group.Texts[0]=="ps coverage" {
-  label="ps coverage"
-  scope:=label+" "+strings.ToLower(r.RefType)+": "+status
-  if s.Aria!=scope || s.Title!=scope {return fmt.Errorf("PowerShell badge lacks matching source scope")}
- }
+	if name == "coverage" && len(s.Group.Texts) == 2 && s.Group.Texts[0] == "ps coverage" {
+		label = "ps coverage"
+		scope := label + " " + strings.ToLower(r.RefType) + ": " + status
+		if s.Aria != scope || s.Title != scope {
+			return fmt.Errorf("PowerShell badge lacks matching source scope")
+		}
+	}
 	color := "#9f9f9f"
 	if status == "passed" {
 		color = "#4c1"

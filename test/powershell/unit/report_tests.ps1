@@ -59,16 +59,18 @@ Write-Host ('Report preview: '+(Join-Path $fixture 'release/index.html'))
 $badgeWidths=@()
 foreach($name in @('unit','integration','system','coverage')){
  [xml]$badge=Get-Content (Join-Path $fixture ($name+'.svg')) -Raw -Encoding UTF8
+ $rects=if($name -eq 'coverage'){@($badge.svg.g[0].rect)}else{@($badge.svg.rect)}
+ $font=if($name -eq 'coverage'){$badge.svg.g[1].'font-size'}else{$badge.svg.g.'font-size'}
  $badgeWidths+=[int]$badge.svg.width
- Assert ($badge.svg.height -eq '20' -and $badge.svg.g.'font-size' -eq '11' -and $badge.svg.rect[0].fill -eq '#555') ('flat-square 徽章對齊 base 字體與高度：'+$name)
- Assert ([int]$badge.svg.width -eq ([int]$badge.svg.rect[0].width+[int]$badge.svg.rect[1].width) -and $badge.svg.'aria-label'.Contains('branch')) ('徽章寬度符合兩段文字且保留範圍：'+$name)
+ Assert ($badge.svg.height -eq '20' -and $font -eq '11' -and $rects[0].fill -eq '#555') ('徽章保留一致字體與高度：'+$name)
+ Assert ([int]$badge.svg.width -eq ([int]$rects[0].width+[int]$rects[1].width) -and $badge.svg.'aria-label'.Contains('branch')) ('徽章寬度符合兩段文字且保留範圍：'+$name)
 }
 Assert (@($badgeWidths|Select-Object -Unique).Count -gt 1 -and ($badgeWidths|Measure-Object -Maximum).Maximum -lt 360) '不同文字使用自適應寬度而非固定寬度大色塊'
 [xml]$passedBadge=Get-Content (Join-Path $fixture 'unit.svg') -Raw -Encoding UTF8
 [xml]$failedBadge=Get-Content (Join-Path $fixture 'integration.svg') -Raw -Encoding UTF8
 Assert ($passedBadge.svg.rect[1].fill -eq '#4c1' -and $failedBadge.svg.rect[1].fill -eq '#e05d44') '通過與失敗使用 base 色階且保留原測試狀態'
 [xml]$coverageBadge=Get-Content (Join-Path $fixture 'coverage.svg') -Raw -Encoding UTF8
-Assert ($coverageBadge.svg.rect[1].fill -eq '#9f9f9f' -and $coverageBadge.svg.'aria-label'.Contains('not measured') -and -not $coverageBadge.OuterXml.Contains('%')) 'Coverage 未量測使用中性灰色而非假百分比'
+Assert ($coverageBadge.svg.g[0].rect[1].fill -eq '#9f9f9f' -and $coverageBadge.svg.'aria-label'.Contains('not measured') -and -not $coverageBadge.svg.'aria-label'.Contains('%')) 'Coverage 未量測使用中性灰色而非假百分比'
 
 Assert ($html.Contains('archive/'+('a'*40)+'.zip') -and -not $html.Contains('href="https://github.com/ycpss91255/windows_setup/releases"')) '分支報告下載指向本次提交，不導向舊發布版'
 Assert ($html.Contains('完整 Windows 安裝、重開機與真實硬體設定尚未實測') -and $html.Contains('blob/main/readme.md')) '明細首屏保留未實測界限與目前使用步驟'

@@ -97,6 +97,7 @@ function Write-TestReports {
   $labelWidth=$label.Length*7+12;$valueWidth=$status.Length*7+12;$width=$labelWidth+$valueWidth
   $labelX=[Math]::Floor($labelWidth/2);$valueX=$labelWidth+[Math]::Floor($valueWidth/2)
   $svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+$width+'" height="20" role="img" aria-label="'+$title+'"><title>'+$title+'</title><rect width="'+$labelWidth+'" height="20" fill="#555"/><rect x="'+$labelWidth+'" width="'+$valueWidth+'" height="20" fill="'+$color+'"/><g fill="#fff" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11" text-anchor="middle"><text x="'+$labelX+'" y="14">'+$label+'</text><text x="'+$valueX+'" y="14">'+$status+'</text></g></svg>'
+  if($badge -eq 'coverage'){$svg=New-CoverageBadgeSvg -Label $label -Value $status -Color $color -Scope $RefType.ToLowerInvariant()}
   [IO.File]::WriteAllText((Join-Path $OutputDirectory ($badge+'.svg')),$svg,$encoding)
  }
  return [pscustomobject]$report
