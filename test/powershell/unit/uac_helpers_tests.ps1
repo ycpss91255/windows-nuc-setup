@@ -18,7 +18,7 @@ Assert (Test-Path $lib) 'UAC有無副作用具名函式來源'
 . $lib
 $script:values=@{EnableLUA=1;ConsentPromptBehaviorAdmin=5;PromptOnSecureDesktop=1;ConsentPromptBehaviorUser=3}
 $script:kinds=@{EnableLUA='DWord';ConsentPromptBehaviorAdmin='DWord'};$script:writes=@();$script:drop=$false
-function Get-Item {param($LiteralPath,$ErrorAction) if($LiteralPath -like 'HKLM:*'){$o=[pscustomobject]@{};$o|Add-Member ScriptMethod GetValueNames {,@($script:values.Keys)};$o|Add-Member ScriptMethod GetValue {param($name) $script:values[$name]};$o|Add-Member ScriptMethod GetValueKind {param($name) if(-not $script:values.ContainsKey($name)){throw 'missing'};$script:kinds[$name]};return $o};Microsoft.PowerShell.Management\Get-Item @PSBoundParameters}
+function Get-Item {param($LiteralPath,$ErrorAction,[switch]$Force) if($LiteralPath -like 'HKLM:*'){$o=[pscustomobject]@{};$o|Add-Member ScriptMethod GetValueNames {,@($script:values.Keys)};$o|Add-Member ScriptMethod GetValue {param($name) $script:values[$name]};$o|Add-Member ScriptMethod GetValueKind {param($name) if(-not $script:values.ContainsKey($name)){throw 'missing'};$script:kinds[$name]};return $o};Microsoft.PowerShell.Management\Get-Item @PSBoundParameters}
 function New-ItemProperty {param($LiteralPath,$Name,$Value,$PropertyType,[switch]$Force,$ErrorAction) if($Name -ne 'ConsentPromptBehaviorAdmin'){throw '禁止修改其他政策'};$script:writes+=@($Name);if(-not $script:drop){$script:values[$Name]=$Value;$script:kinds[$Name]=$PropertyType}}
 function Remove-ItemProperty {param($LiteralPath,$Name,$ErrorAction) if($Name -ne 'ConsentPromptBehaviorAdmin'){throw '禁止移除其他政策'};$script:writes+=@($Name);$script:values.Remove($Name);$script:kinds.Remove($Name)}
 $dir=Join-Path ([IO.Path]::GetTempPath()) ('uac_test_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($dir)
@@ -59,4 +59,7 @@ Invoke-SetupUac @call -VerifyOnly|Out-Null
 Assert ($script:writes.Count -eq $beforeWrites -and -not(Test-Path $call.StatePath)) '真正Hidden祖先可讀且VerifyOnly不寫registry或原值快照'
 $r=Get-Content -LiteralPath $call.ReportPath -Raw -Encoding UTF8|ConvertFrom-Json
 Assert $r.Success 'Hidden祖先不被誤判遺失而阻擋UAC驗證'
+$link=Join-Path $dir 'reparse_parent';$null=New-Item -ItemType Junction -Path $link -Target $hidden
+$call.StatePath=Join-Path $link 'state.json'
+Reject {Invoke-SetupUac @call -VerifyOnly} 'Force讀隱藏目錄仍拒絕重新解析點' '重新解析'
 Write-Host 'ALL PASS: UAC TEMP/mock only'
