@@ -61,6 +61,11 @@ public static class ManagedNativeTests {
   Assert(releases==2,"theme releases DC when pixel read reports failure");
   api.Pixel=delegate(IntPtr dc,int x,int y){throw new InvalidOperationException("pixel fixture failure");};Throws(delegate{NUC8Theme.TaskbarColor(api);},"pixel exception propagates");
   Assert(releases==3,"theme releases DC when pixel read throws");
+  int outsideReads=0;
+  api.Rectangle=delegate(IntPtr window,out NUC8Theme.Rect rect){rect=new NUC8Theme.Rect{Left=0,Top=1078,Right=1920,Bottom=1126};return true;};
+  api.Pixel=delegate(IntPtr dc,int x,int y){if(x<0||x>=1920||y<0||y>=1080){outsideReads++;return 0xffffffff;}return 0x00151515;};
+  Throws(delegate{NUC8Theme.TaskbarColor(api);},"offscreen sample without confirmed autohide is rejected",typeof(Exception));
+  Assert(outsideReads==0,"theme rejects offscreen geometry before asking GetPixel outside the clip region");
  }
  static void HotkeyCases(){
   var log=new List<string>();int unregistered=0,messages=0,launched=0;
