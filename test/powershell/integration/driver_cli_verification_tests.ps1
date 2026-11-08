@@ -10,6 +10,7 @@ Copy-Item -LiteralPath $entry -Destination $module
 [IO.File]::WriteAllText((Join-Path $module 'driver_archive_library.ps1'),'# inert definitions', $utf)
 $hardware=@'
 function Select-SetupDriverRequest {param($DriverPackagePath) [pscustomobject]@{DriverPackagePath=$DriverPackagePath}}
+function Test-SetupInteractiveHost {return $false}
 function Get-SetupHardwareProfile {[pscustomobject]@{IsNuc8=$true}}
 function Get-SetupModuleDecision {[pscustomobject]@{Applicable=$true}}
 function Test-SetupDriverPayload {[pscustomobject]@{Status='Passed'}}
@@ -25,6 +26,11 @@ $bundle=Join-Path $fixture '驅動 包';$run=[guid]::NewGuid().ToString()
 Assert ($LASTEXITCODE -eq 0) '真公開CLI子程序唯讀路由成功，不碰安裝或管理員提權'
 $called=Get-Content -LiteralPath (Join-Path $module 'called.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert ($called.Root -ceq $bundle -and $called.Run -ceq $run) '公開CLI保留動態中文包路徑與本輪ID'
+[IO.File]::WriteAllText((Join-Path $module 'driver_installation_library.ps1'),'function Invoke-SetupDriverVerification {[pscustomobject]@{Success=$false}}', $utf)
+$oldPreference=$ErrorActionPreference;$ErrorActionPreference='Continue'
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $module 'install_drivers.ps1') -VerifyOnly -DriverPackagePath $bundle -VerificationRunId $run -NonInteractive *> (Join-Path $fixture 'failed_entry.log')
+$failedCode=$LASTEXITCODE;$ErrorActionPreference=$oldPreference
+Assert ($failedCode -ne 0) '公開CLI未核實結果保留非零退出碼'
 Copy-Item -LiteralPath (Join-Path $root 'core/run_module.ps1') -Destination (Join-Path $fixture 'core')
 $paths=@'
 function Test-SetupAdministrator {return $true}

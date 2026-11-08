@@ -9,7 +9,7 @@ if($ApplyPolicy -and $Module -ne 'Apply-StartMenuSettings'){throw 'ApplyPolicy �
 if($Restore -and ($Module -ne 'Apply-UACSettings' -or $VerifyOnly)){throw 'Restore僅適用UAC且不可與VerifyOnly同時使用。'}
 if($Module -notin $allowed){throw 'Unknown module'}
 if($Module -ne 'Apply-HostsSync' -and ($SyncOnly -or $Mode -ne 'All')){throw 'SyncOnly/Mode only apply to Apply-HostsSync.'}
-$isAdmin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$isAdmin=Test-SetupAdministrator
 if(-not $isAdmin){
  $command="& '"+$PSCommandPath.Replace("'","''")+"' -Module '"+$Module.Replace("'","''")+"'"
  $command+=" -ExpectedUserSID '"+$sid.Replace("'","''")+"'"
@@ -32,7 +32,9 @@ elseif($Module -eq 'Apply-HostsSync'){
  & $path @options
 }elseif($Module -eq 'Apply-StartMenuSettings'){
  & $path -VerifyOnly:$VerifyOnly -ApplyPolicy:($ApplyPolicy -and -not $VerifyOnly) -NonInteractive:$NonInteractive
+}elseif($Module -eq 'Install-Drivers'){
+ & $path -VerifyOnly:$VerifyOnly @driverArguments
 }elseif($VerifyOnly){
  if($Module -eq 'Desktop-IconLayout'){& $path -Mode Verify}
  else{if(-not (Get-Command $path).Parameters.ContainsKey('VerifyOnly')){throw 'This module does not support VerifyOnly. Use windows.cmd -VerifyOnly.'};& $path -VerifyOnly}
-}else{if($Module -eq 'Install-Drivers'){& $path @driverArguments}else{& $path}}
+}else{& $path}
