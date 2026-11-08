@@ -66,11 +66,11 @@ try{
  # The CLI contract is executed using an isolated copy with a harmless named delegate.
  $cli=Join-Path $temp 'cli_來源_😀/script/test';[void][IO.Directory]::CreateDirectory($cli)
  Copy-Item -LiteralPath (Join-Path $root 'script/test/run_ci.ps1') -Destination $cli
- [IO.File]::WriteAllText((Join-Path $cli 'ci_runner_library.ps1'),'function Invoke-SetupCI {param($PackageRoot,$ReportDirectory,$Layer);@{Root=$PackageRoot;Output=$ReportDirectory;Layer=$Layer}|ConvertTo-Json|Set-Content -LiteralPath $ReportDirectory}', $encoding)
+ [IO.File]::WriteAllText((Join-Path $cli 'ci_runner_library.ps1'),'function Invoke-SetupCI {param($PackageRoot,$ReportDirectory,$Layer);@{Root=$PackageRoot;Output=$ReportDirectory;Layer=$Layer}|ConvertTo-Json|Set-Content -LiteralPath $ReportDirectory -Encoding UTF8}', $encoding)
  $cliOut=Join-Path $temp 'cli.json'
  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $cli 'run_ci.ps1') -Layer Integration -ReportDirectory $cliOut
  Assert ($LASTEXITCODE -eq 0) 'CLI 真子程序委派成功'
- $called=Get-Content -LiteralPath $cliOut -Raw|ConvertFrom-Json
+ $called=Get-Content -LiteralPath $cliOut -Raw -Encoding UTF8|ConvertFrom-Json
  Assert ($called.Root.Contains('😀')) 'CLI fixture JSON 必須完整保留非 ANSI Unicode 目錄'
  Assert (Test-CICliDelegation $called (Join-Path $temp 'cli_來源_😀') $cliOut) ('CLI 動態套件根與參數完整委派；actualRoot='+$called.Root+';expectedRoot='+(Join-Path $temp 'cli_來源_😀')+';actualOutput='+$called.Output+';expectedOutput='+$cliOut+';actualLayer='+$called.Layer)
  # Exercise real equivalent directory spellings, including actual 8.3 alias when available.
@@ -82,7 +82,7 @@ try{
   $aliasOut=Join-Path $temp 'alias_cli.json'
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aliasRoot 'script/test/run_ci.ps1') -Layer Integration -ReportDirectory $aliasOut
   Assert ($LASTEXITCODE -eq 0) '等價路徑 CLI 真子程序委派成功'
-  $aliasCalled=Get-Content -LiteralPath $aliasOut -Raw|ConvertFrom-Json
+  $aliasCalled=Get-Content -LiteralPath $aliasOut -Raw -Encoding UTF8|ConvertFrom-Json
   Assert (Test-CICliDelegation $aliasCalled $aliasRoot $aliasOut) ('等價路徑 CLI 動態套件根與參數完整委派；actualRoot='+$aliasCalled.Root+';expectedRoot='+$aliasRoot+';actualOutput='+$aliasCalled.Output+';expectedOutput='+$aliasOut+';actualLayer='+$aliasCalled.Layer)
  }
  Assert (-not(Test-CICliDelegation $called (Join-Path $temp 'different_root') $cliOut)) '不同目錄即使存在共同祖先也拒絕'
