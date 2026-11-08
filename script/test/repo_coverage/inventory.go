@@ -36,6 +36,7 @@ var executableExtensions = map[string]bool{".py": true, ".sh": true, ".bash": tr
 var inlineLogic = regexp.MustCompile(`(?i)(\b(if|foreach|while|for|switch|try|catch|throw|function|return)\b|\$LASTEXITCODE|\bexit\s+[0-9$]|\biferrorlevel\b)`)
 var addType = regexp.MustCompile(`(?im)\bAdd-Type\b([^\r\n]*)`)
 var methodBody = regexp.MustCompile(`(?s)(\)\s*(\{|=>)|\b(get|set)\s*(\{|=>)|=>|=\s*new\b|=\s*[A-Za-z_]\w*\s*\()`)
+var javascriptPath = regexp.MustCompile(`(?i)\.js\b`)
 
 // Embedded C# is not considered covered when PowerShell executes Add-Type.
 // Only literal declaration-only snippets are classified here; unknown dynamic
@@ -96,6 +97,24 @@ func workflowHasLogic(text string) bool {
 				}
 				body += "\n" + next
 			}
+		}
+		if inlineLogic.MatchString(body) {
+			return true
+		}
+	}
+	return false
+}
+
+func dockerHasLogic(text string) bool {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		if !strings.HasPrefix(strings.TrimSpace(strings.ToUpper(line)), "RUN ") {
+			continue
+		}
+		body := line
+		for j := i + 1; j < len(lines) && (strings.HasSuffix(strings.TrimSpace(line), "`") || strings.HasSuffix(strings.TrimSpace(line), `\`)); j++ {
+			line = lines[j]
+			body += "\n" + line
 		}
 		if inlineLogic.MatchString(body) {
 			return true
@@ -177,7 +196,7 @@ func ScanInventory(root string) (Inventory, error) {
 				if declared {
 					inv.Excluded = append(inv.Excluded, Exclusion{rel + "#csharp", "interop declaration-only snippet has no managed executable body"})
 				}
-				if strings.Contains(strings.ToLower(text), ".js") && strings.Contains(text, "WriteAllText") || regexp.MustCompile(`(?is)<script\s*>\s*[^<\s]`).MatchString(text) {
+				if javascriptPath.MatchString(text) && strings.Contains(text, "WriteAllText") || regexp.MustCompile(`(?is)<script\s*>\s*[^<\s]`).MatchString(text) {
 					inv.Blockers = append(inv.Blockers, rel+": embedded JavaScript needs its own executable-line evidence")
 				}
 			}
@@ -187,18 +206,14 @@ func ScanInventory(root string) (Inventory, error) {
 			inv.Blockers = append(inv.Blockers, rel+": unsupported executable language")
 			return nil
 		}
-		if ext == ".yml" || ext == ".yaml" || strings.EqualFold(filepath.Base(rel), "Dockerfile") {
+		if ext == ".yml" || ext == ".yaml" || ext == ".dockerfile" || strings.EqualFold(filepath.Base(rel), "Dockerfile") {
 			data, e := os.ReadFile(full)
 			if e != nil {
 				return e
 			}
 			logic := workflowHasLogic(string(data))
-			if strings.EqualFold(filepath.Base(rel), "Dockerfile") {
-				for _, line := range strings.Split(string(data), "\n") {
-					if strings.HasPrefix(strings.TrimSpace(strings.ToUpper(line)), "RUN ") && inlineLogic.MatchString(line) {
-						logic = true
-					}
-				}
+			if ext == ".dockerfile" || strings.EqualFold(filepath.Base(rel), "Dockerfile") {
+				logic = dockerHasLogic(string(data))
 			}
 			if logic {
 				inv.Blockers = append(inv.Blockers, rel+": inline control flow must be extracted into measured source")
