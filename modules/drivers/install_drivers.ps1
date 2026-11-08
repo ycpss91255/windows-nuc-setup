@@ -1,6 +1,7 @@
 ﻿#Requires -Version 5.1
 param([string]$DriverPackagePath,[switch]$PackageOnly,[string]$ConfirmedBoard,[string]$ConfirmationComputer,[switch]$NonInteractive)
 $ErrorActionPreference='Stop'
+if($PackageOnly -and ($ConfirmedBoard -or $ConfirmationComputer)){throw 'PackageOnly 離線驗包不可混用手動實機確認。'}
 if($DriverPackagePath){$DriverPackagePath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DriverPackagePath)}
 . (Join-Path $PSScriptRoot '..\..\core\hardware.ps1')
 $ProgressPreference='SilentlyContinue'
