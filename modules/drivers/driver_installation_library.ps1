@@ -13,7 +13,9 @@ function Invoke-SetupDriverVerification {
  $devices=@(Get-SetupDriverDeviceInventory -Targets $allTargets)
  $build=[int](Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).BuildNumber
  $results=@();$step=0
- foreach($entry in $entries){foreach($target in $entry.Drivers){
+ foreach($entry in $entries){
+  if(Test-SetupDriverScopeAbsent -Entry $entry -Devices $devices -Build $build){$results+=@($entry.Drivers|ForEach-Object {New-SetupDriverScopeSkippedResult -Target $_});continue}
+  foreach($target in $entry.Drivers){
   $step++;Write-Host ('['+$step+'/'+$allTargets.Count+'] 核對 '+$entry.Id+' / '+$target.InfPath)
   $plans=@(Get-SetupDriverTargetPlan -Target $target -Devices $devices -Build $build -Architecture amd64)
   if($target.ParentTarget){

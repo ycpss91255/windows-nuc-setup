@@ -138,9 +138,25 @@ function Assert-SetupDriverPayloadFiles {
   if(-not $path.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -or (Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop).Hash -ne $file.SHA256){throw ('payload SHA256 不符：'+$file.Path)}
  }
 }
+function Test-SetupDriverScopeAbsent {
+ param($Entry,[object[]]$Devices,[int]$Build)
+ if(-not $Entry.ScopeTarget){return $false}
+ $scope=@($Entry.Drivers|Where-Object Id -CEQ $Entry.ScopeTarget)
+ if($scope.Count -ne 1){throw '驅動包 ScopeTarget 不是唯一已宣告目標。'}
+ $plans=@(Get-SetupDriverTargetPlan -Target $scope[0] -Devices $Devices -Build $Build -Architecture amd64)
+ return (@($plans|Where-Object Status -notin @('Absent','NotApplicable')).Count -eq 0)
+}
+function New-SetupDriverScopeSkippedResult {
+ param($Target)
+ Write-Host ($Target.InfPath+'：NotApplicable；限定的父硬體未枚舉或OS不適用')
+ [pscustomobject]@{InfPath=$Target.InfPath;InstanceId='';Status='NotApplicable';Reason='限定的父硬體未枚舉或OS不適用，未處理此包';CurrentVersion='';TargetVersion=$Target.DriverVersion}
+}
 function Invoke-SetupOfficialDriverPackage {
  param([Parameter(Mandatory=$true)]$Entry,[Parameter(Mandatory=$true)][string]$Archive,[int]$Build,[string]$LogPath)
  if((Get-FileHash -LiteralPath $Archive -Algorithm SHA256 -ErrorAction Stop).Hash -ne $Entry.SHA256){throw '官方驅動封存檔 SHA256 不符。'}
+ if($Entry.ScopeTarget -and (Test-SetupDriverScopeAbsent -Entry $Entry -Devices @(Get-SetupDriverDeviceInventory -Targets @($Entry.Drivers)) -Build $Build)){
+  return [pscustomobject]@{PackageId=$Entry.Id;Results=@($Entry.Drivers|ForEach-Object {New-SetupDriverScopeSkippedResult -Target $_});Failures=@();RebootRequired=$false;ExtractionRoot=''}
+ }
  $stage=New-SetupDriverExtractionRoot
  Expand-DriverArchive -Archive $Archive -Destination $stage
  Assert-SetupDriverPayloadFiles -Entry $Entry -Root $stage
