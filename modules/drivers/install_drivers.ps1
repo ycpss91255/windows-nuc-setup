@@ -7,6 +7,7 @@ if($DriverPackagePath){$DriverPackagePath=$ExecutionContext.SessionState.Path.Ge
 . (Join-Path $PSScriptRoot '..\..\core\hardware.ps1')
 $ProgressPreference='SilentlyContinue'
 . (Join-Path $PSScriptRoot 'driver_archive_library.ps1')
+if($PackageOnly -and -not $DriverPackagePath){[pscustomobject]@{Applicable=$false;Reason='?芣?摰蝡???嚗?蝺???};return}
 if(-not $PackageOnly){
  $request=Select-SetupDriverRequest -PackageRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))) -DriverPackagePath $DriverPackagePath -PathSpecified:$PSBoundParameters.ContainsKey('DriverPackagePath') -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer -Interactive:((Test-SetupInteractiveHost) -and -not $NonInteractive -and -not $VerifyOnly)
  $DriverPackagePath=$request.DriverPackagePath;$ConfirmedBoard=$request.ConfirmedBoard;$ConfirmationComputer=$request.ConfirmationComputer
