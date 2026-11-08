@@ -21,3 +21,12 @@ function Invoke-StartPinsLegacyPolicy {
  if($installed.Count -ne 1){throw 'Start 政策套用後原生讀回不符，不能視為完成。'}
  return [pscustomobject]@{Success=$false;Status='PendingSignIn';PolicyInstalled=$true}
 }
+function Get-StartPinsExportState {
+ param([string]$ExportPath,$PolicyState)
+ Export-StartLayout -Path $ExportPath -ErrorAction Stop
+ $actual=[IO.File]::ReadAllText($ExportPath)|ConvertFrom-Json -ErrorAction Stop
+ if(-not $actual -or 'pinnedList' -notin @($actual.PSObject.Properties.Name) -or $null -eq $actual.pinnedList -or $actual.pinnedList -isnot [Array]){throw '開始選單原生匯出缺少有效 pinnedList，不能視為空白。'}
+ $count=@($actual.pinnedList).Count
+ $status=if($PolicyState.Status -eq 'LegacyPendingApply'){'LegacyPendingApply'}elseif($count -eq 0){'Confirmed'}else{'PendingSignIn'}
+ return [ordered]@{Success=($status -eq 'Confirmed');Status=$status;PinCount=$count;ExportPath=$ExportPath;CheckedAt=(Get-Date).ToString('o')}
+}
