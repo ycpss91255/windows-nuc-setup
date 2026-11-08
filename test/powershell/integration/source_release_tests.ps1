@@ -15,12 +15,26 @@ function WriteFile([string]$Path,[string]$Text){[IO.File]::WriteAllText((Join-Pa
 # Invoke the copied maintenance entry in a fresh PS5.1 process without PackageRoot.
 $defaultRepo=Join-Path $fixture '預設定位'
 New-Item -ItemType Directory -Path (Join-Path $defaultRepo 'script/release'),(Join-Path $defaultRepo 'doc/changelog') -Force|Out-Null
-Copy-Item -LiteralPath $prepare,(Join-Path $root 'script/release/release.ps1') -Destination (Join-Path $defaultRepo 'script/release')
+Copy-Item -LiteralPath $prepare,$builder,(Join-Path $root 'script/release/release.ps1') -Destination (Join-Path $defaultRepo 'script/release')
 [IO.File]::WriteAllText((Join-Path $defaultRepo 'doc/changelog/changelog.md'),"## [Unreleased]`n`n### Fixed`n`n- fixture change`n")
 $priorPreference=$ErrorActionPreference
 try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $defaultRepo 'script/release/prepare_release.ps1') -Version v9.8.7-rc1 > (Join-Path $fixture 'default_prepare.log') 2>&1;$prepareExit=$LASTEXITCODE}finally{$ErrorActionPreference=$priorPreference}
 Assert ($prepareExit -eq 0) 'PS5.1 新程序省略 PackageRoot 可定位腳本所屬套件'
 Assert ((Get-Content (Join-Path $defaultRepo '.version') -Raw).Trim() -eq 'v9.8.7-rc1') '預設定位只更新暫存套件的版本'
+foreach($file in @('init.cmd','windows.cmd','readme.md')){[IO.File]::WriteAllText((Join-Path $defaultRepo $file),'fixture')}
+& git.exe -C $defaultRepo init --quiet
+& git.exe -C $defaultRepo add --all
+& git.exe -C $defaultRepo -c user.name='CI Fixture' -c user.email=fixture@example.invalid commit --quiet -m fixture
+if($LASTEXITCODE -ne 0){throw '預設發布來源 Git 準備失敗。'}
+$defaultNotes=Join-Path $fixture 'default_builder_notes'
+Push-Location $fixture
+try{
+ $ErrorActionPreference='Continue'
+ & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $defaultRepo 'script/release/build_source_release.ps1') -Version v9.8.7-rc1 -OutputDirectory $defaultNotes > (Join-Path $fixture 'default_builder.log') 2>&1
+ $builderExit=$LASTEXITCODE
+}finally{$ErrorActionPreference=$priorPreference;Pop-Location}
+Assert ($builderExit -eq 0) 'PS5.1 原生 File 入口省略 PackageRoot 可產生所屬 Git 套件版本說明'
+Assert (([IO.File]::ReadAllText((Join-Path $defaultNotes 'release_notes.md'))) -ceq (Get-ReleaseNotes v9.8.7-rc1 ([IO.File]::ReadAllText((Join-Path $defaultRepo 'doc/changelog/changelog.md'))))) '預設發布根目錄不依賴呼叫位置或目前工具倉庫'
 foreach($file in @('init.cmd','windows.cmd','readme.md')){WriteFile $file 'fixture'}
 $log="## [Unreleased]`n`n### Changed`n`n- 通用 Windows 設定。`n"
 WriteFile 'doc/changelog/changelog.md' $log
