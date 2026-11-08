@@ -1,4 +1,6 @@
 ﻿{
+{
+  "debloat_library.ps1": "modules/debloat/debloat_library.ps1",
   "gui_stage_library.ps1": "core/gui_stage_library.ps1",
   "gui_worker.ps1": "core/gui_worker.ps1",
   "explorer_settings_library.ps1": "modules/explorer/explorer_settings_library.ps1",
