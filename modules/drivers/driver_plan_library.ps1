@@ -19,13 +19,14 @@ function Get-SetupDriverTargetPlan {
   $comparable=($device.DriverProvider -eq $Target.Provider -or $device.DriverProvider -in @($Target.ProviderAliases))
   if(-not [version]::TryParse([string]$Target.DriverVersion,[ref]$desired)){throw '目標驅動版本無法解析。'}
   if($device.HardwareIdsReadError){$status='Unverified';$reason='目標硬體屬性讀取失敗'}
+  elseif($device.PSObject.Properties['DriverSigned'] -and -not $device.DriverSigned){$status='Unverified';$reason='目前已載入驅動未確認簽章'}
   elseif($device.DriverProvider -eq 'Microsoft' -and $Target.Provider -ne 'Microsoft'){$status='UpdateRequired';$reason='原廠目標取代通用驅動'}
   elseif(-not $comparable -or -not [version]::TryParse([string]$device.DriverVersion,[ref]$current)){$status='Unverified';$reason='目前供應商或版本無法安全比較'}
   elseif($current -ge $desired -and $device.Status -ne 'OK'){$status='Unverified';$reason='版本已達目標但裝置狀態異常'}
   elseif($current -gt $desired){$status='NewerInstalled';$reason='保留目前較新版本'}
   elseif($current -eq $desired){$status='Current';$reason='已符合目標版本'}
   else{$status='UpdateRequired';$reason='目前版本低於已核目標'}
-  [pscustomobject]@{InstanceId=[string]$device.InstanceId;InfPath=[string]$Target.InfPath;Status=$status;Reason=$reason;CurrentVersion=[string]$device.DriverVersion;CurrentProvider=[string]$device.DriverProvider;TargetVersion=[string]$Target.DriverVersion;TargetProvider=[string]$Target.Provider;ProviderAliases=@($Target.ProviderAliases)}
+  [pscustomobject]@{InstanceId=[string]$device.InstanceId;InfPath=[string]$Target.InfPath;Status=$status;Reason=$reason;CurrentVersion=[string]$device.DriverVersion;CurrentProvider=[string]$device.DriverProvider;DriverSigned=$device.DriverSigned;TargetVersion=[string]$Target.DriverVersion;TargetProvider=[string]$Target.Provider;ProviderAliases=@($Target.ProviderAliases)}
  }
 }
 function Get-SetupDriverReadback {
@@ -35,7 +36,8 @@ function Get-SetupDriverReadback {
  if($device.Count -eq 1){
   $version=[string]$device[0].DriverVersion;$current=$null;$target=$null
   $providerMatches=($device[0].DriverProvider -eq $Plan.TargetProvider -or $device[0].DriverProvider -in @($Plan.ProviderAliases))
-  if($device[0].Status -eq 'OK' -and $providerMatches -and [version]::TryParse($version,[ref]$current) -and [version]::TryParse([string]$Plan.TargetVersion,[ref]$target)){
+  $signed=(-not $device[0].PSObject.Properties['DriverSigned'] -or $device[0].DriverSigned)
+  if($device[0].Status -eq 'OK' -and $signed -and $providerMatches -and [version]::TryParse($version,[ref]$current) -and [version]::TryParse([string]$Plan.TargetVersion,[ref]$target)){
    if($current -gt $target){$status='NewerInstalled';$reason='讀回較新版本，沒有降版'}
    elseif($current -eq $target){$status=if($Plan.Status -eq 'UpdateRequired'){'Updated'}else{'Current'};$reason='已讀回正常裝置及目標版本'}
   }
@@ -77,7 +79,7 @@ function Get-SetupDriverDeviceInventory {
    try{$ids+=@((Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName $key -ErrorAction Stop).Data)}catch{$readError=$_.Exception.Message}
   }
   $ids=@($ids|Where-Object {$_}|Select-Object -Unique)
-  [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;Class=$device.Class;HardwareIds=$ids;HardwareIdsReadError=$readError;Status=$device.Status;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion}
+  [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;Class=$device.Class;HardwareIds=$ids;HardwareIdsReadError=$readError;Status=$device.Status;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion;DriverSigned=[bool]$driver.IsSigned}
  }
 }
 function Get-SetupDriverPnpTool {
@@ -110,7 +112,7 @@ function Get-SetupDriverExtensionReadback {
   })
   $best=@($active|Sort-Object -Property Date,Version -Descending|Select-Object -First 1)
   $status='Unverified';$association='None';$current='';$reason='沒有可信且已關聯的延伸驅動套件';$canInstall=($lineage.Count -eq 0)
-  if($device.Status -ne 'OK' -or $device.HardwareIdsReadError){$reason='所綁裝置異常或硬體識別不可讀';$canInstall=$false}
+  if($device.Status -ne 'OK' -or $device.HardwareIdsReadError -or ($device.PSObject.Properties['DriverSigned'] -and -not $device.DriverSigned)){$reason='所綁裝置異常、識別不可讀或簽章未確認';$canInstall=$false}
   elseif($best.Count){
    $association='Active';$current=$best[0].Version.ToString();$desired=[version]$Target.DriverVersion
    if($best[0].Date -gt $targetDate -or ($best[0].Date -eq $targetDate -and $best[0].Version -gt $desired)){$status='NewerInstalled';$reason='同ExtensionId較新DriverVer已關聯，保留原生排名'}

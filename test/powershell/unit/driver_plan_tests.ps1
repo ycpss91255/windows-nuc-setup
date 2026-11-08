@@ -23,7 +23,7 @@ Assert ($r.Status -eq 'Unverified') 'PnP成功退出但版本未改不得報Upda
 $d.DriverVersion='22.200.0.2';$r=Get-SetupDriverReadback -Plan $p -Devices @($d)
 Assert ($r.Status -eq 'Updated') '讀回同裝置目標版本才報Updated'
 $d.Status='Error';Assert ((Get-SetupDriverReadback -Plan $p -Devices @($d)).Status -eq 'Unverified') '版本吻合但裝置錯誤不得報更新完成'
-Write-Host 'ALL PASS: 13 driver plan assertions; no host changes.'
+Write-Host 'Driver plan cases completed; continuing integrity/status checks with no host changes.'
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('driver_integrity_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
 [IO.File]::WriteAllText((Join-Path $fixture 'driver.inf'),'fixture INF');[IO.File]::WriteAllText((Join-Path $fixture 'driver.cat'),'fixture CAT')
 $t=[pscustomobject]@{InfPath='driver.inf';CatalogPath='driver.cat';InfSHA256=(Get-FileHash (Join-Path $fixture 'driver.inf')).Hash;CatalogSHA256=(Get-FileHash (Join-Path $fixture 'driver.cat')).Hash}

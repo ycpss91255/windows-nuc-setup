@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 . (Join-Path $root 'modules/drivers/driver_plan_library.ps1')
 function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Value}|ConvertTo-Json -Compress));if(-not $Value){throw $Name}}
-function Get-CimInstance {param($ClassName,$ErrorAction) [pscustomobject]@{DeviceID='USB\VID_8087&PID_0A2B\target';DriverProviderName='Intel';DriverVersion='22.200.0.2'}}
+function Get-CimInstance {param($ClassName,$ErrorAction) [pscustomobject]@{DeviceID='USB\VID_8087&PID_0A2B\target';DriverProviderName='Intel';DriverVersion='22.200.0.2';IsSigned=$true}}
 function Get-PnpDevice {param([switch]$PresentOnly,$ErrorAction) @([pscustomobject]@{InstanceId='SWD\unrelated\virtual';FriendlyName='virtual';Status='OK'},[pscustomobject]@{InstanceId='USB\VID_8087&PID_0A2B\target';FriendlyName='BT';Status='OK'})}
 $script:targetFailure=$false;$script:compatibleOnly=$false
 function Get-PnpDeviceProperty {param($InstanceId,$KeyName,$ErrorAction) if($InstanceId -like 'SWD*' -or $script:targetFailure){throw 'property read failure'};if($script:compatibleOnly){[pscustomobject]@{Data=@($(if($KeyName -eq 'DEVPKEY_Device_CompatibleIds'){'PCI\VEN_8086&DEV_A123'}else{'PCI\VEN_8086&DEV_A123&SUBSYS_20738086&REV_31'}))}}else{[pscustomobject]@{Data=@('USB\VID_8087&PID_0A2B')}}}
