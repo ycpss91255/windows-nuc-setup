@@ -152,7 +152,7 @@ jobs:
             . .\script\test\ci_tasks.ps1
             Invoke-CINative -File $tool -Arguments @('export-powershell','--source-root',$PWD.Path,'--evidence-dir',$input,'--output-dir',(Join-Path $env:RUNNER_TEMP 'powershell-raw-public'))
           } else {
-            Write-Host '尚無完成的 PowerShell 原始證據可匯出。'
+            Write-Host 'No completed PowerShell raw evidence to export.'
           }
       - name: 僅保留安全 PowerShell 原始證據七天
         if: always()
