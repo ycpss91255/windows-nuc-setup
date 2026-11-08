@@ -26,6 +26,7 @@ Assert-SetupUpdateAcl -Acl $parent -Ancestor
 Assert $true '父目錄InheritOnly不是作用於父目錄本身的DeleteChild'
 $d=Join-Path ([IO.Path]::GetTempPath()) ('stage_acl_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($d)
 $untrusted=Join-Path $d 'existing';[void][IO.Directory]::CreateDirectory($untrusted);[IO.File]::WriteAllText((Join-Path $untrusted 'keep.txt'),'keep')
+$ownedAcl=Get-Acl -LiteralPath $untrusted;$ownedAcl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User);Set-Acl -LiteralPath $untrusted -AclObject $ownedAcl
 Reject {Assert-SetupUpdateProtectedPath -Path $untrusted -Directory} '真正一般user擁有TEMP目錄拒絕SYSTEM來源' '擁有者'
 Assert ([IO.File]::ReadAllText((Join-Path $untrusted 'keep.txt')) -eq 'keep') '拒絕時保留原檔不接管ACL'
 $link=Join-Path $d 'linked';$null=New-Item -ItemType Junction -Path $link -Target $untrusted

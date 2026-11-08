@@ -1,4 +1,6 @@
 {
+  "one_drive_library.ps1": "modules/debloat/one_drive_library.ps1",
+  "update_stage_library.ps1": "modules/updates/update_stage_library.ps1",
   "update_progress_library.ps1": "modules/updates/update_progress_library.ps1",
   "update_worker_library.ps1": "modules/updates/update_worker_library.ps1",
   "update_callback.cs": "modules/updates/native/update_callback.cs",

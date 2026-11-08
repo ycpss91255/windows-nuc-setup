@@ -76,9 +76,11 @@ try{
  Add-Check '四個圖示的實際排列座標' ([bool]$fresh.Success) ('本輪即時結果：'+($fresh|ConvertTo-Json -Compress -Depth 5))
 }catch{Add-Check '四個圖示的實際排列座標' $false $_.Exception.Message}
 }else{$checks.Add((New-SetupSkippedCheck -Name '四個圖示的實際排列座標' -Reason $layoutDecision.Reason));Write-Host ('[略過] '+$layoutDecision.Reason)}
-$updatePath=Join-Path $env:ProgramData 'NUC8-Setup\WindowsUpdate\WindowsUpdate-Result.json'
-if(Test-Path $updatePath){$updates=Get-Content $updatePath -Raw|ConvertFrom-Json;Add-Check '最近一次更新結果' (Test-WindowsUpdateResult $updates) ('完成時間：'+$updates.CompletedAt+'；安裝項目：'+$updates.Updates.Count)}
-else{Add-Check '最近一次更新結果' $false '尚未找到本工具的更新結果'}
+try{
+ $commonData=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
+ $updates=Read-SetupUpdateResult -CommonDataRoot $commonData -LegacyRoot (Join-Path $commonData 'NUC8-Setup/WindowsUpdate') -UserSid ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -Computer $env:COMPUTERNAME
+ Add-Check '最近一次更新結果' (Test-WindowsUpdateResult $updates) ('完成時間：'+$updates.CompletedAt+'；安裝項目：'+$updates.Updates.Count+'；本輪ID：'+$updates.RunId)
+}catch{Add-Check '最近一次更新結果' $false $_.Exception.Message}
 $reboot=(Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')
 Add-Check '無待處理重新開機' (-not $reboot) $(if($reboot){'Windows 要求重新開機；目前不會自動重開'}else{'未偵測到待重新開機'})
 $apps=Get-Content (Resolve-NucPath 'debloat_apps.txt')|Where-Object {$_ -and -not $_.StartsWith('#')}

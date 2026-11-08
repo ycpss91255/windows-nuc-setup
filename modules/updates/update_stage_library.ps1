@@ -144,5 +144,7 @@ function Read-SetupUpdateResult {
  Assert-SetupUpdateProtectedPath $path
  $result=Get-Content -LiteralPath $path -Raw -Encoding UTF8|ConvertFrom-Json
  if($result.UserSID -cne $UserSid -or $result.Computer -cne $Computer -or $result.RunId -cne $context.RunId){throw '更新結果身分或本輪ID不符。'}
+ if($result.SearchResultCode -ne 2){throw '更新搜尋未完整成功，不能視為沒有更新。'}
+ if($result.Selected -gt 0 -and $result.DownloadResultCode -ne 2){throw '更新下載未完整成功。'}
  return $result
 }

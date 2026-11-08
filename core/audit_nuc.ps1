@@ -25,7 +25,12 @@ try{$report.TPM=Get-Tpm|Select-Object TpmPresent,TpmReady,TpmEnabled}catch{$repo
 try{$report.SecureBoot=Confirm-SecureBootUEFI}catch{$report.SecureBoot=$_.Exception.Message}
 $report.RebootRequired=((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'))
 $report.UpdateTask=@(Get-ScheduledTask -TaskName NUC8-Setup-WindowsUpdate -ErrorAction SilentlyContinue|Select-Object State)
-$report.UpdateResult=if(Test-Path (Join-Path $env:ProgramData 'NUC8-Setup\WindowsUpdate\WindowsUpdate-Result.json')){Get-Content (Join-Path $env:ProgramData 'NUC8-Setup\WindowsUpdate\WindowsUpdate-Result.json') -Raw|ConvertFrom-Json}else{$null}
+. (Resolve-NucPath 'update_stage_library.ps1')
+$report.UpdateResult=$null
+try{
+ $commonData=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
+ $report.UpdateResult=Read-SetupUpdateResult -CommonDataRoot $commonData -LegacyRoot (Join-Path $commonData 'NUC8-Setup/WindowsUpdate') -UserSid ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -Computer $env:COMPUTERNAME
+}catch{$report.UpdateResultError=$_.Exception.Message}
 $report|ConvertTo-Json -Depth 7|Set-Content (Resolve-NucPath 'Audit-Result.json') -Encoding utf8
 Write-Host '=== Windows 檢查結果 ===' -ForegroundColor Cyan
 Write-Host ('SSH：'+$report.SSH.State+'；啟動方式：'+$report.SSH.StartMode)

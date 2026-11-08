@@ -25,7 +25,7 @@ try{
 }finally{$stage.Lock.Dispose()}
 $stage=New-SetupUpdateStage @call
 try{
- $result=@{RunId=$stage.Context.RunId;Computer=$call.Computer;UserSID=$call.UserSid;Selected=0;Updates=@();CompletedAt='fixture'}
+ $result=@{RunId=$stage.Context.RunId;Computer=$call.Computer;UserSID=$call.UserSid;SearchResultCode=2;Selected=0;Updates=@();CompletedAt='fixture'}
  $result|ConvertTo-Json|Set-Content (Join-Path $stage.Path 'WindowsUpdate-Result.json') -Encoding UTF8
  $r=Read-SetupUpdateResult -CommonDataRoot $common -LegacyRoot (Join-Path $d 'legacy') -UserSid $call.UserSid -Computer $call.Computer
   Assert ($r.RunId -eq $stage.Context.RunId) '結果只接受本機本帳號與受保護context本輪ID'
@@ -34,6 +34,15 @@ try{
  $result.SearchResultCode=2
  $result.RunId=[guid]::NewGuid().ToString();$result|ConvertTo-Json|Set-Content (Join-Path $stage.Path 'WindowsUpdate-Result.json') -Encoding UTF8
  Reject {Read-SetupUpdateResult -CommonDataRoot $common -LegacyRoot (Join-Path $d 'legacy') -UserSid $call.UserSid -Computer $call.Computer} '舊輪成功結果不得混用' '身分或本輪'
+ $result.RunId=$stage.Context.RunId;$result|ConvertTo-Json|Set-Content (Join-Path $stage.Path 'WindowsUpdate-Result.json') -Encoding UTF8
+ Reject {Read-SetupUpdateResult -CommonDataRoot $common -UserSid 'S-1-5-21-1-2-3-9999' -Computer $call.Computer} '其他帳號不接受既有更新結果' '身分或本輪'
+ Reject {Read-SetupUpdateResult -CommonDataRoot $common -UserSid $call.UserSid -Computer 'other-pc'} '其他電腦不接受既有更新結果' '身分或本輪'
+ $legacy=Join-Path $common 'legacy';[void][IO.Directory]::CreateDirectory($legacy)
+ Move-Item -LiteralPath (Join-Path $stage.Path 'WindowsUpdate-Result.json') -Destination (Join-Path $legacy 'WindowsUpdate-Result.json')
+ $fallback=Read-SetupUpdateResult -CommonDataRoot $common -LegacyRoot $legacy -UserSid $call.UserSid -Computer $call.Computer
+ Assert ($fallback.RunId -eq $stage.Context.RunId) '舊位置fallback仍須同protected context本輪身分'
+ [IO.File]::WriteAllText((Join-Path $legacy 'WindowsUpdate-Result.json'),'{"Selected":0,"Updates":[]}')
+ Reject {Read-SetupUpdateResult -CommonDataRoot $common -LegacyRoot $legacy -UserSid $call.UserSid -Computer $call.Computer} '無身分metadata舊結果保留但不假通過' '身分或本輪'
 }finally{$stage.Lock.Dispose()}
 Assert (Test-Path (Join-Path $stage.Path 'Update-Worker.ps1')) '完成測試保留stage不遞迴刪除資料'
 $verifyText=Get-Content (Join-Path $root 'core/verification_library.ps1') -Raw
