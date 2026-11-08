@@ -2,6 +2,8 @@ package unit_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	rc "windows_setup/script/test/repo_coverage"
@@ -18,6 +20,14 @@ func TestCMDLauncherCatalogAndUnsupportedSyntax(t *testing.T) {
 			t.Fatalf("accepted unsupported %q", bad)
 		}
 	}
+}
+
+func TestCMDInventoryExplainsDirectiveAndUnknownCommands(t *testing.T){
+ root:=t.TempDir();os.WriteFile(filepath.Join(root,"known.cmd"),[]byte("@echo off\npowershell.exe -File \"%~dp0run.ps1\"\n"),0600);os.WriteFile(filepath.Join(root,"unknown.cmd"),[]byte("@echo off\necho unknown\n"),0600)
+ inv,err:=rc.ScanInventory(root);if err!=nil{t.Fatal(err)}
+ if len(inv.Blockers)!=1 || !strings.Contains(inv.Blockers[0],"unknown.cmd"){t.Fatalf("unsupported CMD missing blocker: %+v",inv)}
+ found:=false;for _,e:=range inv.Excluded{if e.Path=="known.cmd#echo" && strings.Contains(e.Reason,"display directive"){found=true}}
+ if !found{t.Fatal("echo exclusion not explicitly recorded")}
 }
 
 func TestCMDRejectsAmbiguousRawJSON(t *testing.T) {
