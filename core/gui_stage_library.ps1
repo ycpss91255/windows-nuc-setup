@@ -76,3 +76,120 @@ function New-SetupGuiProtectedDirectory {
  }
  Assert-SetupGuiProtectedPath -Path $Path -Directory -UserSid $UserSid
 }
+function Get-SetupGuiStageFiles {
+ param([string]$Role)
+ if($Role -cne 'Explorer'){throw 'GUI worker角色尚未核准。'}
+ return @('core/gui_stage_library.ps1','core/gui_worker.ps1','modules/explorer/explorer_settings_library.ps1','modules/explorer/native/explorer.cs')
+}
+function Get-SetupGuiRunPaths {
+ param([string]$CommonDataRoot,[string]$Role,[string]$RunId)
+ $null=Get-SetupGuiStageFiles $Role
+ $guid=[guid]::Empty
+ if(-not [guid]::TryParse($RunId,[ref]$guid) -or $guid.ToString('D') -cne $RunId){throw 'GUI worker本輪ID格式不符。'}
+ $roleRoot=Join-Path (Join-Path ([IO.Path]::GetFullPath($CommonDataRoot)) 'windows_setup_gui') $Role.ToLowerInvariant()
+ $runRoot=Join-Path $roleRoot $RunId
+ [pscustomobject]@{RoleRoot=$roleRoot;RunRoot=$runRoot;CodeRoot=(Join-Path $runRoot 'code');DataRoot=(Join-Path $runRoot 'data')}
+}
+function Assert-SetupGuiCaller {
+ param([string]$UserSid,[int]$CallerSession,[int]$DesktopSession,[string]$Computer)
+ if($UserSid -notmatch '^S-1-(5-21|12-1)-\d+(-\d+)+$' -or [string]::IsNullOrWhiteSpace($Computer)){throw 'GUI worker呼叫身分格式不符。'}
+ if($CallerSession -lt 0 -or $DesktopSession -le 0 -or ($CallerSession -gt 0 -and $CallerSession -ne $DesktopSession)){throw 'GUI worker必須對應同一使用者的唯一互動桌面。'}
+}
+function Write-SetupGuiAtomicJson {
+ param([string]$Path,$Value,[string]$UserSid)
+ $parent=Split-Path $Path -Parent
+ Assert-SetupGuiProtectedPath $parent -Directory -UserSid $UserSid
+ if(Test-Path -LiteralPath $Path){Assert-SetupGuiProtectedPath $Path -UserSid $UserSid}
+ $temporary=Join-Path $parent ([guid]::NewGuid().ToString('N')+'.tmp')
+ [IO.File]::WriteAllText($temporary,($Value|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($true))
+ Assert-SetupGuiProtectedPath $temporary -UserSid $UserSid
+ if(Test-Path -LiteralPath $Path){[IO.File]::Replace($temporary,$Path,[Management.Automation.Language.NullString]::Value)}else{[IO.File]::Move($temporary,$Path)}
+}
+function New-SetupGuiStage {
+ param([Parameter(Mandatory=$true)][string]$SourceRoot,[Parameter(Mandatory=$true)][string]$CommonDataRoot,
+ [string]$Role,[string]$UserSid,[int]$CallerSession,[int]$DesktopSession,[string]$Computer,[switch]$VerifyOnly)
+ $ErrorActionPreference='Stop'
+ $manifest=@(Get-SetupGuiStageFiles $Role)
+ Assert-SetupGuiCaller -UserSid $UserSid -CallerSession $CallerSession -DesktopSession $DesktopSession -Computer $Computer
+ Assert-SetupGuiAncestors $CommonDataRoot
+ $paths=Get-SetupGuiRunPaths -CommonDataRoot $CommonDataRoot -Role $Role -RunId ([guid]::NewGuid().ToString('D'))
+ New-SetupGuiProtectedDirectory (Split-Path $paths.RoleRoot -Parent)
+ New-SetupGuiProtectedDirectory $paths.RoleRoot
+ $lockPath=Join-Path $paths.RoleRoot 'stage.lock'
+ if(Test-Path -LiteralPath $lockPath){Assert-SetupGuiProtectedPath $lockPath}
+ try{$lock=[IO.File]::Open($lockPath,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}catch{throw 'GUI stage已被另一個程序使用，未複製或啟動工作。'}
+ try{
+  Assert-SetupGuiProtectedPath $lockPath
+  Assert-SetupGuiAncestors $CommonDataRoot
+  foreach($path in @($paths.RunRoot,$paths.CodeRoot)){New-SetupGuiProtectedDirectory $path}
+  New-SetupGuiProtectedDirectory $paths.DataRoot -UserSid $UserSid
+  $files=@()
+  foreach($name in $manifest){
+   $source=Join-Path $SourceRoot $name;Assert-SetupGuiPlainPath $source
+   if(-not(Test-Path -LiteralPath $source -PathType Leaf)){throw ('GUI worker來源缺少檔案：'+$name)}
+   $expected=(Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+   $parent=$paths.CodeRoot
+   foreach($part in @($name.Split('/')[0..($name.Split('/').Length-2)])){$parent=Join-Path $parent $part;New-SetupGuiProtectedDirectory $parent}
+   $target=Join-Path $paths.CodeRoot $name;Assert-SetupGuiPlainPath $target
+   if(Test-Path -LiteralPath $target){throw 'GUI worker全新stage已有非預期檔案，拒絕覆寫。'}
+   Copy-Item -LiteralPath $source -Destination $target -ErrorAction Stop
+   Assert-SetupGuiProtectedPath $target
+   if((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -cne $expected -or (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -cne $expected){throw 'GUI worker來源複製前後雜湊不符。'}
+   $files+=@([pscustomobject]@{Name=$name;SHA256=$expected.ToLowerInvariant()})
+  }
+  $context=[pscustomobject][ordered]@{Schema=1;Role=$Role;RunId=(Split-Path $paths.RunRoot -Leaf);Computer=$Computer;CallerSID=$UserSid;CallerSession=$CallerSession;UserSID=$UserSid;DesktopSession=$DesktopSession;VerifyOnly=[bool]$VerifyOnly;Files=$files}
+  Write-SetupGuiAtomicJson -Path (Join-Path $paths.CodeRoot 'context.json') -Value $context
+  $verified=Read-SetupGuiContext -CodeRoot $paths.CodeRoot -CommonDataRoot $CommonDataRoot -Role $Role -RunId $context.RunId
+  [pscustomobject]@{CodeRoot=$paths.CodeRoot;DataRoot=$paths.DataRoot;CommonDataRoot=$CommonDataRoot;Lock=$lock;Context=$verified}
+ }catch{$lock.Dispose();throw}
+}
+function Read-SetupGuiContext {
+ param([string]$CodeRoot,[string]$CommonDataRoot,[string]$Role,[string]$RunId)
+ $paths=Get-SetupGuiRunPaths -CommonDataRoot $CommonDataRoot -Role $Role -RunId $RunId
+ if([IO.Path]::GetFullPath($CodeRoot) -ine $paths.CodeRoot){throw 'GUI worker必須使用固定角色與本輪code目錄。'}
+ Assert-SetupGuiAncestors $CommonDataRoot
+ Assert-SetupGuiProtectedPath (Split-Path $paths.RoleRoot -Parent) -Directory
+ Assert-SetupGuiProtectedPath $paths.RoleRoot -Directory
+ Assert-SetupGuiProtectedPath $paths.RunRoot -Directory
+ Assert-SetupGuiProtectedPath $CodeRoot -Directory
+ $path=Join-Path $CodeRoot 'context.json';Assert-SetupGuiProtectedPath $path
+ $context=Get-Content -LiteralPath $path -Raw -Encoding UTF8|ConvertFrom-Json
+ if($context.Schema -ne 1 -or $context.Role -cne $Role -or $context.RunId -cne $RunId -or $context.CallerSID -cne $context.UserSID -or $context.VerifyOnly -isnot [bool] -or $context.CallerSession -isnot [int] -or $context.DesktopSession -isnot [int]){throw 'GUI worker context身分或格式不符。'}
+ Assert-SetupGuiCaller -UserSid $context.UserSID -CallerSession $context.CallerSession -DesktopSession $context.DesktopSession -Computer $context.Computer
+ $expected=@(Get-SetupGuiStageFiles $Role|Sort-Object)
+ if(@($context.Files).Count -ne $expected.Count -or (@($context.Files|ForEach-Object Name|Sort-Object) -join '|') -cne ($expected -join '|')){throw 'GUI worker context來源清單不符。'}
+ foreach($file in $context.Files){
+  if($file.SHA256 -cnotmatch '^[a-f0-9]{64}$'){throw 'GUI worker context雜湊格式不符。'}
+  $target=Join-Path $CodeRoot $file.Name;Assert-SetupGuiProtectedPath $target
+  if((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant() -cne $file.SHA256){throw ('GUI worker stage來源雜湊不符：'+$file.Name)}
+ }
+ Assert-SetupGuiProtectedPath $paths.DataRoot -Directory -UserSid $context.UserSID
+ return $context
+}
+function Assert-SetupGuiWorkerScope {
+ param($Context,$Scope)
+ if($Scope.UserSID -cne $Context.UserSID -or $Scope.Computer -cne $Context.Computer -or $Scope.SessionId -ne $Context.DesktopSession -or $Scope.SessionId -le 0){throw 'GUI worker實際執行身分或桌面不符，未套用任何設定。'}
+}
+function Get-SetupGuiResultName {
+ param($Context)
+ $null=Get-SetupGuiStageFiles $Context.Role
+ if($Context.VerifyOnly){return 'Explorer-Verification.json'}
+ return 'Explorer-Result.json'
+}
+function Write-SetupGuiResult {
+ param([string]$DataRoot,$Context,[Collections.IDictionary]$Result)
+ $envelope=[ordered]@{Schema=1;Role=$Context.Role;RunId=$Context.RunId;UserSID=$Context.UserSID;SessionId=$Context.DesktopSession;Computer=$Context.Computer;VerifyOnly=$Context.VerifyOnly}
+ foreach($name in $Result.Keys){if($envelope.Contains($name)){throw 'GUI worker結果不可覆寫本輪身分。'};$envelope[$name]=$Result[$name]}
+ Write-SetupGuiAtomicJson -Path (Join-Path $DataRoot (Get-SetupGuiResultName $Context)) -Value $envelope -UserSid $Context.UserSID
+}
+function Read-SetupGuiResult {
+ param($Stage)
+ $context=Read-SetupGuiContext -CodeRoot $Stage.CodeRoot -CommonDataRoot $Stage.CommonDataRoot -Role $Stage.Context.Role -RunId $Stage.Context.RunId
+ if(($context|ConvertTo-Json -Depth 8 -Compress) -cne ($Stage.Context|ConvertTo-Json -Depth 8 -Compress)){throw 'GUI worker context在本輪執行期間改變。'}
+ $paths=Get-SetupGuiRunPaths -CommonDataRoot $Stage.CommonDataRoot -Role $context.Role -RunId $context.RunId
+ if([IO.Path]::GetFullPath($Stage.DataRoot) -ine $paths.DataRoot){throw 'GUI worker結果必須使用本輪固定data目錄。'}
+ $path=Join-Path $paths.DataRoot (Get-SetupGuiResultName $context);Assert-SetupGuiProtectedPath $path -UserSid $context.UserSID
+ $result=Get-Content -LiteralPath $path -Raw -Encoding UTF8|ConvertFrom-Json
+ if($result.Schema -ne 1 -or $result.Role -cne $context.Role -or $result.RunId -cne $context.RunId -or $result.UserSID -cne $context.UserSID -or $result.Computer -cne $context.Computer -or $result.SessionId -ne $context.DesktopSession -or $result.VerifyOnly -isnot [bool] -or $result.VerifyOnly -ne $context.VerifyOnly -or $result.Success -isnot [bool]){throw 'GUI worker結果身分或本輪ID不符。'}
+ return $result
+}
