@@ -11,6 +11,7 @@ $ssh=Join-Path $temp 'ssh.ps1'
 $global:initFirewallPass=$true
 $global:initSshCalls=0;$global:initSshFail=$false
 function Save-InitProvisioningState {param($State,$StatePath) $script:lastPhase=$State.Phase}
+function Get-NetIPAddress {param($AddressFamily,$ErrorAction) @()}
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) [pscustomobject]@{State='Running';StartMode='Auto'}}
 $state=New-InitProvisioningState 'fixture-machine' 'TEST' 'Z:\removed_usb' ('c'*64)
 $state.TargetUserName='fixture';$state.TargetSid='S-1-5-21-1-2-3-1001';$state.Phase='AwaitingLogon'
