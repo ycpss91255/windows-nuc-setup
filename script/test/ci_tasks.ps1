@@ -41,3 +41,16 @@ function Get-CIPortalParameters {
  if($EventRef -eq 'refs/heads/main'){$parameters.MainRunId=$RunId}
  return $parameters
 }
+
+function Write-CIFailureDiagnostics {
+ param([Parameter(Mandatory=$true)][string]$ReportDirectory,[ValidateSet('Unit.uac_helpers','Integration.managed_catalog')][string[]]$SuiteNames=@('Unit.uac_helpers','Integration.managed_catalog'))
+ $directory=[IO.Path]::GetFullPath($ReportDirectory)
+ if((Test-Path -LiteralPath $directory) -and ((Get-Item -LiteralPath $directory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Diagnostic report directory cannot be a reparse point.'}
+ foreach($suite in $SuiteNames){
+  $name=$suite+'.log';$path=Join-Path $directory $name
+  Write-Output ('CI diagnostic: '+$name)
+  if(-not(Test-Path -LiteralPath $path -PathType Leaf)){Write-Output '    unavailable';continue}
+  if((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Diagnostic suite log cannot be a reparse point.'}
+  foreach($line in @(Get-Content -LiteralPath $path -Encoding UTF8 -Tail 80)){Write-Output ('    '+$line)}
+ }
+}

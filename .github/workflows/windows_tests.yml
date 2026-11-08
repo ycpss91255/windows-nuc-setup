@@ -107,6 +107,11 @@ jobs:
       - name: 執行 Windows PowerShell 5.1 隔離測試
         run: |
           & .\script\test\run_ci.ps1 -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results')
+      - name: 顯示固定失敗測試的有限診斷
+        if: failure()
+        run: |
+          . .\script\test\ci_tasks.ps1
+          Write-CIFailureDiagnostics -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results')
       - name: 產生明確標示的合成首頁驗收樣本
         if: always()
         run: |
