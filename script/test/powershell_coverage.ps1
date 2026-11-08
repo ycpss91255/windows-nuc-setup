@@ -2,6 +2,7 @@
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)][string]$ManifestPath,[Parameter(Mandatory=$true)][string]$OutputDirectory,[int]$WorkerIndex=-1,[string]$PesterModule,[string]$PwshPath,[ValidateRange(1,2)][int]$ThrottleLimit=1)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'powershell_worker_diagnostics.ps1')
 $version='6.0.0'
 # SHA512 from the official Gallery version metadata, not from a local binary.
 $packageHash='AHIAm7QW11As3sjMayo1rPU4JVIEfBL+ZILAyTyDnMPxMwLFQ3VeAA0prFTx+Y4DgZCUnH2N4+Xb0HDQua2EKA=='
@@ -137,7 +138,13 @@ for($offset=0;$offset -lt $tests.Count;$offset+=$ThrottleLimit){
    $i=$running.Index;$requestedEngine=$running.Engine;$launcherHash=$running.LauncherHash
    $running.Process.WaitForExit()
    $nativeExit=$running.Process.ExitCode
-   if($null -eq $nativeExit -or $nativeExit -ne 0){throw ('PowerShell coverage worker failed: index='+$i+' exit='+$nativeExit)}
+   if($null -eq $nativeExit -or $nativeExit -ne 0){
+    try{
+     $diagnostic=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $source -TestFile ([string]$manifest.Tests[$i]) -WorkerIndex $i -Engine $requestedEngine -NativeExitCode $(if($null -eq $nativeExit){-1}else{$nativeExit}) -StandardOutputPath (Join-Path $output ('worker_'+$i+'.private.stdout.log')) -StandardErrorPath (Join-Path $output ('worker_'+$i+'.private.stderr.log')) -AllowedFiles (@($manifest.Sources)+@($manifest.Tests)+@($manifest.Wrapper))
+     Write-Host ('PowerShell worker failure diagnostic: '+($diagnostic|ConvertTo-Json -Depth 5 -Compress))
+    }catch{Write-Host 'PowerShell worker failure diagnostic unavailable; original native failure is retained.'}
+    throw ('PowerShell coverage worker failed: index='+$i+' exit='+$nativeExit)
+   }
  $worker=Get-Content -LiteralPath (Join-Path $output ('worker_'+$i+'.json')) -Raw -Encoding UTF8|ConvertFrom-Json
  if($worker.ProcessId -ne $running.Process.Id -or $worker.Engine -cne $requestedEngine -or $worker.EngineSHA256 -cne $launcherHash -or -not(Test-EngineVersion $requestedEngine $worker.EngineVersion)){throw '子程序引擎版本或執行檔雜湊不一致。'}
  if(($worker.Sources|ConvertTo-Json -Compress) -cne ($hashes|ConvertTo-Json -Compress)){throw '子程序來源雜湊不一致。'}
