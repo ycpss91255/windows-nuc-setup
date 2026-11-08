@@ -1,6 +1,7 @@
 ﻿#Requires -Version 5.1
 param([Parameter(Mandatory=$true)][string]$PackageRoot,[switch]$SourceOnly)
 $ErrorActionPreference='Stop'
+$PackageRoot=(Get-Item -LiteralPath $PackageRoot -ErrorAction Stop).FullName
 $count=0
 function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Message)};$script:count++;Write-Host ('PASS: '+$Message)}
 . (Join-Path $PackageRoot 'core\paths.ps1')
