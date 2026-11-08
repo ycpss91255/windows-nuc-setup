@@ -3,7 +3,10 @@ package repo_coverage
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 type psSource struct {
@@ -16,18 +19,20 @@ type psCommand struct {
 	Hit                              *bool
 }
 type psWorker struct {
-	ProcessId     int
-	PesterVersion string
-	Sources       []psSource
-	Commands      []psCommand
+	ProcessId                           int
+	Engine, EngineVersion, EngineSHA256 string
+	PesterVersion                       string
+	Sources                             []psSource
+	Commands                            []psCommand
 }
 type psEvidence struct {
 	SchemaVersion                        int
 	PesterVersion, PackageSHA512, Metric string
 	Sources                              []psSource
 	Workers                              []struct {
-		Index, ProcessId int
-		Evidence         string
+		Index, ProcessId                    int
+		Evidence                            string
+		Engine, EngineVersion, EngineSHA256 string
 	}
 	Covered, Total int
 }
@@ -84,7 +89,7 @@ func NormalizePowerShell(data []byte, read func(string) ([]byte, error), invento
 		if err := strictJSON(bytes, &worker); err != nil {
 			return r, nil, err
 		}
-		if worker.PesterVersion != evidence.PesterVersion || worker.ProcessId != descriptor.ProcessId || worker.ProcessId <= 0 || len(worker.Sources) != len(expected) {
+		if descriptor.Index != index || !validPowerShellEngine(descriptor.Engine, descriptor.EngineVersion, descriptor.EngineSHA256) || worker.Engine != descriptor.Engine || worker.EngineVersion != descriptor.EngineVersion || worker.EngineSHA256 != descriptor.EngineSHA256 || worker.PesterVersion != evidence.PesterVersion || worker.ProcessId != descriptor.ProcessId || worker.ProcessId <= 0 || len(worker.Sources) != len(expected) {
 			return r, nil, fmt.Errorf("PowerShell worker identity mismatch")
 		}
 		seenSources := map[string]bool{}
@@ -156,4 +161,16 @@ func NormalizePowerShell(data []byte, read func(string) ([]byte, error), invento
 	}
 	sort.Slice(catalogs, func(i, j int) bool { return catalogs[i].Path < catalogs[j].Path })
 	return r, catalogs, nil
+}
+
+// Engine provenance is replayed alongside the raw command spans rather than
+// discarded by a permissive decoder. These are the collector's engine rules.
+func validPowerShellEngine(engine, version, hash string) bool {
+	if !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(hash) || !regexp.MustCompile(`^[0-9]+\.[0-9]+(\.[0-9]+){0,2}$`).MatchString(version) {
+		return false
+	}
+	parts := strings.Split(version, ".")
+	major, _ := strconv.Atoi(parts[0])
+	minor, _ := strconv.Atoi(parts[1])
+	return engine == "powershell" && major == 5 && minor == 1 || engine == "pwsh" && major == 7 && minor >= 4
 }
