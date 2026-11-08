@@ -4,6 +4,8 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Message}}
 $collector=Join-Path $root 'script/test/powershell_coverage.ps1'
 Assert (Test-Path -LiteralPath $collector) '提供原始 PowerShell 檔案的真覆蓋率收集器'
+$baseline=Join-Path $root 'test/powershell/coverage/create_baseline_manifest.ps1'
+Assert (Test-Path -LiteralPath $baseline) '提供明確安全 suite 清單的正式基線準備入口'
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('ps coverage 中文 '+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture|Out-Null
 function WriteFixture($Name,$Text){[IO.File]::WriteAllText((Join-Path $fixture $Name),$Text,[Text.UTF8Encoding]::new($true))}
@@ -75,3 +77,10 @@ $wrappedPath=Join-Path $fixture 'wrapped.json';[IO.File]::WriteAllText($wrappedP
 Assert ($LASTEXITCODE -eq 0) '既有獨立測試可透過 Pester worker 包裝而不改來源'
 [xml]$wrappedXml=Get-Content (Join-Path $fixture 'wrapped/coverage.xml') -Raw
 Assert (@(($wrappedXml.coverage.packages.package.classes.class|Where-Object filename -eq 'branch.ps1').lines.line|Where-Object {$_.number -eq '3' -and $_.hits -eq '1'}).Count -eq 1) 'wrapper 捕捉原始被呼叫檔案的真命中'
+$baselinePath=Join-Path $fixture 'baseline.json'
+& $baseline -SourceRoot $root -OutputPath $baselinePath
+$baselineInput=Get-Content $baselinePath -Raw|ConvertFrom-Json
+Assert ($baselineInput.Tests.Count -eq 23 -and @($baselineInput.Tests|Where-Object {$_ -match 'powershell_coverage|report_scope|simple_portal'}).Count -eq 0) '既有23套安全測試明列且不遞迴收集器'
+$expectedSources=@(git -C $root ls-files '*.ps1'|Where-Object {$_ -match '^(core|modules|script)/' -and $_ -notmatch '^modules/debloat/win11debloat/'})
+Assert (($baselineInput.Sources -join ',') -ceq (($expectedSources|Sort-Object) -join ',')) '基線涵蓋全部已追蹤正式PowerShell來源'
+Assert ($baselineInput.Wrapper -ceq 'test/powershell/coverage/safe_suite.ps1') '正式基線使用具名原檔 wrapper'
