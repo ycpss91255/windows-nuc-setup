@@ -124,7 +124,7 @@ function Invoke-InitProvisioningApply {
  $State.Phase='AwaitingLogon';$State.LastErrorCode='';Save-InitProvisioningState $State $StatePath
 }
 function New-InitProvisioningStage {
- param([string]$SourceRoot,[string]$StageRoot)
+ param([string]$SourceRoot,[string]$StageRoot,$InitialState)
  Assert-InitPlainPath $SourceRoot;Assert-InitPlainPath $StageRoot
  $null=Assert-InitProvisioningAsset -AssetRoot (Join-Path $SourceRoot 'modules/init/assets')
  if(Test-Path -LiteralPath $StageRoot){throw '已有 Init 續跑目錄，請從其 resume_init.cmd 繼續，不能覆寫。'}
@@ -137,7 +137,11 @@ function New-InitProvisioningStage {
   $files+='modules/ssh/'+$file.FullName.Substring($sshRoot.TrimEnd('\').Length+1).Replace('\','/')
  }
  foreach($relative in $files){$path=Join-Path $SourceRoot $relative;Assert-InitPlainPath $path;if(-not(Test-Path -LiteralPath $path -PathType Leaf)){throw ('缺少 Init 依賴：'+$relative)}}
+ if($null -eq $InitialState){throw '暫存前必須提供無帳密的初始狀態。'}
+ $finalRoot=$StageRoot
+ $StageRoot=$finalRoot+'.preparing.'+[guid]::NewGuid().ToString('N')
  New-Item -ItemType Directory -Path $StageRoot -ErrorAction Stop|Out-Null
+ try{
  Protect-InitFolder $StageRoot;Assert-InitProtectedDirectory $StageRoot
  foreach($relative in $files){
   $target=Join-Path (Join-Path $StageRoot 'runtime') $relative
@@ -147,6 +151,9 @@ function New-InitProvisioningStage {
  }
  $command='@echo off'+"`r`n"+'powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0runtime\modules\init\initialize_nuc.ps1" -ResumeStatePath "%~dp0state.json"'+"`r`n"
  [IO.File]::WriteAllText((Join-Path $StageRoot 'resume_init.cmd'),$command,[Text.Encoding]::ASCII)
+ Save-InitProvisioningState $InitialState (Join-Path $StageRoot 'state.json')
+ [IO.Directory]::Move($StageRoot,$finalRoot)
+ }catch{Write-Warning ('Init 暫存未完成；診斷目錄保留於 '+$StageRoot+'。正式續跑位置未建立，可重新執行來源入口。');throw}
 }
 function Test-InitSecurePasswordPair {
  param([Security.SecureString]$Password,[Security.SecureString]$Confirmation)
@@ -179,9 +186,8 @@ function Invoke-InitOobeFlow {
  if(Test-Path -LiteralPath $StageRoot){
   $state=Read-InitProvisioningState $statePath $context.MachineGuid $asset.PackageSHA256
  }else{
-  New-InitProvisioningStage $SourceRoot $StageRoot
   $state=New-InitProvisioningState $context.MachineGuid $context.ComputerName $SourceRoot $asset.PackageSHA256
-  Save-InitProvisioningState $state $statePath
+  New-InitProvisioningStage $SourceRoot $StageRoot $state
  }
  Write-Host ('續跑入口（USB 拔除後仍可用）：'+(Join-Path $StageRoot 'resume_init.cmd')) -ForegroundColor Cyan
  if($state.Phase -eq 'Prepared'){
