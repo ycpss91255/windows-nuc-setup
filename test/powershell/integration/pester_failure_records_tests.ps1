@@ -9,6 +9,7 @@ Put 'source.ps1' 'function Example {return 1}'
 $cases=@(
  @{Name='discovery';Phase='ContainerDiscovery';Text="throw 'PRIVATE-PESTER-FAILURE-SENTINEL'"},
  @{Name='block';Phase='BlockSetup';Text="Describe 'block' {BeforeAll {throw 'PRIVATE-PESTER-FAILURE-SENTINEL'};It 'not reached' {1|Should-Be 1}}"},
+ @{Name='teardown';Phase='BlockLifecycle';Text="Describe 'block teardown' {It 'actually passes' {Write-Host '@@ASSERT@@{`"Name`":`"owned teardown fixture executed`",`"Passed`":true}';1|Should-Be 1};AfterAll {throw 'PRIVATE-PESTER-FAILURE-SENTINEL'}}"},
  @{Name='test';Phase='TestRun';Text="Describe 'test' {It 'fails' {throw 'PRIVATE-PESTER-FAILURE-SENTINEL'}}"},
  @{Name='parse';Phase='ContainerDiscovery';Text="Describe 'PRIVATE-PESTER-FAILURE-SENTINEL' {It 'broken' {"}
 )
