@@ -34,3 +34,8 @@ Assert $integrity '安裝前真正核對INF及CAT釘選hash與CAT簽章'
 [IO.File]::WriteAllText((Join-Path $fixture 'driver.inf'),'fixture INF');function Get-AuthenticodeSignature {[pscustomobject]@{Status='NotSigned';SignerCertificate=$null}}
 $failed=$false;try{Assert-SetupDriverTargetIntegrity -Target $t -Root $fixture}catch{$failed=$true};Assert $failed 'hash相符但CAT無有效簽章拒絕'
 $t.InfPath='../outside.inf';$failed=$false;try{Assert-SetupDriverTargetIntegrity -Target $t -Root $fixture}catch{$failed=$true};Assert $failed '拒絕INF越出展開根目錄'
+$t=[pscustomobject]@{InfPath='net.inf';HardwareIds=@('USB\VID_8087&PID_0A2B');Provider='Intel Corporation';DriverVersion='22.200.0.2';MinimumBuild=22000;Architecture='amd64'}
+$d=[pscustomobject]@{InstanceId='USB\fixture';HardwareIds=$t.HardwareIds;DriverProvider=$t.Provider;DriverVersion=$t.DriverVersion;Status='Error'}
+Assert ((@(Get-SetupDriverTargetPlan -Target $t -Devices @($d) -Build 22621 -Architecture amd64))[0].Status -eq 'Unverified') '同版本但裝置異常不能列Current'
+$d.DriverVersion='23.0.0.1'
+Assert ((@(Get-SetupDriverTargetPlan -Target $t -Devices @($d) -Build 22621 -Architecture amd64))[0].Status -eq 'Unverified') '較新但裝置異常不能列正常已更新'
