@@ -12,6 +12,10 @@ Assert $rejected 'actual ci-rollup rejects failed OOBE package content inspectio
 $env:OOBE_PAYLOAD_RESULT='success'
 & ([scriptblock]::Create($scriptText))
 Assert $true 'actual ci-rollup accepts all required jobs succeeding'
+$env:POWERSHELL_COVERAGE_RESULT='failure'
+$rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
+Assert $rejected 'actual ci-rollup rejects failed or incomplete PowerShell shard matrix'
+$env:POWERSHELL_COVERAGE_RESULT='success'
 $job=[regex]::Match($workflow,'(?ms)^  oobe_payload_inspection:\r?\n(?<body>.*?)(?=^  [a-z][a-z_-]+:)').Groups['body'].Value
 Assert ($job -match 'runs-on: windows-2022' -and $job -notmatch '(?m)^    needs:') 'payload inspection runs independently on Windows'
 Assert ($job.Contains('verify_oobe_payload.ps1') -and $job.Contains('payload_baseline.json') -and $job.Contains('if: always()') -and $job.Contains('retention-days: 7')) 'CI invokes real reader with reviewed baseline and preserves failure evidence seven days'
