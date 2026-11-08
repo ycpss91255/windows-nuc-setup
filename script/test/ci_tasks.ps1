@@ -43,7 +43,7 @@ function Get-CIPortalParameters {
 }
 
 function Write-CIFailureDiagnostics {
- param([Parameter(Mandatory=$true)][string]$ReportDirectory,[ValidateSet('Unit.uac_helpers','Integration.managed_catalog')][string[]]$SuiteNames=@('Unit.uac_helpers','Integration.managed_catalog'))
+ param([Parameter(Mandatory=$true)][string]$ReportDirectory,[ValidateSet('Unit.uac_helpers','Integration.managed_catalog','Integration.collector_self_coverage','Integration.driver_source_coverage','Integration.network_helpers_coverage','Integration.powershell_coverage','Integration.powershell_engine','Integration.uac_updates_coverage','Integration.verification_coverage')][string[]]$SuiteNames=@('Unit.uac_helpers','Integration.managed_catalog'))
  $directory=[IO.Path]::GetFullPath($ReportDirectory)
  if((Test-Path -LiteralPath $directory) -and ((Get-Item -LiteralPath $directory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Diagnostic report directory cannot be a reparse point.'}
  foreach($suite in $SuiteNames){
@@ -53,4 +53,14 @@ function Write-CIFailureDiagnostics {
   if((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Diagnostic suite log cannot be a reparse point.'}
   foreach($line in @(Get-Content -LiteralPath $path -Encoding UTF8 -Tail 80)){Write-Output ('    '+$line)}
  }
+}
+function Write-CIContainerFailureDiagnostics {
+ param([Parameter(Mandatory=$true)][string]$ReportDirectory)
+ $summary=Join-Path $ReportDirectory 'public/summary.json'
+ if(-not(Test-Path -LiteralPath $summary -PathType Leaf)){Write-Output 'Container failure diagnostics unavailable before report generation.';return}
+ if((Get-Item -LiteralPath $summary -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Container diagnostic summary cannot be a reparse point.'}
+ $report=Get-Content -LiteralPath $summary -Raw -Encoding UTF8|ConvertFrom-Json
+ $approved=@('Integration.collector_self_coverage','Integration.driver_source_coverage','Integration.network_helpers_coverage','Integration.powershell_coverage','Integration.powershell_engine','Integration.uac_updates_coverage','Integration.verification_coverage')
+ $failed=@($report.Checks|Where-Object {$_.Name -cin $approved -and $_.Passed -eq $false}|ForEach-Object Name|Select-Object -Unique)
+ if($failed.Count){Write-CIFailureDiagnostics -ReportDirectory $ReportDirectory -SuiteNames $failed}
 }

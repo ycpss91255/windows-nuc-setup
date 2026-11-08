@@ -30,6 +30,8 @@ try {
  Invoke-ContainerGo -Arguments @('run','./script/test/requirements_gate','--artifact-dir',$plan.ArtifactDirectory,'--source-root','C:/workspace','--expected-sha',$plan.Commit,'--expected-run-url',$plan.RunUrl)
  exit 0
 } catch {
- Write-Error $_ -ErrorAction Continue
+ $failure=$_
+ try{Write-CIContainerFailureDiagnostics -ReportDirectory C:/reports}catch{Write-Warning 'Container diagnostics could not be read; original failure is preserved.'}
+ Write-Error $failure -ErrorAction Continue
  exit 1
 }
