@@ -15,7 +15,7 @@ func TestRepoPowerShellCoverageReplaysRawCommandUnion(t *testing.T) {
 	name := "core/logic.ps1"
 	hash := strings.Repeat("a", 64)
 	packageHash := "AHIAm7QW11As3sjMayo1rPU4JVIEfBL+ZILAyTyDnMPxMwLFQ3VeAA0prFTx+Y4DgZCUnH2N4+Xb0HDQua2EKA=="
-	proof := map[string]any{"SchemaVersion": 1, "PesterVersion": "6.0.0", "PackageSHA512": packageHash, "Metric": "FullyCoveredCommandStartLines", "Sources": []any{map[string]any{"File": name, "SHA256": hash, "ExpectedLines": []int{2}}}, "Workers": []any{map[string]any{"Index": 0, "ProcessId": 100, "Evidence": "worker_0.json"}, map[string]any{"Index": 1, "ProcessId": 101, "Evidence": "worker_1.json"}}, "Covered": 1, "Total": 1}
+	proof := map[string]any{"SchemaVersion": 1, "PesterVersion": "6.0.0", "PackageSHA512": packageHash, "Metric": "FullyCoveredCommandStartLines", "Sources": []any{map[string]any{"File": name, "SHA256": hash, "ExpectedLines": []int{2}}}, "Workers": []any{map[string]any{"Index": 0, "ProcessId": 100, "Evidence": "worker_0.json", "Engine": "powershell", "EngineVersion": "5.1.20348.1", "EngineSHA256": strings.Repeat("c", 64)}, map[string]any{"Index": 1, "ProcessId": 101, "Evidence": "worker_1.json", "Engine": "pwsh", "EngineVersion": "7.6.9", "EngineSHA256": strings.Repeat("d", 64)}}, "Covered": 1, "Total": 1}
 	evidence, _ := json.Marshal(proof)
 	data := map[string][]byte{}
 	for i := 0; i < 2; i++ {
@@ -24,6 +24,15 @@ func TestRepoPowerShellCoverageReplaysRawCommandUnion(t *testing.T) {
 			commands = append(commands, map[string]any{"File": name, "Line": 2, "Column": column, "EndLine": 2, "EndColumn": column + 1, "Hit": column == i+1})
 		}
 		worker := map[string]any{"ProcessId": 100 + i, "PesterVersion": "6.0.0", "Sources": []any{map[string]any{"File": name, "SHA256": hash}}, "Commands": commands}
+		if i == 0 {
+			worker["Engine"] = "powershell"
+			worker["EngineVersion"] = "5.1.20348.1"
+			worker["EngineSHA256"] = strings.Repeat("c", 64)
+		} else {
+			worker["Engine"] = "pwsh"
+			worker["EngineVersion"] = "7.6.9"
+			worker["EngineSHA256"] = strings.Repeat("d", 64)
+		}
 		data[fmt.Sprintf("worker_%d.json", i)], _ = json.Marshal(worker)
 	}
 	data["coverage.xml"] = cobertura(`<class filename="core/logic.ps1"><lines><line number="2" hits="1"/></lines></class>`)
@@ -39,7 +48,7 @@ func TestRepoPowerShellCoverageReplaysRawCommandUnion(t *testing.T) {
 	if err != nil || !r.Files[name][2] || len(catalog) != 1 || len(catalog[0].Lines) != 1 {
 		t.Fatalf("raw complementary commands not merged: %+v %+v %v", r, catalog, err)
 	}
-	for _, kind := range []string{"wrong_package", "wrong_version", "wrong_xml", "missing_worker", "wrong_hash", "wrong_catalog", "duplicate_span", "missing_span"} {
+	for _, kind := range []string{"wrong_package", "wrong_version", "wrong_xml", "missing_worker", "wrong_hash", "wrong_catalog", "duplicate_span", "missing_span", "engine_mismatch", "engine_hash", "engine_version", "unknown_engine", "unknown_field"} {
 		t.Run(kind, func(t *testing.T) {
 			copyData := map[string][]byte{}
 			for k, v := range data {
@@ -47,6 +56,22 @@ func TestRepoPowerShellCoverageReplaysRawCommandUnion(t *testing.T) {
 			}
 			bad := append([]byte(nil), evidence...)
 			switch kind {
+			case "engine_mismatch", "engine_hash", "engine_version", "unknown_engine", "unknown_field":
+				var w map[string]any
+				json.Unmarshal(copyData["worker_1.json"], &w)
+				switch kind {
+				case "engine_mismatch":
+					w["Engine"] = "powershell"
+				case "engine_hash":
+					w["EngineSHA256"] = strings.Repeat("f", 64)
+				case "engine_version":
+					w["EngineVersion"] = "7.3.0"
+				case "unknown_engine":
+					w["Engine"] = "injected"
+				case "unknown_field":
+					w["Surprise"] = true
+				}
+				copyData["worker_1.json"], _ = json.Marshal(w)
 			case "wrong_package":
 				bad = []byte(strings.ReplaceAll(string(bad), packageHash, strings.Repeat("A", 86)+"=="))
 			case "wrong_version":
