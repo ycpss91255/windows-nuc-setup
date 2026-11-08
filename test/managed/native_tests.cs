@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 public static class ManagedNativeTests {
  static int assertions;
  static void Assert(bool condition,string name){if(!condition)throw new Exception(name);assertions++;Console.WriteLine("PASS: "+name);}
- static void Throws(Action action,string name){bool rejected=false;try{action();}catch(InvalidOperationException){rejected=true;}Assert(rejected,name);}
+ static void Throws(Action action,string name,Type expected=null){bool rejected=false;try{action();}catch(Exception error){rejected=error.GetType()==(expected??typeof(InvalidOperationException));}Assert(rejected,name);}
  static void ExplorerCases(){
   uint settings=4;int reads=0,writes=0,broadcasts=0,freed=0;
   var api=new NucExplorerLiveV2.NativeApi();
@@ -28,12 +28,12 @@ public static class ManagedNativeTests {
   api.Release=delegate(IntPtr window,IntPtr dc){Assert(window==IntPtr.Zero && dc==(IntPtr)2,"theme releases exact acquired DC");releases++;return 1;};
   api.Pixel=delegate(IntPtr dc,int x,int y){Assert(dc==(IntPtr)2 && x==108 && y==920,"theme reads expected taskbar sample coordinate");return 0x00332211;};
   var rgb=NUC8Theme.TaskbarColor(api);Assert(rgb[0]==17 && rgb[1]==34 && rgb[2]==51 && releases==1,"theme converts COLORREF channels and releases DC");
-  api.Find=delegate(string kind,string title){return IntPtr.Zero;};Throws(delegate{NUC8Theme.TaskbarColor(api);},"missing taskbar is rejected");
+  api.Find=delegate(string kind,string title){return IntPtr.Zero;};Throws(delegate{NUC8Theme.TaskbarColor(api);},"missing taskbar is rejected",typeof(Exception));
   api.Find=delegate(string kind,string title){return (IntPtr)1;};
-  api.Rectangle=delegate(IntPtr window,out NUC8Theme.Rect rect){rect=new NUC8Theme.Rect();return false;};Throws(delegate{NUC8Theme.TaskbarColor(api);},"failed taskbar rectangle query is rejected");
-  api.Rectangle=delegate(IntPtr window,out NUC8Theme.Rect rect){rect=new NUC8Theme.Rect{Top=10,Bottom=10};return true;};Throws(delegate{NUC8Theme.TaskbarColor(api);},"empty taskbar rectangle is rejected");
+  api.Rectangle=delegate(IntPtr window,out NUC8Theme.Rect rect){rect=new NUC8Theme.Rect();return false;};Throws(delegate{NUC8Theme.TaskbarColor(api);},"failed taskbar rectangle query is rejected",typeof(Exception));
+  api.Rectangle=delegate(IntPtr window,out NUC8Theme.Rect rect){rect=new NUC8Theme.Rect{Top=10,Bottom=10};return true;};Throws(delegate{NUC8Theme.TaskbarColor(api);},"empty taskbar rectangle is rejected",typeof(Exception));
   api.Rectangle=delegate(IntPtr window,out NUC8Theme.Rect rect){rect=new NUC8Theme.Rect{Top=900,Bottom=940};return true;};
-  api.Pixel=delegate(IntPtr dc,int x,int y){return 0xffffffff;};Throws(delegate{NUC8Theme.TaskbarColor(api);},"invalid pixel result is rejected");
+  api.Pixel=delegate(IntPtr dc,int x,int y){return 0xffffffff;};Throws(delegate{NUC8Theme.TaskbarColor(api);},"invalid pixel result is rejected",typeof(Exception));
   Assert(releases==2,"theme releases DC when pixel read reports failure");
   api.Pixel=delegate(IntPtr dc,int x,int y){throw new InvalidOperationException("pixel fixture failure");};Throws(delegate{NUC8Theme.TaskbarColor(api);},"pixel exception propagates");
   Assert(releases==3,"theme releases DC when pixel read throws");
