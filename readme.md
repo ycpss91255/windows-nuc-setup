@@ -14,7 +14,7 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 
 ## 快速開始
 
-先把**完整工具包**放到 USB；GitHub 來源 ZIP 需要先[補齊必要資產](#從原始碼準備完整工具包)。以下選符合目前畫面的一種，不必先開命令列或查磁碟代號。
+第一次使用，先在一臺可上網的 Windows 電腦完成 [Release 下載、解壓與官方 Autologon 準備](#從原始碼準備完整工具包)，再把完整資料夾放到 USB。GitHub 的 Source code ZIP 不包含 Autologon EXE，也不是完整離線包；不需要 Git、Go、Docker 或 agent。準備完成後，以下選符合目前畫面的一種，不必先查磁碟代號。
 
 ### A．還在地區／Wi-Fi 初始設定畫面
 
@@ -444,16 +444,24 @@ Hosts／SSH 獨立入口為 `modules\ssh\apply_hosts_sync.cmd`、`sync_hosts.cmd
 
 ### 從原始碼準備完整工具包
 
-1. 保留主程式完整結構，不只複製 `init.cmd` 或 `windows.cmd`。
-2. 補入 `modules\accounts/Autologon64.exe`：可從已核對的主程式複製，或從 [Microsoft Sysinternals 官方頁](https://learn.microsoft.com/en-us/sysinternals/downloads/autologon) 取得；執行時驗證 Microsoft 簽章。
-3. 執行只讀主程式檢查：
+以下可以從全新的 Release 下載開始，不使用任何既有 Downloads／USB 資產。準備電腦需要 Windows 與網路；此階段只準備檔案，不執行 Init、Windows 設定或 Autologon。
 
-   ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\core\test_setup_prerequisites.ps1 -PackageOnly
+1. 開啟 [Releases](https://github.com/ycpss91255/windows_setup/releases)，選擇要使用的版本，先閱讀該版本說明與已知限制。標示 **Pre-release** 的版本是預覽版，不能當作已完成實機驗收。展開該版本的 **Assets**，下載 **Source code (zip)**。
+2. 在檔案總管對下載的 ZIP 按右鍵 →「全部解壓縮」。打開解壓後資料夾，直到同一層可看到 `init.cmd`、`windows.cmd`、`readme.md`、`core` 與 `modules`；這一層就是工具包根目錄。可將它重新命名為 `windows_setup`，保留完整內容，**不要直接在 ZIP 視窗內執行**。解壓與執行位置必須可寫入，而且不能是稍後會被清理的桌面。
+3. 開啟 [Microsoft Sysinternals Autologon 官方頁](https://learn.microsoft.com/en-us/sysinternals/downloads/autologon)，按 **Download Autologon** 取得 `Autologon.zip`，另行「全部解壓縮」。從中找到 **`Autologon64.exe`**；不要選 `Autologon.exe` 或 `Autologon64a.exe`，這套工具使用 x64 版本。
+4. 在 `Autologon64.exe` 按右鍵 →「內容」→「數位簽章」，選擇 Microsoft Corporation 的簽章並按「詳細資料」，確認顯示此數位簽章正常。若沒有簽章、不是 Microsoft 或驗證失敗，先停止，重新從官方取得並排查驗證問題，不要略過。將核對後的 **`Autologon64.exe`** 複製到剛才工具包根目錄的 **`modules\accounts`**，最終位置為 `windows_setup\modules\accounts\Autologon64.exe`；不用雙擊 EXE。
+5. 執行前閱讀 [Sysinternals 官方授權條款](https://learn.microsoft.com/en-us/sysinternals/license-terms)及下載包內的授權說明。後續 `windows.cmd` 的自動登入模組會驗證 Microsoft 簽章，並以 `/accepteula` 呼叫 Autologon 接受條款；不接受條款時不要執行該模組或 Windows 一鍵流程。下載與複製檔案本身不會設定自動登入，也不會執行 EXE。
+6. 回到工具包根目錄，在檔案總管的**位址欄**輸入 `cmd` 後按 Enter。黑色命令視窗會從這個資料夾開始；貼上以下一行並按 Enter，執行既有的只讀套件檢查：
+
+   ```cmd
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\core\test_setup_prerequisites.ps1 -PackageOnly -HardwareProfile Generic
    ```
 
-   未選擇驅動包不要求驅動檔；`-HardwareProfile Generic`／`NUC8` 只用於離線套件檢查，不可在實際設定時覆寫硬體。若要一併驗證 NUC 獨立包，加入 `-HardwareProfile NUC8 -DriverPackagePath "實際獨立包目錄"`。
-4. 通過後依 [初始設定操作](#先看目前在哪個階段) 執行 Init／Windows。原始碼不含 Autologon EXE，不能把 GitHub Source code ZIP 直接當成完整離線安裝包。
+   檢查會核對主程式檔案與語法，不安裝軟體、不變更 Windows 設定，也不代表已通過實機驗收；它不取代上一步數位簽章核對。出現缺檔或錯誤時先依訊息修正，不繼續。未選擇驅動包不要求驅動檔；`Generic` 是此離線檢查使用的設定檔，實際套用時仍自動辨識機型，不能用它強制套用特定硬體設定。
+7. 檢查成功後，將**整個**工具包根資料夾複製到可寫入的 USB；可保留名稱 `windows_setup`。確認 USB 副本內有兩個入口、`core`、`modules` 及剛補入的 EXE，不只複製 `.cmd`。也可直接在 USB 完成以上準備與檢查；不依賴固定磁碟代號或使用者名稱。
+8. 在目標電腦插上 USB：還在選擇地區／Wi-Fi 畫面時，接著按 [快速開始 A](#快速開始) 進入稽核模式並執行 Init；已登入正式帳號時，按 [快速開始 B](#快速開始) 執行 Init。兩者最後都依「接著套用設定」執行 Windows 流程及手動重開後驗收。離線稽核 Init 可先建立帳號；後續 SSH 元件安裝、Windows Update 與未快取的下載仍需要網路。
+
+若要一併檢查已準備的 NUC 獨立包，將上述檢查參數改為 `-PackageOnly -HardwareProfile NUC8 -DriverPackagePath "實際獨立包目錄"`；這只驗證檔案，不安裝驅動。完整來源包準備不代表主程式自帶各硬體驅動，詳見下一節。以上採用官方下載與既有套件檢查，無需額外開發環境。
 
 ### 準備獨立 NUC 驅動包
 
