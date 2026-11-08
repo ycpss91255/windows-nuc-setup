@@ -1,4 +1,6 @@
 ﻿#Requires -Version 5.1
+# Lease registration and cleanup share these pure safety helpers after New returns.
+. (Join-Path $PSScriptRoot '../updates/update_stage_library.ps1')
 function Get-SetupDriverTargetPlan {
  param([Parameter(Mandatory=$true)]$Target,[object[]]$Devices=@(),[int]$Build,[string]$Architecture)
  $matches=@($Devices|Where-Object {$ids=@($_.HardwareIds);@($Target.HardwareIds|Where-Object {$_ -in $ids}).Count -gt 0})
@@ -209,7 +211,6 @@ function Remove-SetupDriverExtractionRoot {
  return $true
 }
 function New-SetupDriverExtractionRoot {
- . (Join-Path $PSScriptRoot '../updates/update_stage_library.ps1')
  $common=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
  Assert-SetupUpdateAncestors -CommonDataRoot $common
  $parent=Get-SetupDriverCacheParent
