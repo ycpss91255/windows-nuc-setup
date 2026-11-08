@@ -57,7 +57,7 @@ func TestCMDOriginalLaunchersWithRealProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(catalogs) != 30 || len(report.Files) != 30 {
+	if len(sources) == 0 || len(catalogs) != len(sources) || len(report.Files) != len(sources) {
 		t.Fatalf("not all launchers measured: %d", len(catalogs))
 	}
 	for _, file := range report.Files {
