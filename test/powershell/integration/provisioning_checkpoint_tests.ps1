@@ -5,10 +5,10 @@ $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 Assert ([bool](Get-Command Confirm-InitAccountCheckpoint -ErrorAction SilentlyContinue)) 'Init completes account checkpoint without installing SSH'
 $script:saves=New-Object Collections.Generic.List[object];$script:installed=$true
-$sid='S-1-5-21-1-2-3-1001';$hash='a'*64
+$sid='S-1-5-21-1-2-3-1001';$script:targetSid=$sid;$hash='a'*64
 $context=@{MachineGuid='fixture';Sid=$sid;ProfilePath=$env:TEMP;RegisteredProfile=$env:TEMP;ImageState='IMAGE_STATE_COMPLETE';DesktopOwned=$true;IsAdministrator=$true}
-function Get-LocalUser {param($SID,$ErrorAction) [pscustomobject]@{Name='fixture';SID=[pscustomobject]@{Value=$sid};Enabled=$true}}
-function Get-LocalGroupMember {param($SID,$ErrorAction) [pscustomobject]@{SID=[pscustomobject]@{Value=$sid}}}
+function Get-LocalUser {param($SID,$ErrorAction) [pscustomobject]@{Name='fixture';SID=[pscustomobject]@{Value=$script:targetSid};Enabled=$true}}
+function Get-LocalGroupMember {param($SID,$ErrorAction) [pscustomobject]@{SID=[pscustomobject]@{Value=$script:targetSid}}}
 function Get-ProvisioningPackage {param([switch]$AllInstalledPackages,$ErrorAction) if($script:installed){[pscustomobject]@{IsInstalled=$true;PackageID='1c2605ea-96ae-42fc-8f11-45fc0cb9d133';Version='1.0';PackageName='windows_setup_hide_oobe'}}}
 function Save-InitProvisioningState {param($State,$StatePath) $script:saves.Add(@{Path=$StatePath;Data=($State|ConvertTo-Json|ConvertFrom-Json)})}
 function Test-Path {param($LiteralPath,$Path) $false}
