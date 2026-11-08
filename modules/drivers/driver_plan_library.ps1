@@ -82,3 +82,40 @@ function Invoke-SetupDriverTarget {
  foreach($result in $results){if($result.Status -eq 'Unverified' -and -not $failures){$failures+=($Target.InfPath+': '+$result.Reason)}}
  [pscustomobject]@{Results=@($results);RebootRequired=$reboot;Failures=@($failures)}
 }
+function New-SetupDriverExtractionRoot {
+ . (Join-Path $PSScriptRoot '../updates/update_stage_library.ps1')
+ $common=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
+ Assert-SetupUpdateAncestors -CommonDataRoot $common
+ $parent=Join-Path $common 'windows_setup_driver_cache'
+ New-SetupUpdateProtectedDirectory -Path $parent
+ $stage=Join-Path $parent ([guid]::NewGuid().ToString('N'))
+ New-SetupUpdateProtectedDirectory -Path $stage
+ return $stage
+}
+function Assert-SetupDriverPayloadFiles {
+ param([Parameter(Mandatory=$true)]$Entry,[Parameter(Mandatory=$true)][string]$Root)
+ $base=[IO.Path]::GetFullPath($Root).TrimEnd('\')+'\'
+ $files=@($Entry.Files)
+ if(-not $files.Count -or @($files.Path|Select-Object -Unique).Count -ne $files.Count){throw '版本2必須提供不重複的完整 payload hash 清單。'}
+ foreach($item in @(Get-ChildItem -LiteralPath $Root -Recurse -Force -ErrorAction Stop)){if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'payload 不可包含重新解析點。'}}
+ $actual=@(Get-ChildItem -LiteralPath $Root -File -Recurse -Force -ErrorAction Stop)
+ if($actual.Count -ne $files.Count){throw '展開 payload 數量與釘選清單不符。'}
+ foreach($file in $files){
+  if(-not $file.Path -or [IO.Path]::IsPathRooted($file.Path) -or $file.Path -match '(^|[\\/])\.\.([\\/]|$)' -or $file.SHA256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'payload 路徑或 SHA256 不合法。'}
+  $path=[IO.Path]::GetFullPath((Join-Path $base $file.Path))
+  if(-not $path.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -or (Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop).Hash -ne $file.SHA256){throw ('payload SHA256 不符：'+$file.Path)}
+ }
+}
+function Invoke-SetupOfficialDriverPackage {
+ param([Parameter(Mandatory=$true)]$Entry,[Parameter(Mandatory=$true)][string]$Archive,[int]$Build,[string]$LogPath)
+ if((Get-FileHash -LiteralPath $Archive -Algorithm SHA256 -ErrorAction Stop).Hash -ne $Entry.SHA256){throw '官方驅動封存檔 SHA256 不符。'}
+ $stage=New-SetupDriverExtractionRoot
+ Expand-DriverArchive -Archive $Archive -Destination $stage
+ Assert-SetupDriverPayloadFiles -Entry $Entry -Root $stage
+ $results=@();$failures=@();$reboot=$false
+ foreach($target in $Entry.Drivers){
+  $outcome=Invoke-SetupDriverTarget -Target $target -Root $stage -Build $Build -Architecture 'amd64' -LogPath $LogPath
+  $results+=@($outcome.Results);$failures+=@($outcome.Failures);$reboot=$reboot -or $outcome.RebootRequired
+ }
+ [pscustomobject]@{PackageId=$Entry.Id;Results=@($results);Failures=@($failures);RebootRequired=$reboot;ExtractionRoot=$stage}
+}
