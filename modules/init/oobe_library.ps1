@@ -7,7 +7,7 @@ function Get-InitRoute {
   if($ImageState -in @('IMAGE_STATE_UNDEPLOYABLE','IMAGE_STATE_GENERALIZE_RESEAL_TO_AUDIT','IMAGE_STATE_SPECIALIZE_RESEAL_TO_AUDIT')){return 'ConfirmAudit'}
   return 'RejectBuiltinAdministrator'
  }
- if($ImageState -eq 'IMAGE_STATE_COMPLETE' -and $DesktopOwned){return 'DesktopSSH'}
+ if($ImageState -eq 'IMAGE_STATE_COMPLETE' -and $DesktopOwned){return 'DesktopReady'}
  return 'RejectUnknownSetupState'
 }
 function Test-InitUserName {

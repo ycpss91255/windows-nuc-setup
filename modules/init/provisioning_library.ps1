@@ -96,33 +96,6 @@ function Assert-InitProtectedFile {
  foreach($rule in $rules){if($rule.AccessControlType -ne 'Allow' -or $rule.IdentityReference.Value -notin @('S-1-5-18','S-1-5-32-544')){throw 'Init 狀態檔 ACL 允許非預期帳號，拒絕讀寫。'}}
  foreach($sid in @('S-1-5-18','S-1-5-32-544')){if(-not @($rules|Where-Object {$_.IdentityReference.Value -eq $sid -and $_.FileSystemRights -eq [Security.AccessControl.FileSystemRights]::FullControl -and -not ($_.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly)}).Count){throw 'Init 狀態檔缺少必要完整存取規則。'}}
 }
-function Invoke-InitSshContinuation {
- param($State,[string]$StatePath,[hashtable]$Context,[string]$SshScriptPath)
- Assert-InitProvisioningState -State $State -MachineGuid $Context.MachineGuid -PackageHash $State.PackageHash
- if($State.Phase -notin @('AwaitingLogon','SshPending','Complete')){throw '尚未完成初始設定包階段，不能續跑 SSH。'}
- if($Context.Sid -ne $State.TargetSid -or $Context.Sid -eq 'S-1-5-18' -or $Context.ImageState -ne 'IMAGE_STATE_COMPLETE' -or -not $Context.DesktopOwned -or -not $Context.IsAdministrator){throw '請以本輪建立的正式管理員帳號登入桌面再續跑。'}
- if([string]::IsNullOrWhiteSpace($Context.ProfilePath) -or [string]::IsNullOrWhiteSpace($Context.RegisteredProfile) -or [IO.Path]::GetFullPath($Context.ProfilePath).TrimEnd('\') -ine [IO.Path]::GetFullPath($Context.RegisteredProfile).TrimEnd('\')){throw '正式帳號 SID 與家目錄登錄不一致。'}
- if(-not(Test-Path -LiteralPath $SshScriptPath -PathType Leaf)){throw '缺少已暫存的 SSH 模組，不能繼續。'}
- $State.Phase='SshPending';$State.LastErrorCode=''
- Save-InitProvisioningState -State $State -StatePath $StatePath
- try{
-  Write-Host '正在正式帳號設定 SSH；缺少元件來源時請連網後重試。' -ForegroundColor Cyan
-  & $SshScriptPath
-  $service=Get-CimInstance -ClassName Win32_Service -Filter "Name='sshd'" -ErrorAction Stop
-  if(-not $service -or $service.State -ne 'Running' -or $service.StartMode -ne 'Auto'){throw 'SSH 服務尚未以自動方式啟動。'}
-  . (Join-Path (Split-Path $SshScriptPath -Parent) 'ssh_firewall.ps1')
-  $firewall=Get-SetupSSHFirewallStatus
-  if(-not $firewall.Passed){throw 'SSH 防火牆驗證尚未通過。'}
- }catch{
-  $State.LastErrorCode='SshSetupFailed'
-  Save-InitProvisioningState -State $State -StatePath $StatePath
-  throw
- }
- $State.Phase='Complete';$State.LastErrorCode=''
- Save-InitProvisioningState -State $State -StatePath $StatePath
- Write-Host 'Init 完成：正式帳號與 SSH 已確認。' -ForegroundColor Green
- foreach($line in @(Get-InitConnectionInfo -UserName $State.TargetUserName -ComputerName $Context.ComputerName)){Write-Host $line}
-}
 function Confirm-InitAccountCheckpoint {
  param($State,[string]$StatePath,[hashtable]$Context,[string]$PackageHash)
  Assert-InitProvisioningState -State $State -MachineGuid $Context.MachineGuid -PackageHash $PackageHash
@@ -144,15 +117,6 @@ function Confirm-InitAccountCheckpoint {
   Save-InitProvisioningState $State $StatePath
  }
  Write-Host 'Init 帳號與 OOBE 已確認；接著執行 windows.cmd。SSH 由 Windows 設定第 4 階段處理。' -ForegroundColor Green
-}
-function Get-InitConnectionInfo {
- param([string]$UserName,[string]$ComputerName)
- '電腦名稱：'+$ComputerName
- 'SSH 登入帳號：'+$UserName+'；使用此帳號既有密碼，這裡不顯示密碼。'
- try{
-  $addresses=@(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop|Where-Object {$_.AddressState -eq 'Preferred' -and $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*'}|Select-Object -ExpandProperty IPAddress -Unique)
-  if($addresses.Count){foreach($ip in $addresses){'IPv4：'+$ip+'；同網段連線：ssh "'+$UserName+'@'+$ip+'"'}}else{'目前沒有可用 IPv4；接上區域網路後重跑入口查看。'}
- }catch{'目前無法讀取 IPv4；請查看 Windows 網路設定。'}
 }
 function Invoke-InitProvisioningApply {
  param($State,[string]$StatePath,[string]$AssetRoot,[scriptblock]$Confirm)
@@ -178,13 +142,6 @@ function New-InitProvisioningStage {
  $null=Assert-InitProvisioningAsset -AssetRoot (Join-Path $SourceRoot 'modules/init/assets')
  if(Test-Path -LiteralPath $StageRoot){throw '已有 Init 續跑目錄，請從其 resume_init.cmd 繼續，不能覆寫。'}
  $files=@('modules/init/initialize_nuc.ps1','modules/init/oobe_library.ps1','modules/init/provisioning_library.ps1','modules/init/provisioning_asset_library.ps1','modules/init/provisioning_launcher_library.ps1','modules/init/assets/hide_oobe.xml','modules/init/assets/hide_oobe.ppkg','modules/init/assets/provenance.json')
- $sshRoot=Join-Path $SourceRoot 'modules/ssh'
- Assert-InitPlainPath $sshRoot
- foreach($file in @(Get-ChildItem -LiteralPath $sshRoot -Recurse -File)){
-  Assert-InitPlainPath $file.FullName
-  if($file.Extension -notin @('.ps1','.md','.json') -or $file.Name -match '^(runtime|owner|status)\.json$|error|backup'){continue}
-  $files+='modules/ssh/'+$file.FullName.Substring($sshRoot.TrimEnd('\').Length+1).Replace('\','/')
- }
  foreach($relative in $files){$path=Join-Path $SourceRoot $relative;Assert-InitPlainPath $path;if(-not(Test-Path -LiteralPath $path -PathType Leaf)){throw ('缺少 Init 依賴：'+$relative)}}
  if($null -eq $InitialState){throw '暫存前必須提供無帳密的初始狀態。'}
  $finalRoot=$StageRoot
@@ -239,7 +196,7 @@ function Invoke-InitOobeFlow {
   New-InitProvisioningStage $SourceRoot $StageRoot $state
  }
  $launcher=New-InitPublicLauncher -StageRoot $StageRoot
- Write-Host ('續跑入口（USB 拔除後仍可用）：'+$launcher) -ForegroundColor Cyan
+ Write-Host ('取消或中斷時的恢復入口（正常登入後直接執行 windows.cmd）：'+$launcher) -ForegroundColor Cyan
  if($state.Phase -eq 'Prepared'){
   $name=Read-Host '新的本機管理員帳號'
   if(-not(Test-InitUserName -Name $name -ExistingNames @((Get-LocalUser).Name))){throw '帳號無效或已存在；不變更既有帳號。'}
@@ -253,7 +210,7 @@ function Invoke-InitOobeFlow {
   New-InitProvisioningAccount $state $state.TargetUserName $null $statePath
  }
  Invoke-InitProvisioningApply $state $statePath (Join-Path $StageRoot 'runtime/modules/init/assets') { (Read-Host '是否現在繼續？Windows 可能重新啟動；同意請輸入 YES') -ceq 'YES' }
- if($state.Phase -eq 'AwaitingLogon'){Write-Host '請依 Windows 畫面登入剛建立的正式帳號，再開啟上述續跑入口完成 SSH。'}
+ if($state.Phase -eq 'AwaitingLogon'){Write-Host '請依 Windows 畫面登入剛建立的正式帳號，直接執行 windows.cmd；SSH 由 Windows 第 4 階段處理，不需再跑 Init。'}
 }
 function Get-InitIdentityContext {
  $identity=[Security.Principal.WindowsIdentity]::GetCurrent()

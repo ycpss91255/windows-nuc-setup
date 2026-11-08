@@ -31,24 +31,10 @@ if($route -eq 'ElevationRequired'){
 if($route -eq 'RejectBuiltinAdministrator'){throw '目前是一般 Administrator 桌面，不是可確認的稽核模式。請登入正式的本機管理員帳號再執行 Init。'}
 if($route -eq 'RejectUnknownSetupState'){throw ('無法確認目前是稽核模式或正式使用者桌面，未變更設定。ImageState='+$imageState)}
 if(-not [Environment]::Is64BitProcess -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64'){throw '本入口僅支援 x64 Windows，請用 64 位元 Windows PowerShell。'}
-if($route -eq 'DesktopSSH'){
+if($route -eq 'DesktopReady'){
  $user=Get-LocalUser -SID $identity.User -ErrorAction Stop
  if(-not $user.Enabled){throw '目前本機使用者未啟用。'}
- if(-not $SshScriptPath -or -not(Test-Path -LiteralPath $SshScriptPath -PathType Leaf)){throw '缺少 SSH 設定模組，請保留完整 USB 工具包。'}
- Write-Host ('目前正式帳號：'+$user.Name+'；沿用帳號，不重設密碼。準備安裝並啟用 SSH。') -ForegroundColor Cyan
- try{
-  & $SshScriptPath
-  $service=Get-CimInstance Win32_Service -Filter "Name='sshd'"
-  if($service.State -ne 'Running' -or $service.StartMode -ne 'Auto'){throw 'SSH 服務未正常啟動。'}
- }catch{throw ('Init 尚未完成：'+$_.Exception.Message+' 若 OpenSSH 安裝來源不足，請接上網路後重跑 init.cmd；本次不會假報完成。')}
- Write-Host 'Init 完成：正式帳號已確認，SSH 已啟動。接著執行 windows.cmd 套用 Windows 設定。' -ForegroundColor Green
- Write-Host ('電腦名稱：'+$env:COMPUTERNAME)
- Write-Host ('SSH 登入帳號：'+$user.Name+'；使用這個帳號既有的密碼，密碼不會在此顯示。')
- try{
-  $addresses=@(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop|Where-Object {$_.AddressState -eq 'Preferred' -and $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*'}|Select-Object -ExpandProperty IPAddress -Unique)
-  if($addresses.Count){foreach($address in $addresses){Write-Host ('IPv4：'+$address+'；同網段電腦可執行：ssh "'+$user.Name+'@'+$address+'"')}}
-  else{Write-Host '目前沒有可用 IPv4，接上區域網路後重跑 init.cmd 查看連線資訊。' -ForegroundColor Yellow}
- }catch{Write-Warning 'SSH 服務已確認，但無法讀取 IPv4；請在網路設定中查看 IP。'}
+ Write-Host ('目前正式帳號：'+$user.Name+'；帳號已就緒，不重設密碼。請直接執行 windows.cmd，SSH 由第 4 階段安裝。') -ForegroundColor Green
  return
 }
 # Audit is inferred conservatively. ImageState alone is not proof of audit mode.
@@ -106,5 +92,5 @@ try{
  throw
 }
 Write-Host '帳號設定已準備完成，請現在手動重新啟動；不要再開其他應用程式。' -ForegroundColor Green
-Write-Host '完成剩餘地區／隱私等初始設定，用剛才的本機帳號登入。進入正式桌面後再執行 init.cmd 啟用 SSH，然後執行 windows.cmd。'
+Write-Host '完成剩餘地區／隱私等初始設定，用剛才的本機帳號登入，直接執行 windows.cmd；不需再跑 Init，SSH 由 Windows 第 4 階段處理。'
 Write-Host ('若初始設定失敗或取消，密碼暫存仍可能存在於 '+$stage+'；不可忽略，請先檢查 cleanup-result.json 與受保護的 answer.xml。')
