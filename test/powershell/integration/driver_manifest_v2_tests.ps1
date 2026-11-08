@@ -9,6 +9,11 @@ $entries=@(1..5|ForEach-Object {
  $name='fixture_'+$_+'.zip';[IO.File]::WriteAllText((Join-Path $fixture $name),'fixture, never installed')
  [ordered]@{Id=('driver_'+$_);File=$name;SHA256=(Get-FileHash (Join-Path $fixture $name)).Hash;SourceUrl='https://www.intel.com/content/www/us/en/download/774186/driver.html';PackageVersion='22.200.0';HardwareIds=@('USB\VID_8087&PID_0A2B');InfPaths=@('driver/ibtusb.inf');Provider='Intel Corporation';DriverVersion='22.200.0.2';MinimumBuild=22000;Architecture='amd64'}
 })
+foreach($entry in $entries){
+ $entry.Drivers=@([ordered]@{InfPath=$entry.InfPaths[0];HardwareIds=$entry.HardwareIds;Provider=$entry.Provider;DriverVersion=$entry.DriverVersion;MinimumBuild=$entry.MinimumBuild;Architecture=$entry.Architecture})
+ foreach($key in @('InfPaths','HardwareIds','Provider','DriverVersion','MinimumBuild','Architecture')){$entry.Remove($key)}
+}
+$entries[0].Drivers+=@([ordered]@{InfPath='driver/other.inf';HardwareIds=@('ACPI\INT3515');Provider='Texas Instruments';DriverVersion='1.0.10.3';MinimumBuild=22000;Architecture='amd64'})
 $manifest=[ordered]@{SchemaVersion=2;Packages=$entries}
 function SaveManifest {$manifest|ConvertTo-Json -Depth 8|Set-Content (Join-Path $fixture 'manifest.json') -Encoding UTF8}
 SaveManifest
@@ -19,13 +24,13 @@ foreach($case in @('Duplicate','Traversal','UntrustedSource','MissingVersion','W
  $saved=$manifest|ConvertTo-Json -Depth 8
  switch($case){
  Duplicate{$manifest.Packages[4].Id=$manifest.Packages[0].Id}
- Traversal{$manifest.Packages[0].InfPaths=@('../outside.inf')}
+ Traversal{$manifest.Packages[0].Drivers[0].InfPath='../outside.inf'}
  UntrustedSource{$manifest.Packages[0].SourceUrl='https://intel.com.attacker.invalid/driver'}
- MissingVersion{$manifest.Packages[0].DriverVersion=''}
- WrongArchitecture{$manifest.Packages[0].Architecture='x86'}
- InvalidHardware{$manifest.Packages[0].HardwareIds=@('USB\VID_8087*')}
- NoInf{$manifest.Packages[0].InfPaths=@()}
- InvalidBuild{$manifest.Packages[0].MinimumBuild=0}
+ MissingVersion{$manifest.Packages[0].Drivers[0].DriverVersion=''}
+ WrongArchitecture{$manifest.Packages[0].Drivers[0].Architecture='x86'}
+ InvalidHardware{$manifest.Packages[0].Drivers[0].HardwareIds=@('USB\VID_8087*')}
+ NoInf{$manifest.Packages[0].Drivers=@()}
+ InvalidBuild{$manifest.Packages[0].Drivers[0].MinimumBuild=0}
  }
  SaveManifest;$failed=$false;try{Test-SetupDriverPayload $h $fixture|Out-Null}catch{$failed=$true}
  Assert $failed ('版本2拒絕不可信規格：'+$case)
