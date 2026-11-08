@@ -177,7 +177,7 @@ func TestRepoCoverageInventoryDoesNotHideExecutableSources(t *testing.T) {
 	files := map[string]string{
 		"core/main.ps1":                         "Write-Output 'ok'",
 		"script/main.go":                        "package main\nfunc main(){}",
-		"entry.cmd":                             "@echo off\npowershell.exe -File core/main.ps1",
+		"entry.cmd":                             "@echo off\npowershell.exe -File \"%~dp0core/main.ps1\"",
 		"native/logic.cs":                       "public class Native { public static int Run(){return 1;} }",
 		".github/helper.ps1":                    "Write-Output 'owned code'",
 		"test/example.ps1":                      "test fixture",
