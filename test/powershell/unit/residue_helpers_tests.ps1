@@ -42,4 +42,13 @@ Reject {Invoke-SetupResidueCleanup -SystemRoot $system -UserProfile ([IO.Path]::
 Reject {Invoke-SetupResidueCleanup -SystemRoot (Join-Path $fixture 'missing') -UserProfile $profile -ResultRoot $result -UserSid 'x'} '拒絕不存在的系統根'
 function Get-Item {param([string]$LiteralPath,[switch]$Force) [pscustomobject]@{Attributes=[IO.FileAttributes]::ReparsePoint;Parent=$null}}
 try{Reject {Invoke-SetupResidueCleanup @argsMap} '根路徑重新解析點在任何清理前拒絕'}finally{Remove-Item Function:\Get-Item}
+$script:capturedRoot=''
+function Get-Item {param([string]$LiteralPath,[switch]$Force) $script:capturedRoot=$LiteralPath;throw 'fixture stops before any write'}
+$previousDirectory=[Environment]::CurrentDirectory
+try{
+ [Environment]::CurrentDirectory=$system
+ $driveRoot=[IO.Path]::GetPathRoot($system)
+ try{Invoke-SetupResidueCleanup -SystemRoot $driveRoot.TrimEnd('\') -UserProfile $profile -ResultRoot $result -UserSid 'x'|Out-Null}catch{}
+ Assert ($script:capturedRoot -eq $driveRoot) '只有磁碟代號的SystemRoot必須解析成磁碟根而非當前資料夾'
+}finally{[Environment]::CurrentDirectory=$previousDirectory;Remove-Item Function:\Get-Item}
 Write-Host 'ALL PASS: residue named source tests'
