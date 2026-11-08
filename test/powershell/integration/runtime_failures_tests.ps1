@@ -32,6 +32,7 @@ function Test-Path {param($Path);if([string]$Path -like 'HKLM:*'){return $false}
 '@
 foreach($mode in @('success','module-fail','device-fail')){
  $dir=Join-Path $fixture $mode;New-Item -ItemType Directory $dir|Out-Null
+ Assert (Test-Path (Join-Path $dir 'start_pins_policy_library.ps1')) 'controller fixture includes actual Start completion helper'
  $runner=Join-Path $dir 'run.ps1';[IO.File]::WriteAllText($runner,$prefix+"`n"+$body,[Text.UTF8Encoding]::new($true))
  $oldMode=$env:CASE_MODE;$env:CASE_MODE=$mode;$oldPreference=$ErrorActionPreference;$ErrorActionPreference='Continue'
  try{& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $runner *> (Join-Path $dir 'output.txt');$code=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference;$env:CASE_MODE=$oldMode}
