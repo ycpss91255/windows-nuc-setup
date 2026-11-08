@@ -68,8 +68,24 @@ function Save-InitProvisioningState {
  $backup=$temporary+'.previous'
  try{
   [IO.File]::WriteAllText($temporary,($State|ConvertTo-Json -Depth 3),(New-Object Text.UTF8Encoding($false)))
+  Protect-InitStateFile $temporary
+  Assert-InitProtectedFile $temporary
   if(Test-Path -LiteralPath $StatePath){[IO.File]::Replace($temporary,$StatePath,$backup)}else{[IO.File]::Move($temporary,$StatePath)}
+  Assert-InitProtectedFile $StatePath
  }finally{foreach($path in @($temporary,$backup)){if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Force}}}
+}
+function Protect-InitStateFile {
+ param([string]$Path)
+ Assert-InitPlainPath $Path
+ $acl=New-Object Security.AccessControl.FileSecurity
+ $acl.SetAccessRuleProtection($true,$false)
+ $admin=New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')
+ $acl.SetOwner($admin)
+ foreach($id in @('S-1-5-18','S-1-5-32-544')){
+  $sid=New-Object Security.Principal.SecurityIdentifier($id)
+  $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow')))
+ }
+ Set-Acl -LiteralPath $Path -AclObject $acl -ErrorAction Stop
 }
 function Assert-InitProtectedFile {
  param([string]$Path)
