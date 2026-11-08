@@ -8,8 +8,8 @@ Assert (Test-Path -LiteralPath $library) 'Taskbar has a named original-source le
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('taskbar_leaf_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
 $script:writes=@();$script:values=@{SearchOnTaskbarMode=0;TaskbarDa=0;ShowTaskViewButton=0;AllowNewsAndInterests=0};$script:pending=$true;$script:backups=0;$script:removed=@();$script:delays=@()
 function Test-Path {param($Path,$LiteralPath,$PathType) if($Path -like 'HK*'){return $true};Microsoft.PowerShell.Management\Test-Path @PSBoundParameters}
-function New-ItemProperty {param($Path,$Name,$Value,$PropertyType,[switch]$Force) if($Path -notlike 'HK*' -or -not $Force){throw 'unexpected Taskbar registry write'};$script:writes+=@($Name);$script:values[$Name]=$Value}
-function Get-ItemProperty {param($Path,$ErrorAction) if($Path -like '*RunOnce'){return [pscustomobject]@{NUC8FinalizeTaskbar=$(if($script:pending){'pending'}else{$null})}};[pscustomobject]$script:values}
+function New-ItemProperty {param($Path,$Name,$Value,$PropertyType,[switch]$Force) if($Path -notlike 'HK*' -or -not $Force){throw 'unexpected Taskbar registry write'};$script:writes+=@($Name);if($Name -notin @($script:discardNames)){$script:values[$Name]=$Value}}
+function Get-ItemProperty {param($Path,$ErrorAction) if($script:corruptLayout){[IO.File]::WriteAllText($layout,'<Layout/>')};if($Path -like '*RunOnce'){return [pscustomobject]@{NUC8FinalizeTaskbar=$(if($script:pending){'pending'}else{$null})}};[pscustomobject]$script:values}
 function Export-SetupTaskbarBackup {param($Path) if(-not $Path.StartsWith($temp)){throw 'outside TEMP backup'};$script:backups++}
 $layout=Join-Path $temp 'TaskbarLayout.xml'
 $r=Invoke-SetupTaskbarSettings -OutputRoot $temp -LayoutPath $layout
@@ -30,3 +30,13 @@ Assert (-not $r.Success -and $script:removed.Count -eq $before) 'Finalize refuse
 $script:values.StartLayoutFile=$layout;$script:values.LockedStartLayout=1;$script:denyRemoval=$true
 $r=Invoke-SetupTaskbarFinalize -LayoutPath $layout
 Assert (-not $r.Success -and $r.Status -eq 'Failed' -and -not $r.TemporaryLayoutPolicyRemoved) 'Finalize cannot claim removal when native registry readback still has temporary policy'
+$script:pending=$true
+foreach($name in @('SearchOnTaskbarMode','AllowNewsAndInterests','ShowTaskViewButton','StartLayoutFile','LockedStartLayout')){
+ $script:discardNames=@($name);$script:values[$name]=$(if($name -eq 'StartLayoutFile'){'other-layout'}else{7})
+ $r=Invoke-SetupTaskbarSettings -OutputRoot $temp -LayoutPath $layout
+ Assert (-not $r.Success -and $r.Status -eq 'Failed') ('Apply refuses native write that did not take effect: '+$name)
+}
+$script:discardNames=@();$script:corruptLayout=$true;$r=Invoke-SetupTaskbarSettings -OutputRoot $temp -LayoutPath $layout
+Assert (-not $r.Success -and $r.Status -eq 'Failed') 'Apply refuses invalid XML readback even after write returned normally'
+$script:corruptLayout=$false;$r=Invoke-SetupTaskbarSettings -OutputRoot $temp -LayoutPath $layout
+Assert ($r.Success -and $r.Status -eq 'Applied' -and $r.RequiresNextSignIn) 'new Apply validates its own policies without rejecting old RunOnce before controller replacement'
