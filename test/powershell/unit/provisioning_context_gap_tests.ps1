@@ -4,6 +4,15 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 . (Join-Path $root 'modules/init/provisioning_library.ps1')
 function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Value}|ConvertTo-Json -Compress));if(-not $Value){throw $Name}}
 function Reject([scriptblock]$Action,[string]$Expected,[string]$Name){$f=$null;try{& $Action|Out-Null}catch{$f=$_};Assert ($f -and $f.Exception -isnot [Management.Automation.ParameterBindingException] -and $f.Exception.Message.Contains($Expected)) ($Name+'; actual='+$f.Exception.Message)}
+# Native Client API double. Real asset file/hash/XML validation is unchanged.
+function Get-ProvisioningPackage {
+ param([switch]$AllInstalledPackages,$PackagePath,$LogsDirectoryPath,$ErrorAction)
+ if($PackagePath){
+  if([IO.Path]::GetFileName($PackagePath) -cne 'hide_oobe.ppkg' -or -not(Microsoft.PowerShell.Management\Test-Path -LiteralPath $PackagePath -PathType Leaf)){throw 'unexpected metadata input'}
+  return [pscustomobject]@{PackageID='1c2605ea-96ae-42fc-8f11-45fc0cb9d133';PackageName='windows_setup_hide_oobe';Version='1.0';Rank=0;OwnerType=5000;IsInstalled=$false}
+ }
+ if($AllInstalledPackages -and $script:installed){[pscustomobject]@{IsInstalled=$true;PackageID='1c2605ea-96ae-42fc-8f11-45fc0cb9d133';Version='1.0';PackageName='windows_setup_hide_oobe';Rank=0;OwnerType=5000}}
+}
 $fixture=Join-Path $env:TEMP ('provision_context_gaps_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
 $stage=Join-Path $fixture 'stage';[void][IO.Directory]::CreateDirectory($stage)
 $script:gapIdentity=@{Sid='S-1-5-21-1-2-3-1001';IsAdministrator=$true;SessionId=1};$script:complete=$true;$script:aclReads=0

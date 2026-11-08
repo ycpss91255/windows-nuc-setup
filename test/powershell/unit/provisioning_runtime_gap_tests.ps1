@@ -7,7 +7,27 @@ function Reject([scriptblock]$Action,[string]$Expected,[string]$Name){$failure=$
 function Clone($v){$v|ConvertTo-Json -Depth 8|ConvertFrom-Json}
 $fixture=Join-Path $env:TEMP ('provision_gaps_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
 $identity=Get-InitIdentityContext;Assert ($identity.Sid -and $identity.IsAdministrator -is [bool]) '真實權杖只讀身分查詢，不提權'
+# The SDK does not publish a minimum Server version for this native API.
+# Substitute only the native type compiler boundary; execute the original wrapper twice.
+$script:GapNativeAddType=Get-Command Add-Type
+$script:GapOobeTypeCompilations=0
+function Add-Type {
+ param($TypeDefinition)
+ if($TypeDefinition -notmatch 'DllImport\("kernel32\.dll"' -or $TypeDefinition -notmatch 'extern bool OOBEComplete') {throw 'unexpected native compilation'}
+ $script:GapOobeTypeCompilations++
+ & $script:GapNativeAddType -TypeDefinition 'namespace WindowsSetup { public static class InitOobeNative { public static bool OOBEComplete(out bool complete) {complete=true; return true;} } }'
+}
 $native=Invoke-InitOobeCompleteNative;$again=Invoke-InitOobeCompleteNative;Assert ($native.Succeeded -is [bool] -and $again.Complete -is [bool]) '原始OOBEComplete只讀原生API及已載入型別路徑'
+# Native Client API double. Real asset file/hash/XML validation is unchanged.
+function Get-ProvisioningPackage {
+ param([switch]$AllInstalledPackages,$PackagePath,$LogsDirectoryPath,$ErrorAction)
+ if($PackagePath){
+  if([IO.Path]::GetFileName($PackagePath) -cne 'hide_oobe.ppkg' -or -not(Microsoft.PowerShell.Management\Test-Path -LiteralPath $PackagePath -PathType Leaf)){throw 'unexpected metadata input'}
+  return [pscustomobject]@{PackageID='1c2605ea-96ae-42fc-8f11-45fc0cb9d133';PackageName='windows_setup_hide_oobe';Version='1.0';Rank=0;OwnerType=5000;IsInstalled=$false}
+ }
+ if($AllInstalledPackages -and $script:installed){[pscustomobject]@{IsInstalled=$true;PackageID='1c2605ea-96ae-42fc-8f11-45fc0cb9d133';Version='1.0';PackageName='windows_setup_hide_oobe';Rank=0;OwnerType=5000}}
+}
+Assert ($script:GapOobeTypeCompilations -eq 1) '原始native wrapper只建立一次受控OS API型別，不依Server匯出'
 $assetRoot=Join-Path $root 'modules/init/assets';$asset=Assert-InitProvisioningAsset $assetRoot;$hash=$asset.PackageSHA256
 $sid='S-1-5-21-1-2-3-1001';$script:aclMap=@{};$script:aclMode='good';$script:users=@{};$script:members=@();$script:accountMode='normal';$script:groupWrites=0;$script:installed=$true;$script:installEffect=$true;$script:installs=0
 function NewAcl([bool]$Directory){$a=if($Directory){[Security.AccessControl.DirectorySecurity]::new()}else{[Security.AccessControl.FileSecurity]::new()};$a.SetAccessRuleProtection($true,$false);$a.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'));foreach($id in @('S-1-5-18','S-1-5-32-544')){$flags=if($Directory){'ContainerInherit,ObjectInherit'}else{'None'};$a.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($id),'FullControl',$flags,'None','Allow'))};return $a}
@@ -17,8 +37,6 @@ function Get-LocalUser {param($SID,$Name,$ErrorAction) if($SID){if($script:accou
 function New-LocalUser {param($Name,$Password,$ErrorAction) $value=if($script:accountMode -eq 'new_sid_bad'){'invalid'}else{$sid};$u=[pscustomobject]@{SID=[pscustomobject]@{Value=$value};Name=$Name;Enabled=$true};$script:users[$value]=$u;return $u}
 function Get-LocalGroupMember {param($SID,$ErrorAction) @($script:members|ForEach-Object {[pscustomobject]@{SID=[pscustomobject]@{Value=$_}}})}
 function Add-LocalGroupMember {param($SID,$Member,$ErrorAction) $script:groupWrites++;if($script:accountMode -ne 'group_refused'){$script:members+=@($Member)}}
-$script:NativeGetProvisioningPackage=Get-Command Get-ProvisioningPackage
-function Get-ProvisioningPackage {param([switch]$AllInstalledPackages,$PackagePath,$ErrorAction) if($PackagePath){return (& $script:NativeGetProvisioningPackage -PackagePath $PackagePath -ErrorAction Stop)};if($script:installed){[pscustomobject]@{IsInstalled=$true;PackageID='1c2605ea-96ae-42fc-8f11-45fc0cb9d133';Version='1.0';PackageName='windows_setup_hide_oobe'}}}
 function Install-ProvisioningPackage {param($PackagePath,[switch]$QuietInstall,$ErrorAction) $script:installs++;$script:installed=$script:installEffect}
 $path=Join-Path $fixture 'state.json'
 function State([string]$Phase='Prepared'){$s=New-InitProvisioningState 'fixture-machine' 'TEST' $root $hash;if($Phase -ne 'Prepared'){$s.TargetSid=$sid;$s.TargetUserName='fixture'};$s.Phase=$Phase;return $s}
