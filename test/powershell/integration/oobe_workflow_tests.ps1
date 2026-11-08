@@ -16,4 +16,19 @@ $job=[regex]::Match($workflow,'(?ms)^  oobe_payload_inspection:\r?\n(?<body>.*?)
 Assert ($job -match 'runs-on: windows-2022' -and $job -notmatch '(?m)^    needs:') 'payload inspection runs independently on Windows'
 Assert ($job.Contains('verify_oobe_payload.ps1') -and $job.Contains('payload_baseline.json') -and $job.Contains('if: always()') -and $job.Contains('retention-days: 7')) 'CI invokes real reader with reviewed baseline and preserves failure evidence seven days'
 Assert ($rollup.Contains('oobe_payload_inspection') -and $rollup.Contains('needs.oobe_payload_inspection.result')) 'rollup dependency and result refer to real payload job'
+$fixture=Join-Path ([IO.Path]::GetTempPath()) ('oobe_workflow_'+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path (Join-Path $fixture 'script/test') -Force|Out-Null
+[IO.File]::WriteAllText((Join-Path $fixture 'script/test/verify_oobe_payload.ps1'),'param($PackagePath,$EvidenceDirectory,$BaselinePath); [IO.File]::WriteAllText((Join-Path $PWD "capture.json"),(@{EvidenceDirectory=$EvidenceDirectory;OutputBeforeRead=[IO.File]::ReadAllText($env:GITHUB_OUTPUT)}|ConvertTo-Json))')
+$run=([regex]::Match($job,'(?ms)        run: \|\r?\n(?<body>.*?)(?=^      - name:)').Groups['body'].Value -replace '(?m)^          ','').Trim()
+$oldRunner=$env:RUNNER_TEMP;$oldOutput=$env:GITHUB_OUTPUT
+try{
+ $env:RUNNER_TEMP=Join-Path $fixture 'different_runner_temp';$env:GITHUB_OUTPUT=Join-Path $fixture 'github_output'
+ [IO.File]::WriteAllText($env:GITHUB_OUTPUT,'')
+ Push-Location $fixture
+ try{& ([scriptblock]::Create($run))}finally{Pop-Location}
+ $capture=[IO.File]::ReadAllText((Join-Path $fixture 'capture.json'))|ConvertFrom-Json
+ Assert ((Split-Path $capture.EvidenceDirectory -Parent).TrimEnd('\') -eq ([IO.Path]::GetTempPath()).TrimEnd('\')) 'real workflow selects native TEMP when RUNNER_TEMP differs'
+ Assert ($capture.OutputBeforeRead.Contains('evidence='+$capture.EvidenceDirectory)) 'workflow publishes evidence output before invoking reader'
+ Assert ($job.Contains('id: payload') -and $job.Contains('path: ${{ steps.payload.outputs.evidence }}')) 'artifact upload uses the exact reader output path'
+}finally{$env:RUNNER_TEMP=$oldRunner;$env:GITHUB_OUTPUT=$oldOutput}
 Write-Host ('ALL PASS: '+$script:count+' workflow contract assertions')
