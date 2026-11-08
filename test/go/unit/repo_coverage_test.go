@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,32 @@ import (
 
 	rc "windows_setup/script/test/repo_coverage"
 )
+
+func TestRepoPowerShellCoverageReplaysRawCommandUnion(t *testing.T) {
+	name:="core/logic.ps1";hash:=strings.Repeat("a",64)
+	proof:=map[string]any{"SchemaVersion":1,"PesterVersion":"6.0.0","PackageSHA512":base64.StdEncoding.EncodeToString(make([]byte,64)),"Metric":"FullyCoveredCommandStartLines","Sources":[]any{map[string]any{"File":name,"SHA256":hash,"ExpectedLines":[]int{2}}},"Workers":[]any{map[string]any{"Index":0,"ProcessId":100,"Evidence":"worker_0.json"},map[string]any{"Index":1,"ProcessId":101,"Evidence":"worker_1.json"}},"Covered":1,"Total":1}
+	evidence,_:=json.Marshal(proof)
+	data:=map[string][]byte{}
+	for i:=0;i<2;i++{commands:=[]any{};for column:=1;column<=2;column++{commands=append(commands,map[string]any{"File":name,"Line":2,"Column":column,"EndLine":2,"EndColumn":column+1,"Hit":column==i+1})};worker:=map[string]any{"ProcessId":100+i,"PesterVersion":"6.0.0","Sources":[]any{map[string]any{"File":name,"SHA256":hash}},"Commands":commands};data[fmt.Sprintf("worker_%d.json",i)],_=json.Marshal(worker)}
+	data["coverage.xml"]=cobertura(`<class filename="core/logic.ps1"><lines><line number="2" hits="1"/></lines></class>`)
+	read:=func(path string)([]byte,error){b,ok:=data[path];if !ok{return nil,fmt.Errorf("missing %s",path)};return b,nil}
+	inv:=rc.Inventory{Sources:[]rc.Source{{Path:name,Language:"powershell",SHA256:hash}}}
+	r,catalog,err:=rc.NormalizePowerShell(evidence,read,inv)
+	if err!=nil||!r.Files[name][2]||len(catalog)!=1||len(catalog[0].Lines)!=1{t.Fatalf("raw complementary commands not merged: %+v %+v %v",r,catalog,err)}
+	for _,kind:=range []string{"wrong_xml","missing_worker","wrong_hash","wrong_catalog","duplicate_span","missing_span"}{t.Run(kind,func(t *testing.T){
+		copyData:=map[string][]byte{};for k,v:=range data{copyData[k]=append([]byte(nil),v...)}
+		bad:=append([]byte(nil),evidence...)
+		switch kind{
+		case "wrong_xml":copyData["coverage.xml"]=[]byte(strings.Replace(string(copyData["coverage.xml"]),`hits="1"`,`hits="0"`,1))
+		case "missing_worker":delete(copyData,"worker_1.json")
+		case "wrong_hash":bad=[]byte(strings.Replace(string(bad),hash,strings.Repeat("b",64),1))
+		case "wrong_catalog":bad=[]byte(strings.Replace(string(bad),`"ExpectedLines":[2]`,`"ExpectedLines":[2,3]`,1))
+		case "duplicate_span","missing_span":var w map[string]any;json.Unmarshal(copyData["worker_1.json"],&w);commands:=w["Commands"].([]any);if kind=="duplicate_span"{w["Commands"]=append(commands,commands[0])}else{w["Commands"]=commands[:1]};copyData["worker_1.json"],_=json.Marshal(w)
+		}
+		reader:=func(path string)([]byte,error){b,ok:=copyData[path];if !ok{return nil,fmt.Errorf("missing")};return b,nil}
+		if _,_,err:=rc.NormalizePowerShell(bad,reader,inv);err==nil{t.Fatal("invalid raw command proof accepted")}
+	})}
+}
 
 func TestRepoCoverageEvidenceCannotBeDetachedFromSourceAndCounts(t *testing.T) {
 	inv := rc.Inventory{Sources: []rc.Source{{Path: "logic.go", Language: "go", SHA256: strings.Repeat("a", 64), ExpectedLines: []int{2, 3}}}}
