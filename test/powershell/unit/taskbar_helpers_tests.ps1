@@ -1,0 +1,29 @@
+﻿#Requires -Version 5.1
+$ErrorActionPreference='Stop'
+$root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
+$library=Join-Path $root 'modules/taskbar/taskbar_settings_library.ps1'
+Assert (Test-Path -LiteralPath $library) 'Taskbar has a named original-source leaf with independent readonly verification'
+. $library
+$temp=Join-Path ([IO.Path]::GetTempPath()) ('taskbar_leaf_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
+$script:writes=@();$script:values=@{SearchOnTaskbarMode=0;TaskbarDa=0;ShowTaskViewButton=0;AllowNewsAndInterests=0};$script:pending=$true;$script:backups=0;$script:removed=@();$script:delays=@()
+function Test-Path {param($Path,$LiteralPath,$PathType) if($Path -like 'HK*'){return $true};Microsoft.PowerShell.Management\Test-Path @PSBoundParameters}
+function New-ItemProperty {param($Path,$Name,$Value,$PropertyType,[switch]$Force) if($Path -notlike 'HK*' -or -not $Force){throw 'unexpected Taskbar registry write'};$script:writes+=@($Name);$script:values[$Name]=$Value}
+function Get-ItemProperty {param($Path,$ErrorAction) if($Path -like '*RunOnce'){return [pscustomobject]@{NUC8FinalizeTaskbar=$(if($script:pending){'pending'}else{$null})}};[pscustomobject]$script:values}
+function Export-SetupTaskbarBackup {param($Path) if(-not $Path.StartsWith($temp)){throw 'outside TEMP backup'};$script:backups++}
+$layout=Join-Path $temp 'TaskbarLayout.xml'
+$r=Invoke-SetupTaskbarSettings -OutputRoot $temp -LayoutPath $layout
+Assert ($r.Success -and $script:writes.Count -eq 6 -and $script:backups -eq 1 -and $r.RequiresNextSignIn) 'Taskbar retains original six preference writes backup and pending sign-in semantics'
+[xml]$xml=[IO.File]::ReadAllText($layout);$pins=@($xml.SelectNodes('//*[local-name()="TaskbarPinList"]/*'))
+Assert ($pins.Count -eq 1 -and $pins[0].DesktopApplicationID -ceq 'MSEdge') 'Taskbar generated layout pins exactly Edge'
+$before=$script:writes.Count;$r=Invoke-SetupTaskbarSettings -OutputRoot $temp -LayoutPath $layout -VerifyOnly
+Assert (-not $r.Success -and $r.RequiresNextSignIn -and $script:writes.Count -eq $before -and $script:backups -eq 1) 'Taskbar readonly verification cannot claim pending RunOnce is complete'
+$script:pending=$false;$script:values.Remove('StartLayoutFile');$script:values.Remove('LockedStartLayout');$r=Invoke-SetupTaskbarSettings -OutputRoot $temp -LayoutPath $layout -VerifyOnly
+Assert ($r.Success -and -not $r.RequiresNextSignIn -and $script:writes.Count -eq $before) 'Taskbar readonly verification accepts current preferences after temporary policy cleanup'
+function Start-Sleep {param($Seconds) $script:delays+=@($Seconds)}
+function Remove-ItemProperty {param($Path,$Name,$ErrorAction) if($Path -ne 'HKCU:\Software\Policies\Microsoft\Windows\Explorer'){throw 'unexpected finalize path'};$script:removed+=@($Name)}
+$script:values.StartLayoutFile=$layout
+$r=Invoke-SetupTaskbarFinalize -LayoutPath $layout
+Assert ($r.Success -and ($script:removed -join ',') -ceq 'LockedStartLayout,StartLayoutFile' -and ($script:delays -join ',') -ceq '45') 'Finalize preserves 45-second Explorer delay and removes only temporary matching policy'
+$script:values.StartLayoutFile='other-layout';$before=$script:removed.Count;$r=Invoke-SetupTaskbarFinalize -LayoutPath $layout
+Assert (-not $r.Success -and $script:removed.Count -eq $before) 'Finalize refuses a changed layout policy without deleting unrelated settings'
