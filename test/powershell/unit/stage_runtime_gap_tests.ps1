@@ -7,7 +7,12 @@ function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Na
 function Reject([scriptblock]$Action,[string]$Expected,[string]$Name){$f=$null;try{& $Action|Out-Null}catch{$f=$_};Assert ($f -and $f.Exception -isnot [Management.Automation.ParameterBindingException] -and $f.Exception.Message.Contains($Expected)) ($Name+'; actual='+$f.Exception.Message)}
 function Clone($v){$v|ConvertTo-Json -Depth 12|ConvertFrom-Json}
 $fixture=Join-Path $env:TEMP ('stage_gaps_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
-$scope=Get-SetupGuiIdentity;$user=$scope.UserSID;$session=if($scope.SessionId -gt 0){$scope.SessionId}else{1};$script:aclOverride=@{};$script:copyCorrupt=$false;$script:referenceRace=$false
+$nativeScope=Get-SetupGuiIdentity
+Assert ([bool]$nativeScope.UserSID -and [bool]$nativeScope.Computer) '原生身分僅唯讀觀測，不作為互動案例的帳號假設'
+$script:controlledGuiScope=[pscustomobject]@{UserSID='S-1-5-21-1-2-3-1001';Computer='stage-fixture';SessionId=1;CommonDataRoot=$fixture;PowerShell='powershell.exe'}
+function Get-StageFixtureIdentity {$script:controlledGuiScope}
+Set-Alias -Name Get-SetupGuiIdentity -Value Get-StageFixtureIdentity -Scope Script
+$scope=Get-SetupGuiIdentity;$user=$scope.UserSID;$session=$scope.SessionId;$script:aclOverride=@{};$script:copyCorrupt=$false;$script:referenceRace=$false
 function NewFileAcl([string]$UserSid){$a=[Security.AccessControl.FileSecurity]::new();$a.SetAccessRuleProtection($true,$false);$a.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'));foreach($id in @('S-1-5-18','S-1-5-32-544')){$a.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($id),'FullControl','Allow'))};if($UserSid){$a.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new($UserSid),'ReadAndExecute','Allow'))};return $a}
 function Get-Acl {param($LiteralPath,$ErrorAction) if($script:aclOverride.ContainsKey($LiteralPath)){return $script:aclOverride[$LiteralPath]};$data=if($LiteralPath -match '[\\/]data([\\/]|$)'){$user}else{''};if((Get-Item -LiteralPath $LiteralPath -Force).PSIsContainer){return (New-SetupGuiDirectorySecurity -UserSid $data)}else{return (NewFileAcl $data)}}
 function Copy-Item {param($LiteralPath,$Destination,$ErrorAction,[switch]$Force) Microsoft.PowerShell.Management\Copy-Item -LiteralPath $LiteralPath -Destination $Destination -Force:$Force -ErrorAction Stop;if($script:copyCorrupt -and ([IO.Path]::GetFullPath($Destination)).StartsWith($fixture)){[IO.File]::AppendAllText($Destination,'tampered')}}
@@ -59,9 +64,7 @@ Reject {Assert-SetupGuiTaskbarResult ([pscustomobject]@{Success=$true;Status='Fi
 foreach($field in @('RequiresNextSignIn','Configured','BindingMatches')){$r=[pscustomobject]@{Success=$false;Status='PendingSignIn';RequiresNextSignIn=$true;Configured=$true;BindingMatches=$true};$r.$field=$false;Reject {Assert-SetupGuiTaskbarResult $r -VerifyOnly} '待登入狀態不完整' ('PendingSignIn完整性 '+$field)}
 Assert (-not(Test-SetupGuiPendingResult -Role Start -Result ([pscustomobject]@{Success='not-bool'}))) '非布林成功值不能當pending略過'
 Reject {Invoke-SetupGuiRole -PackageRoot $fixture -Role TaskbarFinalize} '固定工作' '公用GUI路由不能直接啟動收尾'
-$script:gapScope=$scope;$nativeIdentity=${function:Get-SetupGuiIdentity};function Get-SetupGuiIdentity {$script:gapScope}
 Reject {Invoke-SetupGuiRole -PackageRoot $fixture -Role Explorer -VerificationRunId bad} 'ID格式' '非法fresh ID在stage建立前拒絕'
-${function:Get-SetupGuiIdentity}=$nativeIdentity
 $roots=@(Get-SetupDesktopRoots);Assert ($roots.Count -ge 1) '只讀實際桌面路徑，不改動桌面'
 Reject {Export-SetupTaskbarBackup -Path (Join-Path $fixture 'missing-parent/settings.reg')} '匯出失敗' '真reg export寫入不存在TEMP目錄失敗不當成功'
 # Update stage: pre-existing TEMP directories avoid any privileged ACL creation.
