@@ -49,7 +49,7 @@ func ValidateSource(root string) (string, error) {
 			return "", fmt.Errorf("R01 缺少使用者入口：%s", s)
 		}
 	}
-	for _, s := range []string{"Ctrl+Shift+F3", "-AfterRestart", "-VerifyOnly"} {
+	for _, s := range []string{"Shift+F10", "-AfterRestart", "-VerifyOnly"} {
 		if !strings.Contains(doc, s) {
 			return "", fmt.Errorf("R01 操作說明缺少：%s", s)
 		}
