@@ -65,6 +65,18 @@ func TestPowerShellRawExportCLI(t *testing.T) {
 			t.Fatal("private metadata leaked")
 		}
 	}
+	if runtime.GOOS == "windows" && !strings.EqualFold(filepath.VolumeName(repo), filepath.VolumeName(source)) {
+		other, err := os.MkdirTemp(filepath.Dir(repo), "raw_volume_fixture_")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// This is the exact fresh directory returned by MkdirTemp, not a computed parent.
+		defer os.RemoveAll(other)
+		if err := os.WriteFile(filepath.Join(other, name), code, 0600); err != nil {
+			t.Fatal(err)
+		}
+		run(true, "export-powershell", "--source-root", other, "--evidence-dir", input, "--output-dir", filepath.Join(t.TempDir(), "cross_volume"))
+	}
 	run(false, args...)
 	run(false, "export-powershell")
 	run(false, "export-powershell", "--unknown")
