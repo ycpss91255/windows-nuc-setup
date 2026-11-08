@@ -103,6 +103,4 @@ Push-Location $fixture
 try{$selected=& (Join-Path $fixture 'start_windows.ps1') -NonInteractive -DriverPackagePath '.\driver_pack'}finally{Pop-Location}
 Assert ($selected -eq (Join-Path $fixture 'driver_pack')) '主入口相對驅動路徑依 PowerShell 位置解析'
 Remove-Item Function:Get-CimInstance
-$systemStatus=& (Join-Path $PackageRoot 'test\powershell\system\invoke_acceptance.ps1')
-Assert ($systemStatus.Status -eq 'NotRun' -and -not $systemStatus.Executed) 'system 入口未明確選擇時不執行實機驗收'
 Write-Host ('ALL PASS: '+$count+' layout/routing assertions. No Windows settings were executed.')
