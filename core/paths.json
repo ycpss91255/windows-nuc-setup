@@ -1,4 +1,5 @@
 {
+  "verification_library.ps1": "core/verification_library.ps1",
   "connection_info_library.ps1": "modules/ssh/connection_info_library.ps1",
   "privacy_library.ps1": "modules/privacy/privacy_library.ps1",
   "apply_privacy_settings.ps1": "modules/privacy/apply_privacy_settings.ps1",

@@ -101,8 +101,11 @@ foreach($relative in @('modules/display/apply_display_settings.ps1','modules/the
  Assert ($principal.UserId -eq [Security.Principal.WindowsIdentity]::GetCurrent().Name) ('desktop worker uses invoking identity: '+$relative)
 }
 # Execute the actual Verify-Only finalization and AfterRestart acceptance tail.
-$verifySource=[IO.File]::ReadAllText((Join-Path $root 'core/verify_only.ps1'))
-$verifyTail=$verifySource.Substring($verifySource.IndexOf('$result=[ordered]'))
+$verifyTokens=$null;$verifyErrors=$null
+$verifyAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/verification_library.ps1'),[ref]$verifyTokens,[ref]$verifyErrors)
+$verifyFunction=$verifyAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-SetupVerification'},$true)
+$verifyStarted=$false
+$verifyTail=(@(foreach($statement in $verifyFunction.Body.EndBlock.Statements){if($statement.Extent.Text.StartsWith('$result=[ordered]')){$verifyStarted=$true};if($verifyStarted){$statement.Extent.Text}}) -join "`r`n")
 $afterSource=[IO.File]::ReadAllText((Join-Path $root 'core/verify_after_restart.ps1'))
 $afterTail=$afterSource.Substring($afterSource.IndexOf('$verificationRunId='))
 foreach($mode in @('fresh-failure','stale-success')){

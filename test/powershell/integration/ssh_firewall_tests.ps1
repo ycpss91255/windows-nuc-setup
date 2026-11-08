@@ -7,7 +7,7 @@ function Get-NetFirewallRule {param($Name);if(-not $script:missing){$script:rule
 function Get-NetFirewallAddressFilter {param([Parameter(ValueFromPipeline=$true)]$InputObject);process{[pscustomobject]@{RemoteAddress=$script:addresses}}}
 function Get-NetFirewallPortFilter {param([Parameter(ValueFromPipeline=$true)]$InputObject);process{[pscustomobject]@{Protocol=$script:protocol;LocalPort=$script:ports}}}
 function Add-Check {param($Name,$Passed,$Detail);$script:verified=[bool]$Passed}
-$source=[IO.File]::ReadAllText((Join-Path $root 'core/verify_only.ps1'))
+$source=[IO.File]::ReadAllText((Join-Path $root 'core/verification_library.ps1'))
 $begin=$source.IndexOf('$scope=@(Get-NetFirewallRule')
 if($begin -lt 0){$begin=$source.IndexOf('$sshFirewall=Get-SetupSSHFirewallStatus')}
 $end=$source.IndexOf("foreach(`$setting",$begin)
