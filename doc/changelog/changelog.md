@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed（修正）
+
+- GitHub hosted Windows 的 Docker 工作先以有界程序探測 Windows daemon；尚未就緒時最多啟動或重啟 Docker 服務一次，再以真實引擎資訊確認。超時、錯誤引擎或服務失敗仍阻擋後續容器測試，沒有降低發布門檻；一般電腦與 self-hosted runner 不會因此操作服務。
+
 ## [v0.2.1] — 2026-11-09
 
 此版整合未發布 v0.2.1-rc1 的功能與後續修正。版本標題代表已準備發布；實際公開版本、對應提交與品質證據，以 GitHub Release、Actions 及 Pages 為準。

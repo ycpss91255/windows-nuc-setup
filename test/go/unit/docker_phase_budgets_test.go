@@ -24,6 +24,11 @@ func TestDockerBuildAndFullTestHaveIndependentBoundedBudgets(t *testing.T) {
 		t.Fatal("Docker job and required rollup must remain")
 	}
 	job := w[start : start+end]
+	ready := strings.Index(job, "script\\docker\\runner_daemon.ps1")
+	doctor := strings.Index(job, "'-Action','doctor'")
+	if ready < 0 || doctor < ready || !strings.Contains(job[:doctor], "timeout-minutes: 3") {
+		t.Fatal("bounded hosted-daemon readiness must run before the unchanged real Windows Docker doctor")
+	}
 	budget := regexp.MustCompile(`timeout-minutes:\s*([0-9]+)`)
 	limits := budget.FindAllStringSubmatch(job, -1)
 	if len(limits) < 5 {
