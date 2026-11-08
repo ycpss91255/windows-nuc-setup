@@ -41,3 +41,29 @@ function New-InitProvisioningAccount {
  $State.Phase='AccountReady';$State.LastErrorCode=''
  Save-InitProvisioningState -State $State -StatePath $StatePath
 }
+function Assert-InitProtectedDirectory {
+ param([string]$Path)
+ Assert-InitPlainPath -Path $Path
+ $acl=Get-Acl -LiteralPath $Path -ErrorAction Stop
+ if(-not $acl.AreAccessRulesProtected){throw 'Init 暫存目錄未停用繼承，拒絕寫入。'}
+ $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+ if($owner -notin @('S-1-5-18','S-1-5-32-544')){throw 'Init 暫存目錄擁有者不是 SYSTEM 或管理員群組。'}
+ $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+ foreach($rule in $rules){if($rule.AccessControlType -ne 'Allow' -or $rule.IdentityReference.Value -notin @('S-1-5-18','S-1-5-32-544')){throw 'Init 暫存目錄存在非預期 ACL。'}}
+ foreach($sid in @('S-1-5-18','S-1-5-32-544')){
+  if(-not @($rules|Where-Object {$_.IdentityReference.Value -eq $sid -and $_.FileSystemRights -eq [Security.AccessControl.FileSystemRights]::FullControl -and $_.InheritanceFlags -eq ([Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit) -and $_.PropagationFlags -eq [Security.AccessControl.PropagationFlags]::None}).Count){throw 'Init 暫存目錄缺少可繼承的完整保護規則。'}
+ }
+}
+function Save-InitProvisioningState {
+ param($State,[string]$StatePath)
+ Assert-InitProvisioningState -State $State -MachineGuid $State.MachineGuid -PackageHash $State.PackageHash
+ Assert-InitPlainPath -Path $StatePath
+ Assert-InitProtectedDirectory -Path (Split-Path $StatePath -Parent)
+ $State.UpdatedUtc=[DateTime]::UtcNow.ToString('o')
+ $temporary=$StatePath+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
+ $backup=$temporary+'.previous'
+ try{
+  [IO.File]::WriteAllText($temporary,($State|ConvertTo-Json -Depth 3),(New-Object Text.UTF8Encoding($false)))
+  if(Test-Path -LiteralPath $StatePath){[IO.File]::Replace($temporary,$StatePath,$backup)}else{[IO.File]::Move($temporary,$StatePath)}
+ }finally{foreach($path in @($temporary,$backup)){if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Force}}}
+}
