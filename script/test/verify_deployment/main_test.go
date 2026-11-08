@@ -45,6 +45,7 @@ func TestDeploymentExecutableLineCoverage(t *testing.T) {
 			hit++
 		}
 	}
+	t.Logf("actual deployment cases: %d/%d complete executable lines", hit, len(report.Files["script/test/verify_deployment/main.go"]))
 	if hit < 60 {
 		t.Fatalf("deployment command behavior cases cover %d real complete executable lines; require at least 60", hit)
 	}
