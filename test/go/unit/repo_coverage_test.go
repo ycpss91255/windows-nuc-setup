@@ -75,6 +75,7 @@ func TestRepoCoverageEmbeddedCodeIsNotPowerShellCoverage(t *testing.T) {
 		"managed.ps1":   "Add-Type -TypeDefinition @\"\npublic class Native { public static int Call() { return 1; } }\n\"@",
 		"generated.ps1": `[IO.File]::WriteAllText('compare.js','function run(){ return 1; }')`,
 		"assembly.ps1":  "Add-Type -AssemblyName System.Drawing",
+		"data.ps1": `[IO.File]::WriteAllText('result.json','{}')`,
 	}
 	for name, contents := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0600); err != nil {
@@ -82,7 +83,7 @@ func TestRepoCoverageEmbeddedCodeIsNotPowerShellCoverage(t *testing.T) {
 		}
 	}
 	inv, err := rc.ScanInventory(root)
-	if err != nil || len(inv.Sources) != 4 || len(inv.Blockers) != 2 {
+	if err != nil || len(inv.Sources) != 5 || len(inv.Blockers) != 2 {
 		t.Fatalf("embedded code scope wrong: %+v %v", inv, err)
 	}
 	found := false
@@ -94,6 +95,13 @@ func TestRepoCoverageEmbeddedCodeIsNotPowerShellCoverage(t *testing.T) {
 	if !found {
 		t.Fatal("pure extern declaration must be explained, not counted as managed executable lines")
 	}
+}
+
+func TestRepoCoverageDockerInlineLogicCannotHideBehindExtension(t *testing.T) {
+	root:=t.TempDir()
+	if err:=os.WriteFile(filepath.Join(root,"build.dockerfile"),[]byte("FROM image\nRUN powershell -Command `\n  if ($LASTEXITCODE -ne 0) { throw 'failed' }\n"),0600);err!=nil{t.Fatal(err)}
+	inv,err:=rc.ScanInventory(root)
+	if err!=nil||len(inv.Blockers)!=1{t.Fatalf("docker continuation hid executable checks: %+v %v",inv,err)}
 }
 
 func TestRepoCoverageUnionAndCompleteScope(t *testing.T) {
