@@ -95,9 +95,15 @@ if($WorkerIndex -ge 0){
  $config.CodeCoverage.OutputFormat='Cobertura';$config.CodeCoverage.OutputPath=Join-Path $output ('worker_'+$WorkerIndex+'.xml')
  $config.CodeCoverage.CoveragePercentTarget=0
  $failurePath=Join-Path $output ('worker_'+$WorkerIndex+'.private.failure.json')
- try{$result=Invoke-Pester -Configuration $config}catch{try{Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -InvocationErrors @($_)}catch{};throw}
+ $priorPesterErrors=@($global:Error);$pesterInvocationErrors=@()
+ try{$result=Invoke-Pester -Configuration $config -ErrorVariable pesterInvocationErrors}catch{try{Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -InvocationErrors @($_)}catch{};throw}
  if($result.FailedCount -gt 0 -or $result.PassedCount -lt 1 -or $result.Result -ne 'Passed'){
-  try{Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -Result $result}catch{}
+  try{
+   if($null -eq $result){
+    $currentPesterErrors=@(Get-NewPesterInvocationErrors -PriorErrors $priorPesterErrors -CurrentErrors @($global:Error) -InvocationErrors $pesterInvocationErrors)
+    Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -InvocationErrors $currentPesterErrors -NoResult
+   }else{Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -Result $result}
+  }catch{}
   throw 'Pester 測試未全部成功。'
  }
  if($null -ne $testContext -and ((Get-FileHash -LiteralPath $suiteFile).Hash.ToLowerInvariant() -cne $testContext.TestSHA256 -or ($wrapper -and (Get-FileHash -LiteralPath $wrapper).Hash.ToLowerInvariant() -cne $testContext.WrapperSHA256))){throw '測試或wrapper在原生量測期間變更。'}
