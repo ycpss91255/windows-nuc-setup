@@ -53,12 +53,14 @@ function Wait-HostedWindowsDocker {
  $probe={
   $result=& $call $DockerFile @('info','--format','{{json .}}')
   if($result.ExitCode -ne 0){return $false}
-  try{$engine=$result.Output|ConvertFrom-Json -ErrorAction Stop}catch{throw 'Docker returned invalid engine information.'}
-  if($engine.OSType -cne 'windows'){throw 'A Windows Docker engine is required; engine switching is forbidden.'}
+  # PS5 may enumerate a root JSON array and coerce bool/array comparisons.
+  if($result.Output -isnot [string] -or -not $result.Output.Trim().StartsWith('{')){throw 'Docker returned invalid engine information.'}
+  try{$engine=ConvertFrom-Json -InputObject $result.Output -ErrorAction Stop}catch{throw 'Docker returned invalid engine information.'}
+  if($engine -isnot [Management.Automation.PSCustomObject] -or $engine.OSType -isnot [string] -or $engine.OSType -cne 'windows'){throw 'A Windows Docker engine is required; engine switching is forbidden.'}
   return $true
  }
  if(& $probe){Write-Host 'Windows Docker daemon is ready.';return}
- if($Identity.GITHUB_ACTIONS -cne 'true' -or $Identity.RUNNER_ENVIRONMENT -cne 'github-hosted' -or $Identity.RUNNER_OS -cne 'Windows'){throw 'Docker recovery is restricted to GitHub hosted Windows runners.'}
+ if($Identity.GITHUB_ACTIONS -isnot [string] -or $Identity.RUNNER_ENVIRONMENT -isnot [string] -or $Identity.RUNNER_OS -isnot [string] -or $Identity.GITHUB_ACTIONS -cne 'true' -or $Identity.RUNNER_ENVIRONMENT -cne 'github-hosted' -or $Identity.RUNNER_OS -cne 'Windows'){throw 'Docker recovery is restricted to GitHub hosted Windows runners.'}
  $state={
   $result=& $call $ServiceFile @('query','Docker')
   if($result.ExitCode -ne 0){throw 'Docker service query failed; no daemon is installed or reconfigured.'}
