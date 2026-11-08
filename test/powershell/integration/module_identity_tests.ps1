@@ -31,3 +31,17 @@ Assert ($refused -and -not $called) 'different elevation account is rejected bef
 $ExpectedUserSID=$sid;$called=$false
 . ([scriptblock]::Create($guard.Extent.Text));$called=$true
 Assert $called 'same account remains usable without requiring a local Explorer session'
+# The layout Save shortcut calls its script directly rather than run_module.
+$layout=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'modules/desktop/desktop_icon_layout.ps1'),[ref]$tokens,[ref]$errors)
+$layoutElevation=$layout.Find({param($a) $a -is [Management.Automation.Language.IfStatementAst] -and $a.Clauses[0].Item1.Extent.Text -like '-not $principal.IsInRole*'},$true)
+$layoutBody=(@($layoutElevation.Clauses[0].Item2.Statements|Where-Object {$_ -isnot [Management.Automation.Language.ExitStatementAst]}|ForEach-Object {$_.Extent.Text}) -join "`n").Replace('$PSCommandPath','$entry')
+$Mode='Save';$sid='S-1-5-21-111-222-333-1001';$currentSID=$sid;$Worker=$false;$VerificationRunId=''
+& ([scriptblock]::Create($layoutBody))
+$layoutCommand=$script:captured
+if($layoutCommand.Contains('-EncodedCommand ')){$layoutCommand=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($layoutCommand -split '-EncodedCommand ')[1]))}
+Assert ($layoutCommand.Contains('-ExpectedUserSID') -and $layoutCommand.Contains($sid)) 'direct layout Save elevation also binds the original user'
+$layoutGuard=$layout.Find({param($a) $a -is [Management.Automation.Language.IfStatementAst] -and $a.Clauses[0].Item1.Extent.Text -match '^\$ExpectedUserSID -and'},$true)
+Assert ($null -ne $layoutGuard) 'direct layout Save contains an executable identity guard'
+$ExpectedUserSID='original';$sid='different';$currentSID=$sid;$refused=$false
+try{. ([scriptblock]::Create($layoutGuard.Extent.Text))}catch{$refused=$true}
+Assert $refused 'direct layout Save rejects a changed elevation account before saving'
