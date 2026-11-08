@@ -16,7 +16,7 @@ function Assert-InitProvisioningState {
  $fields=@('SchemaVersion','MachineGuid','ComputerName','SourceRoot','PackageHash','PackageId','PackageVersion','TargetUserName','TargetSid','Phase','LastErrorCode','UpdatedUtc')
  if($null -eq $State -or @($State.PSObject.Properties.Name).Count -ne $fields.Count -or @($State.PSObject.Properties.Name|Where-Object {$_ -notin $fields}).Count){throw 'Init 狀態欄位不符，拒絕讀取未知或機密欄位。'}
  if($State.SchemaVersion -ne 1 -or [string]::IsNullOrWhiteSpace($MachineGuid) -or $State.MachineGuid -cne $MachineGuid -or $PackageHash -notmatch '^[a-fA-F0-9]{64}$' -or $State.PackageHash -ine $PackageHash){throw 'Init 狀態不屬於此機器或設定包。'}
- if($State.PackageId -ne '1c2605ea-96ae-42fc-8f11-45fc0cb9d133' -or $State.PackageVersion -ne '1.0' -or $State.Phase -notin @('Prepared','AccountCreated','AccountReady','AwaitingConsent','ApplyPending','AwaitingLogon','SshPending','Complete')){throw 'Init 狀態版本或階段無效。'}
+ if($State.PackageId -ne '1c2605ea-96ae-42fc-8f11-45fc0cb9d133' -or $State.PackageVersion -ne '1.0' -or $State.Phase -notin @('Prepared','AccountCreated','AccountReady','AwaitingConsent','ApplyPending','AwaitingLogon','SshPending','Complete','AccountConfirmed')){throw 'Init 狀態版本或階段無效。'}
  if($State.Phase -ne 'Prepared' -and ($State.TargetSid -notmatch '^S-1-5-21-\d+-\d+-\d+-\d+$' -or [string]::IsNullOrWhiteSpace($State.TargetUserName))){throw 'Init 狀態缺少已確認的正式帳號 SID。'}
 }
 function New-InitProvisioningAccount {
@@ -122,6 +122,28 @@ function Invoke-InitSshContinuation {
  Save-InitProvisioningState -State $State -StatePath $StatePath
  Write-Host 'Init 完成：正式帳號與 SSH 已確認。' -ForegroundColor Green
  foreach($line in @(Get-InitConnectionInfo -UserName $State.TargetUserName -ComputerName $Context.ComputerName)){Write-Host $line}
+}
+function Confirm-InitAccountCheckpoint {
+ param($State,[string]$StatePath,[hashtable]$Context,[string]$PackageHash)
+ Assert-InitProvisioningState -State $State -MachineGuid $Context.MachineGuid -PackageHash $PackageHash
+ if($State.Phase -notin @('AwaitingLogon','ApplyPending','SshPending','Complete','AccountConfirmed')){throw '帳號與 OOBE 尚未準備完成，不能進入 Windows 設定。'}
+ if($Context.Sid -ne $State.TargetSid -or $Context.Sid -eq 'S-1-5-18' -or $Context.ImageState -ne 'IMAGE_STATE_COMPLETE' -or -not $Context.DesktopOwned -or -not $Context.IsAdministrator){throw '請以本輪建立的正式管理員帳號登入桌面。'}
+ if([string]::IsNullOrWhiteSpace($Context.ProfilePath) -or [string]::IsNullOrWhiteSpace($Context.RegisteredProfile) -or [IO.Path]::GetFullPath($Context.ProfilePath).TrimEnd('\') -ine [IO.Path]::GetFullPath($Context.RegisteredProfile).TrimEnd('\')){throw '正式帳號 SID 與家目錄登錄不一致。'}
+ $user=Get-LocalUser -SID $State.TargetSid -ErrorAction Stop
+ $members=@(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction Stop)
+ if(-not $user -or -not $user.Enabled -or $user.SID.Value -ne $State.TargetSid -or $user.Name -cne $State.TargetUserName -or -not @($members|Where-Object {$_.SID.Value -eq $State.TargetSid}).Count){throw '正式帳號或管理員群組驗證失敗。'}
+ $installed=@(Get-ProvisioningPackage -AllInstalledPackages -ErrorAction Stop|Where-Object {$_.IsInstalled -and $_.PackageID -eq $State.PackageId -and $_.Version -eq $State.PackageVersion -and $_.PackageName -eq 'windows_setup_hide_oobe'})
+ if($installed.Count -ne 1){throw '初始設定包尚未確認完成；保留原狀態，停止 Windows 設定。'}
+ if($State.Phase -ne 'AccountConfirmed'){
+  $snapshot=Join-Path (Split-Path $StatePath -Parent) 'state_before_account_confirmation.json'
+  if(Test-Path -LiteralPath $snapshot){
+   $previous=Read-InitProvisioningState $snapshot $Context.MachineGuid $PackageHash
+   if($previous.TargetSid -ne $State.TargetSid){throw '既有帳號確認快照不屬於此 SID，不覆寫。'}
+  }else{Save-InitProvisioningState $State $snapshot}
+  $State.Phase='AccountConfirmed';$State.LastErrorCode=''
+  Save-InitProvisioningState $State $StatePath
+ }
+ Write-Host 'Init 帳號與 OOBE 已確認；接著執行 windows.cmd。SSH 由 Windows 設定第 4 階段處理。' -ForegroundColor Green
 }
 function Get-InitConnectionInfo {
  param([string]$UserName,[string]$ComputerName)
