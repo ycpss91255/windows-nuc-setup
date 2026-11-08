@@ -6,7 +6,7 @@ $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 $rollup=[regex]::Match($workflow,'(?ms)^  ci-rollup:\r?\n(?<body>.*?)^  release:').Groups['body'].Value
 $scriptText=([regex]::Match($rollup,'(?ms)        run: \|\r?\n(?<body>.*)$').Groups['body'].Value -replace '(?m)^          ','').Trim()
-$env:TEST_RESULT='success';$env:REQUIREMENTS_RESULT='success';$env:DOCKER_RESULT='success';$env:OOBE_PAYLOAD_RESULT='failure'
+$env:TEST_RESULT='success';$env:REQUIREMENTS_RESULT='success';$env:DOCKER_RESULT='success';$env:POWERSHELL_COVERAGE_RESULT='success';$env:OOBE_PAYLOAD_RESULT='failure'
 $rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
 Assert $rejected 'actual ci-rollup rejects failed OOBE package content inspection'
 $env:OOBE_PAYLOAD_RESULT='success'
