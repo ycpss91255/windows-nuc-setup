@@ -59,6 +59,7 @@ function Save-InitProvisioningState {
  Assert-InitProvisioningState -State $State -MachineGuid $State.MachineGuid -PackageHash $State.PackageHash
  Assert-InitPlainPath -Path $StatePath
  Assert-InitProtectedDirectory -Path (Split-Path $StatePath -Parent)
+ if(Test-Path -LiteralPath $StatePath){Assert-InitProtectedFile -Path $StatePath}
  $State.UpdatedUtc=[DateTime]::UtcNow.ToString('o')
  $temporary=$StatePath+'.'+[guid]::NewGuid().ToString('N')+'.tmp'
  $backup=$temporary+'.previous'
@@ -66,6 +67,15 @@ function Save-InitProvisioningState {
   [IO.File]::WriteAllText($temporary,($State|ConvertTo-Json -Depth 3),(New-Object Text.UTF8Encoding($false)))
   if(Test-Path -LiteralPath $StatePath){[IO.File]::Replace($temporary,$StatePath,$backup)}else{[IO.File]::Move($temporary,$StatePath)}
  }finally{foreach($path in @($temporary,$backup)){if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Force}}}
+}
+function Assert-InitProtectedFile {
+ param([string]$Path)
+ Assert-InitPlainPath -Path $Path
+ $acl=Get-Acl -LiteralPath $Path -ErrorAction Stop
+ if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin @('S-1-5-18','S-1-5-32-544')){throw 'Init 狀態檔擁有者不可信。'}
+ $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+ foreach($rule in $rules){if($rule.AccessControlType -ne 'Allow' -or $rule.IdentityReference.Value -notin @('S-1-5-18','S-1-5-32-544')){throw 'Init 狀態檔 ACL 允許非預期帳號，拒絕讀寫。'}}
+ foreach($sid in @('S-1-5-18','S-1-5-32-544')){if(-not @($rules|Where-Object {$_.IdentityReference.Value -eq $sid -and $_.FileSystemRights -eq [Security.AccessControl.FileSystemRights]::FullControl -and -not ($_.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly)}).Count){throw 'Init 狀態檔缺少必要完整存取規則。'}}
 }
 function Invoke-InitSshContinuation {
  param($State,[string]$StatePath,[hashtable]$Context,[string]$SshScriptPath)
