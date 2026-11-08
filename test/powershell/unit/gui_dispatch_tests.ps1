@@ -7,6 +7,12 @@ function Reject([scriptblock]$Action,[string]$Expected,[string]$Name){$failure=$
 . (Join-Path $root 'core/gui_stage_library.ps1')
 $scope=Get-SetupGuiIdentity
 Assert ($scope.UserSID -and $scope.Computer -ceq $env:COMPUTERNAME -and $scope.SessionId -ge 0) 'GUI identity reads actual current scope without applying any setting'
+$savedWindowsRoot=$env:SystemRoot;$savedComputer=$env:COMPUTERNAME
+try{
+ $env:SystemRoot=Join-Path ([IO.Path]::GetTempPath()) 'caller-controlled-windows';$env:COMPUTERNAME='caller-controlled-computer'
+ $trustedIdentity=Get-SetupGuiIdentity
+}finally{$env:SystemRoot=$savedWindowsRoot;$env:COMPUTERNAME=$savedComputer}
+Assert ($trustedIdentity.PowerShell -ceq (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'WindowsPowerShell/v1.0/powershell.exe') -and $trustedIdentity.Computer -ceq [Environment]::MachineName) 'GUI executable and machine binding use OS values instead of caller-controlled environment'
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('gui_dispatch_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
 $script:scope=[pscustomobject]@{UserSID='S-1-5-21-1-2-3-1001';Computer='fixture';SessionId=0;CommonDataRoot=$temp;PowerShell='fixture powershell.exe'}
 function Get-SetupGuiIdentity {$script:scope}
