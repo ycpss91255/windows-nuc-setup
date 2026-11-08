@@ -9,7 +9,7 @@ $cases=@(
  @{Native='modules/display/native/display.cs';Script='modules/display/apply_display_settings.ps1';Type='NUC8Display.Display';Methods='Read,Apply,NativeScales,GetDpiForSystem';Key='display.cs'},
  @{Native='modules/explorer/native/explorer.cs';Script='modules/explorer/apply_explorer_settings.ps1';Type='NucExplorerLiveV2';Methods='Options';Key='explorer.cs'},
  @{Native='modules/theme/native/theme.cs';Script='modules/theme/apply_theme_settings.ps1';Type='NUC8Theme';Methods='TaskbarColor,SetSysColors,ReadWallpaper,GetSysColor,SystemParametersInfo';Key='theme.cs'},
- @{Native='modules/terminal/native/terminal_hotkey.cs';Script='modules/terminal/terminal_hotkey_listener.ps1';Type='NucTerminalHotkey';Methods='Run';Key='terminal_hotkey.cs'},
+ @{Native='modules/terminal/native/terminal_hotkey.cs';Script='modules/terminal/terminal_hotkey_library.ps1';Type='NucTerminalHotkey';Methods='Run';Key='terminal_hotkey.cs'},
  @{Native='script/test/native/oobe_wim_reader.cs';Script='script/test/verify_oobe_payload.ps1';Type='WindowsSetup.OobeWimReader';Methods='Extract';Key=$null}
 )
 foreach($case in $cases){
