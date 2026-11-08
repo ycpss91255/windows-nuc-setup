@@ -65,6 +65,7 @@ public static class ManagedNativeTests {
   api.Rectangle=delegate(IntPtr window,out NUC8Theme.Rect rect){rect=new NUC8Theme.Rect{Left=0,Top=1078,Right=1920,Bottom=1126};return true;};
   api.Pixel=delegate(IntPtr dc,int x,int y){if(x<0||x>=1920||y<0||y>=1080){outsideReads++;return 0xffffffff;}return 0x00151515;};
   Throws(delegate{NUC8Theme.TaskbarColor(api);},"offscreen sample without confirmed autohide is rejected",typeof(Exception));
+  Console.WriteLine("OFFSCREEN_PIXEL_CALLS="+outsideReads);
   Assert(outsideReads==0,"theme rejects offscreen geometry before asking GetPixel outside the clip region");
  }
  static void HotkeyCases(){
