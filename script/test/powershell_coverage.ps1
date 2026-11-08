@@ -10,6 +10,10 @@ function Get-PinnedPester {
  $cache=Join-Path ([IO.Path]::GetTempPath()) 'windows_setup_pester_6_0_0'
  [void][IO.Directory]::CreateDirectory($cache)
  $zip=Join-Path $cache 'pester.zip'
+ if($env:WINDOWS_SETUP_PESTER_PACKAGE_PATH){
+  $zip=[IO.Path]::GetFullPath($env:WINDOWS_SETUP_PESTER_PACKAGE_PATH)
+  if(-not(Test-Path -LiteralPath $zip -PathType Leaf)){throw '預備的 Pester 套件不存在，拒絕退回網路或使用者快取。'}
+ }
  if(-not(Test-Path -LiteralPath $zip)){
   $download=Join-Path $cache ([guid]::NewGuid().ToString('N')+'.download')
   $tls=[Net.ServicePointManager]::SecurityProtocol
