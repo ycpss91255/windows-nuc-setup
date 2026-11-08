@@ -24,7 +24,7 @@ function Invoke-SetupDesktopSettings {
   if([string]::IsNullOrWhiteSpace($desktop)){throw '無法辨識桌面路徑。'}
   $absolute=[IO.Path]::GetFullPath($desktop).TrimEnd('\')
   if($absolute -eq [IO.Path]::GetPathRoot($absolute).TrimEnd('\') -or $absolute -eq $env:USERPROFILE){throw ('桌面路徑不安全：'+$absolute)}
-  foreach($item in Get-ChildItem -LiteralPath $absolute -Force -ErrorAction Stop|Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::Hidden) -and -not ($_.Attributes -band [IO.FileAttributes]::System) }){
+  foreach($item in Get-ChildItem -LiteralPath $absolute -Force -ErrorAction Stop|Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::System) }){
    Write-Host ('刪除桌面項目：'+$item.FullName)
    Remove-SetupDesktopEntry -Item $item -AllowedRoot $absolute
    $deleted.Add($item.FullName)
@@ -45,7 +45,7 @@ function Invoke-SetupDesktopSettings {
  New-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\explorer\Advanced' -Name HideIcons -Value 0 -PropertyType DWord -Force|Out-Null
  if(-not ('NUC8DesktopRefresh' -as [type])){Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public static class NUC8DesktopRefresh{[DllImport("shell32.dll")]public static extern void SHChangeNotify(int e,uint f,IntPtr a,IntPtr b);}'}
  [NUC8DesktopRefresh]::SHChangeNotify(0x08000000,0,[IntPtr]::Zero,[IntPtr]::Zero)
- $remaining=@(foreach($desktop in $roots){Get-ChildItem -LiteralPath $desktop -Force|Where-Object {-not ($_.Attributes -band [IO.FileAttributes]::Hidden) -and -not ($_.Attributes -band [IO.FileAttributes]::System)}|Select-Object -ExpandProperty FullName})
+ $remaining=@(foreach($desktop in $roots){Get-ChildItem -LiteralPath $desktop -Force|Where-Object {-not ($_.Attributes -band [IO.FileAttributes]::System)}|Select-Object -ExpandProperty FullName})
  $result=[ordered]@{Success=($remaining.Count -eq 0);DesktopRoots=$roots;DeletedItems=@($deleted.ToArray());RemainingFiles=$remaining;SystemIcons=@('控制台','本機','網路','資源回收筒');AppliedAt=(Get-Date).ToString('o')}
  return [pscustomobject]$result
 }

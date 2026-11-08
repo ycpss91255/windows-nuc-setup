@@ -63,7 +63,7 @@ $show=@('{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}','{20D04FE0-3AEA-1069-A2D8-08002
 $iconsOK=$true
 foreach($id in $show){if($null -eq $icons.$id -or $icons.$id -ne 0){$iconsOK=$false}}
 Add-Check '四個桌面系統圖示' $iconsOK '控制台、本機、網路、資源回收筒的顯示設定'
-$desktopFiles=@(foreach($dir in @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))){Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue|Where-Object {-not ($_.Attributes -band [IO.FileAttributes]::Hidden) -and -not ($_.Attributes -band [IO.FileAttributes]::System)}|Select-Object -ExpandProperty Name})
+$desktopFiles=@(foreach($dir in @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('CommonDesktopDirectory'))){Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue|Where-Object {-not ($_.Attributes -band [IO.FileAttributes]::System)}|Select-Object -ExpandProperty Name})
 Add-Check '桌面無其他一般檔案/捷徑' ($desktopFiles.Count -eq 0) ('剩餘項目：'+($desktopFiles -join ', '))
 try{
  $fresh=Invoke-SetupGuiFreshVerification -PackageRoot $script:NucPackageRoot -Role Theme
