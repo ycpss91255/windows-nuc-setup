@@ -36,6 +36,11 @@ $identity=Get-Content (Join-Path $export 'package.json') -Raw|ConvertFrom-Json
 Assert ($identity.SchemaVersion -eq 2 -and $identity.ProfileId -eq 'synthetic_board') '版本2包身分綁定profile'
 Assert ($identity.ProfileSHA256 -eq (Get-FileHash (Join-Path $dir 'profile.json')).Hash) '身分記錄profile原始位元組hash'
 Assert ((Test-SetupDriverPayload $h $export).Status -eq 'Passed') '已選型第二種板可驗證輸出包'
+$entryPath=Join-Path $export 'modules/drivers/install_drivers.ps1'
+$command="& '"+$entryPath.Replace("'","''")+"' -PackageOnly -DriverPackagePath '"+$export.Replace("'","''")+"' | ConvertTo-Json -Compress"
+$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+$cli=@(& powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded 2>&1)
+Assert ($LASTEXITCODE -eq 0 -and ($cli -join '') -match '"Status":"Passed"' -and ($cli -join '') -match '"Count":1') '真交付CLI離線驗包支援第二個機型，不固定NUC板號'
 $wrong=Get-SetupHardwareProfile -BoardProduct NUC8i7HVB
 Reject {Test-SetupDriverPayload $wrong $export} '其他合法profile的包不能跨板安裝'
 $identity.SupportedBoards=@('NUC8i7HVB');$identity|ConvertTo-Json|Set-Content (Join-Path $export 'package.json') -Encoding UTF8
