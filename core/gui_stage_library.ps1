@@ -226,7 +226,7 @@ function Invoke-SetupGuiScheduledWorker {
   Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -ErrorAction Stop|Out-Null
   $registered=$true;Start-ScheduledTask -TaskName $name -ErrorAction Stop
   $resultPath=Join-Path $Stage.DataRoot (Get-SetupGuiResultName $context);$deadline=(Get-Date).AddSeconds(60)
-  do{Start-Sleep -Seconds 2;if(Test-Path -LiteralPath $resultPath){return}}while((Get-Date) -lt $deadline)
+  do{Start-Sleep -Seconds 2;$task=Get-ScheduledTask -TaskName $name -ErrorAction Stop;if((Test-Path -LiteralPath $resultPath) -and $task -and $task.State -ne 'Running'){return}}while((Get-Date) -lt $deadline)
   throw '尚未取得受保護的本輪GUI worker結果；請確認原帳號已登入桌面。'
  }finally{
   if($registered){$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;if($task -and $task.State -ne 'Running'){Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction Stop}}
