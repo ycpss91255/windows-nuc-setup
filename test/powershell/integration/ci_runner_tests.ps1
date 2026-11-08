@@ -64,19 +64,20 @@ try{
  Remove-Item -LiteralPath (Join-Path $fixture '.version')
  $r=Run 'unversioned' 'Unit';Assert ($r.Version -eq 'Unknown' -and $r.SourceState -eq 'Dirty') '缺版本不假設有效版本'
  # The CLI contract is executed using an isolated copy with a harmless named delegate.
- $cli=Join-Path $temp 'cli/script/test';[void][IO.Directory]::CreateDirectory($cli)
+ $cli=Join-Path $temp 'cli_來源_😀/script/test';[void][IO.Directory]::CreateDirectory($cli)
  Copy-Item -LiteralPath (Join-Path $root 'script/test/run_ci.ps1') -Destination $cli
  [IO.File]::WriteAllText((Join-Path $cli 'ci_runner_library.ps1'),'function Invoke-SetupCI {param($PackageRoot,$ReportDirectory,$Layer);@{Root=$PackageRoot;Output=$ReportDirectory;Layer=$Layer}|ConvertTo-Json|Set-Content -LiteralPath $ReportDirectory}', $encoding)
  $cliOut=Join-Path $temp 'cli.json'
  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $cli 'run_ci.ps1') -Layer Integration -ReportDirectory $cliOut
  Assert ($LASTEXITCODE -eq 0) 'CLI 真子程序委派成功'
  $called=Get-Content -LiteralPath $cliOut -Raw|ConvertFrom-Json
- Assert (Test-CICliDelegation $called (Join-Path $temp 'cli') $cliOut) ('CLI 動態套件根與參數完整委派；actualRoot='+$called.Root+';expectedRoot='+(Join-Path $temp 'cli')+';actualOutput='+$called.Output+';expectedOutput='+$cliOut+';actualLayer='+$called.Layer)
+ Assert ($called.Root.Contains('😀')) 'CLI fixture JSON 必須完整保留非 ANSI Unicode 目錄'
+ Assert (Test-CICliDelegation $called (Join-Path $temp 'cli_來源_😀') $cliOut) ('CLI 動態套件根與參數完整委派；actualRoot='+$called.Root+';expectedRoot='+(Join-Path $temp 'cli_來源_😀')+';actualOutput='+$called.Output+';expectedOutput='+$cliOut+';actualLayer='+$called.Layer)
  # Exercise real equivalent directory spellings, including actual 8.3 alias when available.
- $aliases=@((Join-Path $temp 'cli\.'),(Join-Path $temp 'cli\'))
+ $aliases=@((Join-Path $temp 'cli_來源_😀\.'),(Join-Path $temp 'cli_來源_😀\'))
  $fso=New-Object -ComObject Scripting.FileSystemObject
- $shortRoot=[string]$fso.GetFolder((Join-Path $temp 'cli')).ShortPath
- if($shortRoot -ine (Join-Path $temp 'cli')){$aliases+=@($shortRoot)}
+ $shortRoot=[string]$fso.GetFolder((Join-Path $temp 'cli_來源_😀')).ShortPath
+ if($shortRoot -ine (Join-Path $temp 'cli_來源_😀')){$aliases+=@($shortRoot)}
  foreach($aliasRoot in $aliases){
   $aliasOut=Join-Path $temp 'alias_cli.json'
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aliasRoot 'script/test/run_ci.ps1') -Layer Integration -ReportDirectory $aliasOut
@@ -85,8 +86,8 @@ try{
   Assert (Test-CICliDelegation $aliasCalled $aliasRoot $aliasOut) ('等價路徑 CLI 動態套件根與參數完整委派；actualRoot='+$aliasCalled.Root+';expectedRoot='+$aliasRoot+';actualOutput='+$aliasCalled.Output+';expectedOutput='+$aliasOut+';actualLayer='+$aliasCalled.Layer)
  }
  Assert (-not(Test-CICliDelegation $called (Join-Path $temp 'different_root') $cliOut)) '不同目錄即使存在共同祖先也拒絕'
- Assert (-not(Test-CICliDelegation ([pscustomobject]@{Root=$called.Root;Output=$cliOut;Layer='Unit'}) (Join-Path $temp 'cli') $cliOut)) 'Layer仍須精確Integration'
- Assert (-not(Test-CICliDelegation ([pscustomobject]@{Root=$called.Root;Output=($cliOut+'.wrong');Layer='Integration'}) (Join-Path $temp 'cli') $cliOut)) 'Output仍須精確原參數'
+ Assert (-not(Test-CICliDelegation ([pscustomobject]@{Root=$called.Root;Output=$cliOut;Layer='Unit'}) (Join-Path $temp 'cli_來源_😀') $cliOut)) 'Layer仍須精確Integration'
+ Assert (-not(Test-CICliDelegation ([pscustomobject]@{Root=$called.Root;Output=($cliOut+'.wrong');Layer='Integration'}) (Join-Path $temp 'cli_來源_😀') $cliOut)) 'Output仍須精確原參數'
 }finally{
  foreach($key in $keys){[Environment]::SetEnvironmentVariable($key,$saved[$key],'Process')}
  # Only this test-created absolute TEMP tree can be removed.
