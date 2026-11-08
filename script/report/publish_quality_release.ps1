@@ -1,10 +1,12 @@
 ﻿#Requires -Version 5.1
-param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease)
+param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../test/test_report.ps1')
 . (Join-Path $PSScriptRoot 'portal.ps1')
 $snapshot=Get-Content (Join-Path $PublicDirectory 'summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert-TestReportSnapshot -Report $snapshot -Release
+if($snapshot.SchemaVersion -ne 2){throw '本輪發布只接受schema2完整整體覆蓋率，legacy僅供歷史讀取。'}
+Assert-RepoCoverageArtifacts -Report $snapshot -Directory $PublicDirectory -CoverageToolPath $CoverageToolPath -RequireComplete
 if($snapshot.Commit -cne $Commit -or $snapshot.Version -cne $Version -or $snapshot.RefName -cne $Version){throw '發布版本與測試來源不一致。'}
 $files=@(Get-TestReportArtifactNames $snapshot.SchemaVersion)
 $hashes=@(foreach($name in $files){[ordered]@{Name=$name;SHA256=(Get-FileHash -LiteralPath (Join-Path $PublicDirectory $name)).Hash.ToLowerInvariant()}})
