@@ -14,7 +14,7 @@ function New-FakeJob {
  $j=[pscustomobject]@{IsCompleted=$false;Index=0;Never=$false}
  $j|Add-Member ScriptMethod GetProgress {$script:events+='Progress';if($script:failProgress){throw 'fixture progress fail'};$p=@(25,70,100)[$this.Index];$i=[math]::Min(1,$this.Index);if(-not $this.Never){$this.Index++;if($this.Index -eq 3){$this.IsCompleted=$true}};[pscustomobject]@{PercentComplete=$p;CurrentUpdateIndex=$i;CurrentUpdatePercentComplete=50}}
  $j|Add-Member ScriptMethod RequestAbort {$script:events+='Abort';$this.IsCompleted=$true}
- $j|Add-Member ScriptMethod CleanUp {$script:events+='CleanUp'}
+ $j|Add-Member ScriptMethod CleanUp {$script:events+='CleanUp';$script:cleanupSawFailure=($script:seen[-1].Stage -eq '更新未完成')}
  return $j
 }
 function New-FakeClient {
@@ -34,7 +34,7 @@ foreach($op in @('Download','Install')){
  Assert (($script:events -join ',') -eq 'Begin,Progress,Progress,Progress,End,CleanUp') ($op+'只啟動一次完成後End並Cleanup')
 }
 $client=New-FakeClient;$client.IsBusy=$true;$script:events=@();Reject {Invoke-SetupUpdateOperation -Operation Install -Client $client -Titles a -ProgressPath x} 'installer busy不雙重啟動';Assert ($script:events.Count -eq 0) 'busy完全不呼叫Begin'
-$client=New-FakeClient;$client.Job.Never=$true;$script:events=@();Reject {Invoke-SetupUpdateOperation -Operation Download -Client $client -Titles a -ProgressPath x -TimeoutSeconds 0 -PollSeconds 0} '下載超時明確失敗';Assert ($script:events -contains 'Abort' -and $script:events -contains 'CleanUp' -and @($script:events|Where-Object {$_ -eq 'Begin'}).Count -eq 1) '超時只中止自己工作並清理不重啟'
+$client=New-FakeClient;$client.Job.Never=$true;$script:events=@();Reject {Invoke-SetupUpdateOperation -Operation Download -Client $client -Titles a -ProgressPath x -TimeoutSeconds 0 -PollSeconds 0} '下載超時明確失敗';Assert ($script:events -contains 'Abort' -and $script:events -contains 'CleanUp' -and @($script:events|Where-Object {$_ -eq 'Begin'}).Count -eq 1) '超時只中止自己工作並清理不重啟';Assert $script:cleanupSawFailure '進入可能阻塞的COM清理前已保存失敗進度'
 $client=New-FakeClient;$script:failEnd=$true;$script:events=@();Reject {Invoke-SetupUpdateOperation -Operation Install -Client $client -Titles a -ProgressPath x -PollSeconds 0} 'End錯誤如實失敗';Assert ($script:events[-1] -eq 'CleanUp') 'End失敗仍Cleanup';$script:failEnd=$false
 $client=New-FakeClient;$script:failProgress=$true;$script:events=@();Reject {Invoke-SetupUpdateOperation -Operation Download -Client $client -Titles a -ProgressPath x -PollSeconds 0} '進度API錯誤不假成功';Assert ($script:events -contains 'Abort' -and $script:events[-1] -eq 'CleanUp') '進度失敗清理自己job';$script:failProgress=$false
 Write-Host 'ALL PASS: fake WUA boundaries, original orchestration only'
