@@ -31,4 +31,13 @@ foreach($case in @('transient','persistent','404','timeout','non-network','429')
 $existing=Join-Path $temp 'existing.zip';[IO.File]::WriteAllText($existing,'original');$script:calls=0;$rejected=$false
 try{Invoke-ContainerOfficialDownload -Uri 'https://example.invalid/official.zip' -OutFile $existing}catch{$rejected=$true}
 Assert ($rejected -and $script:calls -eq 0 -and [IO.File]::ReadAllText($existing) -ceq 'original') '不把既有或未知cache當成成功也不覆寫'
+. (Join-Path $root 'script/docker/install_managed_tools.ps1')
+$fixtureContent=Join-Path $temp 'expected.bin';[IO.File]::WriteAllText($fixtureContent,'partial-or-complete')
+$artifact=[pscustomobject]@{Name='fixture.zip';Uri='https://example.invalid/official.zip';Algorithm='SHA256';Hash=(Get-FileHash $fixtureContent).Hash;Kind='File';HashFormat='Hex'}
+$script:calls=0;$script:sleeps=@();$script:codes=@(504,0);$target=Join-Path $temp 'target.bin';$stage=Join-Path $temp 'stage';$accepted=$true
+try{Install-ContainerToolArtifact -Artifact $artifact -Destination $target -ArchiveDirectory $stage}catch{$accepted=$false}
+Assert ($accepted -and $script:calls -eq 2 -and (Get-FileHash $target).Hash -ceq $artifact.Hash) '正式managed安裝器使用同URL重試並保留真hash驗證'
+$artifact.Name='bad.zip';$artifact.Hash='0'*64;$script:calls=0;$script:codes=@(0);$accepted=$true
+try{Install-ContainerToolArtifact -Artifact $artifact -Destination (Join-Path $temp 'bad.bin') -ArchiveDirectory $stage}catch{$accepted=$false}
+Assert (-not $accepted -and $script:calls -eq 1 -and -not(Test-Path (Join-Path $stage 'bad.zip')) -and -not(Test-Path (Join-Path $temp 'bad.bin'))) '雜湊失敗不重試、不安裝且不保留未信任cache'
 Write-Host 'ALL PASS: bounded official downloads; TEMP and mocked HTTP only'
