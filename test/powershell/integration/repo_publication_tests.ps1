@@ -106,6 +106,25 @@ $downloaded=@(Get-Content $inputs.CatalogPath -Raw -Encoding UTF8|ConvertFrom-Js
 foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml')){Assert (Test-Path -LiteralPath (Join-Path $downloaded.AssetDirectory $name)) ('實際Release匯入完整覆蓋率附件：'+$name)}
 $null=Test-PortalReleaseEvidence -Entry $downloaded -CoverageToolPath $tool
 Remove-Item Function:\gh
+Refuse {& (Join-Path $root 'script/test/attach_repo_coverage.ps1') -PublicDirectory $public -CoverageDirectory $evidence -CoverageToolPath (Join-Path $fixture 'missing_cli.exe')} '缺少驗證CLI不得略過門檻'
+$lowDirectory=Join-Path $fixture 'below_threshold';New-Item -ItemType Directory $lowDirectory|Out-Null
+Copy-Item -LiteralPath (Join-Path $evidence 'coverage_inventory.json') -Destination $lowDirectory
+$lowXml=([regex]'hits="1"').Replace($xml,'hits="0"',1)
+[IO.File]::WriteAllText((Join-Path $lowDirectory 'coverage.xml'),$lowXml,$utf8)
+$lowCoverage=Get-Content (Join-Path $evidence 'repo_coverage.json') -Raw -Encoding UTF8|ConvertFrom-Json
+$lowCoverage.Result.Covered=3;$lowCoverage.Result.Percent=60;$lowCoverage.Result.Languages.powershell.Covered=3
+$lowCoverage.NormalizedSHA256=(Get-FileHash (Join-Path $lowDirectory 'coverage.xml')).Hash.ToLowerInvariant()
+[IO.File]::WriteAllText((Join-Path $lowDirectory 'repo_coverage.json'),($lowCoverage|ConvertTo-Json -Depth 10),$utf8)
+Refuse {& (Join-Path $root 'script/test/attach_repo_coverage.ps1') -PublicDirectory $public -CoverageDirectory $lowDirectory -CoverageToolPath $tool} '完整但低於八成的真證據不得附加發布'
+$lowReport=$report|ConvertTo-Json -Depth 20|ConvertFrom-Json;$lowReport.RepoCoverage=$lowCoverage;$lowReport.RefType='Branch';$lowReport.RefName='main'
+Write-SnapshotView $lowReport $lowDirectory
+Refuse {& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory (Join-Path $fixture 'low_portal') -MainSnapshotPath (Join-Path $lowDirectory 'summary.json') -CoverageToolPath $tool} '正式Pages逐行重算拒絕低於八成'
+$lowReport.RefType='Release';$lowReport.RefName='v1.0.0';Write-SnapshotView $lowReport $lowDirectory
+$global:repoPublicationRemoteCalled=$false
+function gh {$global:repoPublicationRemoteCalled=$true;throw 'unexpected remote call'}
+Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $lowDirectory -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $lowDirectory 'summary.md') -Repository example/repo -CoverageToolPath $tool} '新版publisher拒絕完整但低於八成'
+Assert (-not $global:repoPublicationRemoteCalled) '八成門檻失敗在任何遠端操作前停止'
+Remove-Item Function:\gh
 $before=(Get-FileHash (Join-Path $public 'summary.json')).Hash
 [IO.File]::AppendAllText((Join-Path $evidence 'coverage.xml'),'tampered')
 Refuse {& (Join-Path $root 'script/test/attach_repo_coverage.ps1') -PublicDirectory $public -CoverageDirectory $evidence -CoverageToolPath $tool} '篡改逐行證據不得附加'
