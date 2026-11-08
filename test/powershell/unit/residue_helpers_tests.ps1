@@ -40,4 +40,6 @@ Assert (Test-Path (Join-Path $system 'Windows.old/data.txt')) 'Windows.old 實�
 Assert (Test-Path (Join-Path $profile 'Favorites/Links/custom.txt')) '巢狀自訂收藏保留'
 Reject {Invoke-SetupResidueCleanup -SystemRoot $system -UserProfile ([IO.Path]::GetPathRoot($profile)) -ResultRoot $result -UserSid 'x'} '拒絕磁碟根作使用者資料夾'
 Reject {Invoke-SetupResidueCleanup -SystemRoot (Join-Path $fixture 'missing') -UserProfile $profile -ResultRoot $result -UserSid 'x'} '拒絕不存在的系統根'
+function Get-Item {param([string]$LiteralPath,[switch]$Force) [pscustomobject]@{Attributes=[IO.FileAttributes]::ReparsePoint;Parent=$null}}
+try{Reject {Invoke-SetupResidueCleanup @argsMap} '根路徑重新解析點在任何清理前拒絕'}finally{Remove-Item Function:\Get-Item}
 Write-Host 'ALL PASS: residue named source tests'
