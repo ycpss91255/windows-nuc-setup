@@ -24,6 +24,7 @@ type psWorker struct {
 	PesterVersion                       string
 	Sources                             []psSource
 	Commands                            []psCommand
+	Context                             *PowerShellWorkerContext `json:"Context,omitempty"`
 }
 type psEvidence struct {
 	SchemaVersion                        int
@@ -91,6 +92,14 @@ func NormalizePowerShell(data []byte, read func(string) ([]byte, error), invento
 		}
 		if descriptor.Index != index || !validPowerShellEngine(descriptor.Engine, descriptor.EngineVersion, descriptor.EngineSHA256) || worker.Engine != descriptor.Engine || worker.EngineVersion != descriptor.EngineVersion || worker.EngineSHA256 != descriptor.EngineSHA256 || worker.PesterVersion != evidence.PesterVersion || worker.ProcessId != descriptor.ProcessId || worker.ProcessId <= 0 || len(worker.Sources) != len(expected) {
 			return r, nil, fmt.Errorf("PowerShell worker identity mismatch")
+		}
+		if worker.Context != nil {
+			if !validNativePowerShellContext(worker.Context, worker.ProcessId) {
+				return r, nil, fmt.Errorf("invalid native PowerShell worker context")
+			}
+			if err := exactShardFields(bytes, reflect.TypeOf(worker), false); err != nil {
+				return r, nil, err
+			}
 		}
 		seenSources := map[string]bool{}
 		for _, source := range worker.Sources {
