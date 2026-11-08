@@ -6,9 +6,9 @@ function Get-SetupSSHFirewallStatus {
   $rule=$rules[0]
   $addresses=@($rule|Get-NetFirewallAddressFilter -ErrorAction Stop|Select-Object -ExpandProperty RemoteAddress)
   $filters=@($rule|Get-NetFirewallPortFilter -ErrorAction Stop)
-  $valid=$rule.Enabled.ToString() -eq 'True' -and $rule.Direction.ToString() -eq 'Inbound' -and $rule.Action.ToString() -eq 'Allow'
+  $valid=$rule.Enabled.ToString() -eq 'True' -and $rule.Direction.ToString() -eq 'Inbound' -and $rule.Action.ToString() -eq 'Allow' -and $rule.Profile.ToString() -eq 'Any'
   $valid=$valid -and $addresses.Count -eq 1 -and $addresses[0] -eq 'LocalSubnet' -and $filters.Count -eq 1
   if($filters.Count -eq 1){$ports=@($filters[0].LocalPort);$valid=$valid -and $filters[0].Protocol.ToString() -in @('TCP','6') -and $ports.Count -eq 1 -and $ports[0] -eq '22'}
-  [pscustomobject]@{Passed=[bool]$valid;Detail=('Enabled='+$rule.Enabled+'; Direction='+$rule.Direction+'; Action='+$rule.Action+'; RemoteAddress='+($addresses -join ',')+'; Protocol/Port='+(@($filters|ForEach-Object {$_.Protocol.ToString()+'/'+($_.LocalPort -join ',')}) -join ';'))}
+  [pscustomobject]@{Passed=[bool]$valid;Detail=('Enabled='+$rule.Enabled+'; Direction='+$rule.Direction+'; Action='+$rule.Action+'; Profile='+$rule.Profile+'; RemoteAddress='+($addresses -join ',')+'; Protocol/Port='+(@($filters|ForEach-Object {$_.Protocol.ToString()+'/'+($_.LocalPort -join ',')}) -join ';'))}
  } catch {[pscustomobject]@{Passed=$false;Detail=('無法驗證 SSH 防火牆：'+$_.Exception.Message)}}
 }
