@@ -28,7 +28,7 @@ function Get-ItemProperty {param($Path,$ErrorAction)
  [pscustomobject]$values
 }
 function Get-PnpDevice {param([switch]$PresentOnly) if($global:AggregateFixtureMode -eq 'Throw'){[pscustomobject]@{Status='Error'}}}
-function Get-ChildItem {param($LiteralPath,[switch]$Force,$ErrorAction) if($global:AggregateFixtureMode -eq 'Throw'){[pscustomobject]@{Attributes=0;Name='fixture.txt'}}}
+function Get-ChildItem {param($LiteralPath,[switch]$Force,$ErrorAction) if($global:AggregateFixtureMode -eq 'Throw'){[pscustomobject]@{Attributes=0;Name='fixture.txt'}};if($global:AggregateFixtureMode -eq 'HiddenDesktop'){[pscustomobject]@{Attributes=[IO.FileAttributes]::Hidden;Name='hidden.txt'}};if($global:AggregateFixtureMode -eq 'SystemDesktop'){[pscustomobject]@{Attributes=([IO.FileAttributes]::Hidden -bor [IO.FileAttributes]::System);Name='desktop.ini'}}}
 function Get-AppxPackage {param([switch]$AllUsers) if($global:AggregateFixtureMode -eq 'Throw'){[pscustomobject]@{Name='Fixture.App';PackageUserInformation=@([pscustomobject]@{InstallState='Installed'})}}}
 function Get-AppxProvisionedPackage {param([switch]$Online) if($global:AggregateFixtureMode -eq 'Throw'){[pscustomobject]@{DisplayName='Fixture.App'}}}
 function Test-SetupDriverPayload {param($Hardware,$DriverPackagePath) if($global:AggregateFixtureMode -eq 'Throw'){throw 'fixture invalid driver'};[pscustomobject]@{Status='Passed'}}
@@ -50,6 +50,10 @@ try{
   Assert (@($result.Checks|Where-Object Name -eq '非必要資料分享政策').Count -eq 1) ('保留隱私檢查 '+$mode)
   $expected=@{Throw='fixture submodule failed';Missing='本輪驗證未產生結果';Stale='驗證結果不是本輪產生';WrongComputer='電腦或使用者不符';WrongUser='電腦或使用者不符'}
   if($expected.ContainsKey($mode)){$detail=($result.Checks|Where-Object Name -eq '非必要資料分享政策').Detail;Assert ($detail.Contains($expected[$mode])) ('失敗原因確實來自預期本輪拒絕 '+$mode)}
+ }
+ foreach($desktopMode in @('HiddenDesktop','SystemDesktop')){
+  $global:AggregateFixtureMode=$desktopMode
+  if($desktopMode -eq 'HiddenDesktop'){Reject {Invoke-SetupVerification -Hardware $hardware -DriverPackagePath $fixture -VerificationRunId ([guid]::NewGuid().ToString())} 'aggregation refuses visible hidden-only ordinary desktop file'}else{Invoke-SetupVerification -Hardware $hardware -DriverPackagePath $fixture -VerificationRunId ([guid]::NewGuid().ToString())|Out-Null;Assert $true 'aggregation preserves hidden system desktop.ini'}
  }
  $global:AggregateFixtureMode='Pass'
  $generic=Get-SetupHardwareProfile -BoardProduct 'Other PC' -UICulture en-US
