@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	a "windows_setup/script/test/acceptance"
 )
 
@@ -180,7 +181,12 @@ func portal(t *testing.T, m map[string][]byte) map[string][]byte {
 	if !r.Success {
 		title = "目前程式檢查未通過"
 	}
-	p["index.html"] = []byte(`<h1>` + title + `</h1><a href="main/index.html">結果</a><a href="https://github.com/example/windows_setup/blob/main/readme.md">說明</a>`)
+	stamp, e := time.Parse(time.RFC3339Nano, r.MeasuredAt)
+	if e != nil {
+		t.Fatal(e)
+	}
+	identity := "提交 <code>" + r.Commit[:7] + "</code> 檢查時間：" + stamp.UTC().Format("2006-01-02 15:04:05") + " UTC"
+	p["index.html"] = []byte(`<h1>` + title + `</h1><a href="main/index.html">結果</a><a href="https://github.com/example/windows_setup/blob/main/readme.md">說明</a>` + identity)
 	p["versions.json"] = []byte(`[]`)
 	return p
 }

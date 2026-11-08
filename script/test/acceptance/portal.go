@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func ValidatePortal(read Reader, readme, sha, run, base string) (Report, error) {
@@ -37,6 +38,13 @@ func ValidatePortal(read Reader, readme, sha, run, base string) (Report, error) 
 	}
 	if strings.Contains(page.Visible, "Unknown") || !strings.Contains(page.Visible, title) {
 		return fail("R02/R06 首頁結論不符")
+	}
+	stamp, e := time.Parse(time.RFC3339Nano, r.MeasuredAt)
+	if e != nil {
+		return r, e
+	}
+	if !strings.Contains(page.Visible, r.Commit[:7]) || !strings.Contains(page.Visible, stamp.UTC().Format("2006-01-02 15:04:05")+" UTC") {
+		return fail("R03 首頁提交或時間與本次報告不一致")
 	}
 	var versions []struct{ Version, Status, Path string }
 	b, e = read("versions.json")
