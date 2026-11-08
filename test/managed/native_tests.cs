@@ -73,6 +73,18 @@ public static class ManagedNativeTests {
   var hidden=NUC8Theme.ObserveTaskbar(api);
   Assert(hidden.AutoHidden && hidden.RGB.Length==0 && outsideReads==0,"confirmed autohide outside the clip has no invented RGB and never samples the wallpaper");
   Throws(delegate{NUC8Theme.TaskbarColor(api);},"legacy RGB API never invents color for an auto-hidden taskbar",typeof(Exception));
+  bool malformedRejected=true;
+  foreach(uint invalidState in new uint[]{5,uint.MaxValue}){
+   api.State=delegate{return invalidState;};bool rejected=false;
+   try{NUC8Theme.ObserveTaskbar(api);}catch(Exception){rejected=true;}
+   Console.WriteLine("MALFORMED_STATE_"+invalidState+"_REJECTED="+rejected);malformedRejected&=rejected;
+  }
+  api.State=delegate{return 1;};
+  api.Clip=delegate(IntPtr dc,out NUC8Theme.Rect rect){rect=new NUC8Theme.Rect{Right=1920,Bottom=1080};return 4;};
+  bool unknownClipRejected=false;try{NUC8Theme.ObserveTaskbar(api);}catch(Exception){unknownClipRejected=true;}
+  Console.WriteLine("UNKNOWN_CLIP_4_REJECTED="+unknownClipRejected);
+  Assert(malformedRejected && unknownClipRejected,"unknown appbar and clipping values never authorize a hidden observation");
+  api.Clip=delegate(IntPtr dc,out NUC8Theme.Rect rect){rect=new NUC8Theme.Rect{Right=1920,Bottom=1080};return 2;};
   api.State=delegate{return 2;};
   Throws(delegate{NUC8Theme.ObserveTaskbar(api);},"always-on-top alone cannot authorize a hidden observation",typeof(Exception));
   api.State=delegate{throw new InvalidOperationException("state query failed");};
