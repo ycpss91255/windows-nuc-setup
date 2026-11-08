@@ -18,10 +18,11 @@ $sshFirewall=Get-SetupSSHFirewallStatus
 if(-not $sshFirewall.Passed){throw $sshFirewall.Detail}
 if((Get-Service sshd).Status -ne 'Running'){throw 'SSH 服務尚未正常啟動。'}
 Write-Host 'SSH 已啟動、設為自動啟動，防火牆僅允許本機子網路。' -ForegroundColor Green
-Get-NetIPAddress -AddressFamily IPv4|Where-Object {$_.IPAddress -ne '127.0.0.1' -and $_.IPAddress -notlike '169.254.*'}|Select-Object InterfaceAlias,IPAddress|Format-Table|Out-Host
+
 
 & (Join-Path $PSScriptRoot 'apply_lan_ping_settings.ps1')
 
 
 & (Join-Path $PSScriptRoot 'apply_hosts_sync.ps1')
-
+. (Join-Path $PSScriptRoot 'connection_info_library.ps1')
+Get-SetupSshConnectionInfo|ForEach-Object {Write-Host $_}
