@@ -2,6 +2,7 @@
 # Microsoft MCR manifest and MinGit release digest verified 2026-11-08.
 FROM mcr.microsoft.com/windows/servercore:ltsc2022@sha256:b52799a67fa596d4bddcd82ae1dab0077a84767fbc33c7342b72b53ecc71ad09 AS devel
 SHELL ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+COPY script/docker/download_library.ps1 C:/tools/download_library.ps1
 COPY script/docker/install_min_git.ps1 C:/tools/install_min_git.ps1
 RUN C:/tools/install_min_git.ps1
 COPY script/docker/install_go.ps1 C:/tools/install_go.ps1
