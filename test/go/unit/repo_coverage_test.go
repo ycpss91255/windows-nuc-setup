@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,51 @@ import (
 
 func cobertura(files string) []byte {
 	return []byte(`<coverage line-rate="1" coverage-schema="1" coverage-metric="complete-executable-lines-v1"><packages><package><classes>` + files + `</classes></package></packages></coverage>`)
+}
+
+func TestRepoCoverageInventoryDoesNotHideExecutableSources(t *testing.T) {
+	root:=t.TempDir()
+	files:=map[string]string{
+		"core/main.ps1":"Write-Output 'ok'",
+		"script/main.go":"package main\nfunc main(){}",
+		"entry.cmd":"@echo off\npowershell.exe -File core/main.ps1",
+		"native/logic.cs":"public class Native { public static int Run(){return 1;} }",
+		".github/helper.ps1":"Write-Output 'owned code'",
+		"test/example.ps1":"test fixture",
+		"vendor/pkg/main.go":"third-party",
+		"modules/debloat/win11debloat/main.ps1":"third-party",
+		"doc/example.ps1":"documentation example",
+		"readme.md":"information",
+		"Dockerfile":"FROM image\nRUN powershell -File script/build.ps1",
+		".github/workflows/check.yml":"jobs:\n  test:\n    steps:\n      - run: powershell -File script/check.ps1\n",
+		"config.json":"{}",
+	}
+	for name,contents:=range files {p:=filepath.Join(root,filepath.FromSlash(name));if err:=os.MkdirAll(filepath.Dir(p),0700);err!=nil{t.Fatal(err)};if err:=os.WriteFile(p,[]byte(contents),0600);err!=nil{t.Fatal(err)}}
+	inv,err:=rc.ScanInventory(root)
+	if err!=nil{t.Fatal(err)}
+	if len(inv.Sources)!=5 || len(inv.Blockers)!=0 {t.Fatalf("unexpected scope: %+v",inv)}
+	for _,excluded:=range inv.Excluded {if excluded.Reason==""{t.Fatal("silent exclusion")}}
+	if err:=os.WriteFile(filepath.Join(root,"new.py"),[]byte("print('new language')"),0600);err!=nil{t.Fatal(err)}
+	if err:=os.WriteFile(filepath.Join(root,".github/workflows/check.yml"),[]byte("jobs:\n  test:\n    steps:\n      - run: |\n          if ($value -lt 80) { throw 'coverage' }\n"),0600);err!=nil{t.Fatal(err)}
+	inv,err=rc.ScanInventory(root)
+	if err!=nil||len(inv.Blockers)!=2{t.Fatalf("unknown language or workflow logic hidden: %+v %v",inv,err)}
+	result,err:=inv.Merge()
+	if err!=nil||result.Complete||result.Percent!=nil||len(result.Blockers)!=2{t.Fatalf("incomplete inventory became measured: %+v %v",result,err)}
+}
+
+func TestRepoCoverageEmbeddedCodeIsNotPowerShellCoverage(t *testing.T) {
+	root:=t.TempDir()
+	files:=map[string]string{
+		"extern.ps1":`Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class Native { [DllImport("a.dll")] public static extern int Call(); }'`,
+		"managed.ps1":"Add-Type -TypeDefinition @\"\npublic class Native { public static int Call() { return 1; } }\n\"@",
+		"generated.ps1":`[IO.File]::WriteAllText('compare.js','function run(){ return 1; }')`,
+		"assembly.ps1":"Add-Type -AssemblyName System.Drawing",
+	}
+	for name,contents:=range files{if err:=os.WriteFile(filepath.Join(root,name),[]byte(contents),0600);err!=nil{t.Fatal(err)}}
+	inv,err:=rc.ScanInventory(root)
+	if err!=nil||len(inv.Sources)!=4||len(inv.Blockers)!=2{t.Fatalf("embedded code scope wrong: %+v %v",inv,err)}
+	found:=false;for _,e:=range inv.Excluded{if e.Path=="extern.ps1#csharp"&&strings.Contains(e.Reason,"declaration"){found=true}}
+	if !found{t.Fatal("pure extern declaration must be explained, not counted as managed executable lines")}
 }
 
 func TestRepoCoverageUnionAndCompleteScope(t *testing.T) {
