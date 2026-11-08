@@ -21,9 +21,12 @@ Assert (-not $r.Success -and $r.RequiresNextSignIn -and $script:writes.Count -eq
 $script:pending=$false;$script:values.Remove('StartLayoutFile');$script:values.Remove('LockedStartLayout');$r=Invoke-SetupTaskbarSettings -OutputRoot $temp -LayoutPath $layout -VerifyOnly
 Assert ($r.Success -and -not $r.RequiresNextSignIn -and $script:writes.Count -eq $before) 'Taskbar readonly verification accepts current preferences after temporary policy cleanup'
 function Start-Sleep {param($Seconds) $script:delays+=@($Seconds)}
-function Remove-ItemProperty {param($Path,$Name,$ErrorAction) if($Path -ne 'HKCU:\Software\Policies\Microsoft\Windows\Explorer'){throw 'unexpected finalize path'};$script:removed+=@($Name)}
+function Remove-ItemProperty {param($Path,$Name,$ErrorAction) if($Path -ne 'HKCU:\Software\Policies\Microsoft\Windows\Explorer'){throw 'unexpected finalize path'};$script:removed+=@($Name);if(-not $script:denyRemoval){$script:values.Remove($Name)}}
 $script:values.StartLayoutFile=$layout
 $r=Invoke-SetupTaskbarFinalize -LayoutPath $layout
 Assert ($r.Success -and ($script:removed -join ',') -ceq 'LockedStartLayout,StartLayoutFile' -and ($script:delays -join ',') -ceq '45') 'Finalize preserves 45-second Explorer delay and removes only temporary matching policy'
 $script:values.StartLayoutFile='other-layout';$before=$script:removed.Count;$r=Invoke-SetupTaskbarFinalize -LayoutPath $layout
 Assert (-not $r.Success -and $script:removed.Count -eq $before) 'Finalize refuses a changed layout policy without deleting unrelated settings'
+$script:values.StartLayoutFile=$layout;$script:values.LockedStartLayout=1;$script:denyRemoval=$true
+$r=Invoke-SetupTaskbarFinalize -LayoutPath $layout
+Assert (-not $r.Success -and $r.Status -eq 'Failed' -and -not $r.TemporaryLayoutPolicyRemoved) 'Finalize cannot claim removal when native registry readback still has temporary policy'
