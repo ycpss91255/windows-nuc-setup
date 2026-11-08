@@ -114,6 +114,52 @@ func TestPowerShellShardsMergeComplementaryCommandsAndPreserveRawWorkers(t *test
 	}
 }
 
+func TestPowerShellShardsSnapshotEachRawInputOnce(t *testing.T) {
+	f := newPSShardFixture(t)
+	for i := range f.inputs {
+		read := f.inputs[i].Read
+		seen := map[string]bool{}
+		f.inputs[i].Read = func(name string) ([]byte, error) {
+			if seen[name] {
+				return nil, fmt.Errorf("raw input changed after first observation")
+			}
+			seen[name] = true
+			return read(name)
+		}
+	}
+	if _, err := rc.MergePowerShellShards(f.identity, f.catalog, f.inputs, f.inventory); err != nil {
+		t.Fatal("verified raw input was read again instead of using its captured bytes", err)
+	}
+}
+
+func TestPowerShellShardsSingleShardRetainsEverySuite(t *testing.T) {
+	f := newPSShardFixture(t)
+	f.identity.ShardCount = 1
+	var proof, other map[string]any
+	if err := json.Unmarshal(f.files[0]["evidence.json"], &proof); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(f.files[1]["evidence.json"], &other); err != nil {
+		t.Fatal(err)
+	}
+	descriptor := other["Workers"].([]any)[0].(map[string]any)
+	descriptor["Index"], descriptor["Evidence"] = 1, "worker_1.json"
+	proof["Workers"] = append(proof["Workers"].([]any), descriptor)
+	proof["Covered"] = 1
+	f.files[0]["evidence.json"] = psShardJSON(t, proof)
+	f.files[0]["coverage.xml"] = cobertura(`<class filename="core/logic.ps1"><lines><line number="2" hits="1"/></lines></class>`)
+	f.files[0]["worker_1.json"] = f.files[1]["worker_0.json"]
+	f.manifest(t, 0, func(m *rc.PowerShellShardManifest) {
+		m.ShardCount = 1
+		m.Workers = append(m.Workers, rc.PowerShellShardWorker{GlobalIndex: 1, TestFile: f.catalog.Tests[1].File, TestSHA256: f.catalog.Tests[1].SHA256, Evidence: "worker_1.json", SHA256: psShardHash(f.files[0]["worker_1.json"])})
+	})
+	f.inputs = f.inputs[:1]
+	files, err := rc.MergePowerShellShards(f.identity, f.catalog, f.inputs, f.inventory)
+	if err != nil || len(files) != 4 {
+		t.Fatal("single shard lost a canonical suite", err)
+	}
+}
+
 func TestPowerShellShardsRejectIncompleteOrForeignProvenance(t *testing.T) {
 	cases := map[string]func(*psShardFixture){
 		"missing shard":   func(f *psShardFixture) { f.inputs = f.inputs[:1] },
@@ -168,6 +214,12 @@ func TestPowerShellShardsRejectIncompleteOrForeignProvenance(t *testing.T) {
 		"worker unknown field": func(f *psShardFixture) {
 			f.worker(t, 1, func(w map[string]any) { w["PrivatePath"] = `C:\Users\secret` })
 		},
+		"worker hidden case alias": func(f *psShardFixture) {
+			f.worker(t, 1, func(w map[string]any) {
+				w["sources"] = w["Sources"]
+				w["Sources"] = []any{map[string]any{"File": `C:\Users\secret`, "SHA256": strings.Repeat("a", 64)}}
+			})
+		},
 		"worker engine mismatch": func(f *psShardFixture) { f.worker(t, 1, func(w map[string]any) { w["Engine"] = "powershell" }) },
 		"cross shard span mismatch": func(f *psShardFixture) {
 			f.worker(t, 1, func(w map[string]any) { w["Commands"].([]any)[0].(map[string]any)["EndColumn"] = 9 })
@@ -177,6 +229,12 @@ func TestPowerShellShardsRejectIncompleteOrForeignProvenance(t *testing.T) {
 		},
 		"unknown envelope field": func(f *psShardFixture) {
 			f.inputs[1].Manifest = append(f.inputs[1].Manifest[:len(f.inputs[1].Manifest)-1], []byte(`,"extra":true}`)...)
+		},
+		"envelope case alias": func(f *psShardFixture) {
+			f.inputs[1].Manifest = []byte(strings.Replace(string(f.inputs[1].Manifest), `"ShardIndex":`, `"shardindex":`, 1))
+		},
+		"nested case alias": func(f *psShardFixture) {
+			f.inputs[1].Manifest = []byte(strings.Replace(string(f.inputs[1].Manifest), `"TestFile":`, `"testfile":`, 1))
 		},
 		"duplicate envelope key": func(f *psShardFixture) {
 			f.inputs[1].Manifest = append(f.inputs[1].Manifest[:len(f.inputs[1].Manifest)-1], []byte(`,"ShardIndex":1}`)...)
