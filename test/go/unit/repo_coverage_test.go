@@ -1,7 +1,6 @@
 package unit_test
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,7 +14,8 @@ import (
 func TestRepoPowerShellCoverageReplaysRawCommandUnion(t *testing.T) {
 	name := "core/logic.ps1"
 	hash := strings.Repeat("a", 64)
-	proof := map[string]any{"SchemaVersion": 1, "PesterVersion": "6.0.0", "PackageSHA512": base64.StdEncoding.EncodeToString(make([]byte, 64)), "Metric": "FullyCoveredCommandStartLines", "Sources": []any{map[string]any{"File": name, "SHA256": hash, "ExpectedLines": []int{2}}}, "Workers": []any{map[string]any{"Index": 0, "ProcessId": 100, "Evidence": "worker_0.json"}, map[string]any{"Index": 1, "ProcessId": 101, "Evidence": "worker_1.json"}}, "Covered": 1, "Total": 1}
+	packageHash:="AHIAm7QW11As3sjMayo1rPU4JVIEfBL+ZILAyTyDnMPxMwLFQ3VeAA0prFTx+Y4DgZCUnH2N4+Xb0HDQua2EKA=="
+	proof := map[string]any{"SchemaVersion": 1, "PesterVersion": "6.0.0", "PackageSHA512": packageHash, "Metric": "FullyCoveredCommandStartLines", "Sources": []any{map[string]any{"File": name, "SHA256": hash, "ExpectedLines": []int{2}}}, "Workers": []any{map[string]any{"Index": 0, "ProcessId": 100, "Evidence": "worker_0.json"}, map[string]any{"Index": 1, "ProcessId": 101, "Evidence": "worker_1.json"}}, "Covered": 1, "Total": 1}
 	evidence, _ := json.Marshal(proof)
 	data := map[string][]byte{}
 	for i := 0; i < 2; i++ {
@@ -39,7 +39,7 @@ func TestRepoPowerShellCoverageReplaysRawCommandUnion(t *testing.T) {
 	if err != nil || !r.Files[name][2] || len(catalog) != 1 || len(catalog[0].Lines) != 1 {
 		t.Fatalf("raw complementary commands not merged: %+v %+v %v", r, catalog, err)
 	}
-	for _, kind := range []string{"wrong_xml", "missing_worker", "wrong_hash", "wrong_catalog", "duplicate_span", "missing_span"} {
+	for _, kind := range []string{"wrong_package","wrong_version","wrong_xml", "missing_worker", "wrong_hash", "wrong_catalog", "duplicate_span", "missing_span"} {
 		t.Run(kind, func(t *testing.T) {
 			copyData := map[string][]byte{}
 			for k, v := range data {
@@ -47,6 +47,10 @@ func TestRepoPowerShellCoverageReplaysRawCommandUnion(t *testing.T) {
 			}
 			bad := append([]byte(nil), evidence...)
 			switch kind {
+			case "wrong_package":
+				bad=[]byte(strings.ReplaceAll(string(bad),packageHash,strings.Repeat("A",86)+"=="))
+			case "wrong_version":
+				bad=[]byte(strings.ReplaceAll(string(bad),"6.0.0","5.0.0"));for key,value:=range copyData{copyData[key]=[]byte(strings.ReplaceAll(string(value),"6.0.0","5.0.0"))}
 			case "wrong_xml":
 				copyData["coverage.xml"] = []byte(strings.Replace(string(copyData["coverage.xml"]), `hits="1"`, `hits="0"`, 1))
 			case "missing_worker":
