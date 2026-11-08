@@ -52,4 +52,11 @@ Reject {Invoke-SetupUac @call} '快照與報告不可共用檔案' '原值快照
 $call.ReportPath=Join-Path $dir 'result.json';$script:values.ConsentPromptBehaviorAdmin='5';$script:kinds.ConsentPromptBehaviorAdmin='String'
 Reject {Invoke-SetupUac @call} '首次原值型別不正確不覆寫' '原政策不是有效DWORD'
 Assert (-not(Test-Path $call.StatePath)) '拒絕原值時不產生錯誤快照'
+$hidden=Join-Path $dir 'hidden_parent';$hiddenInfo=[IO.Directory]::CreateDirectory($hidden);$hiddenInfo.Attributes=$hiddenInfo.Attributes -bor [IO.FileAttributes]::Hidden
+$call.StatePath=Join-Path $hidden 'state.json';$call.ReportPath=Join-Path $hidden 'result.json';$script:values.ConsentPromptBehaviorAdmin=0;$script:kinds.ConsentPromptBehaviorAdmin='DWord'
+$beforeWrites=$script:writes.Count
+Invoke-SetupUac @call -VerifyOnly|Out-Null
+Assert ($script:writes.Count -eq $beforeWrites -and -not(Test-Path $call.StatePath)) '真正Hidden祖先可讀且VerifyOnly不寫registry或原值快照'
+$r=Get-Content -LiteralPath $call.ReportPath -Raw -Encoding UTF8|ConvertFrom-Json
+Assert $r.Success 'Hidden祖先不被誤判遺失而阻擋UAC驗證'
 Write-Host 'ALL PASS: UAC TEMP/mock only'
