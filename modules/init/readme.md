@@ -4,9 +4,9 @@
 
 ## 發行完整性
 
-OOBE 入口需要 assets/hide_oobe.ppkg、hide_oobe.xml、provenance.json。這是本專案自身產生的小型設定資產，只含 OOBE/Desktop/HideOobe=True，不包含帳密或 Microsoft 編譯工具。原始 XML、固定官方 ICD 身分與輸出 SHA256 都由 provenance 追溯；產物不是位元完全可重現，不能只以重新編譯 hash 相同作驗收。
+OOBE 入口需要 assets/hide_oobe.ppkg、hide_oobe.xml、provenance.json，發行包另包含 CI 內容檢驗使用的 payload_baseline.json。這是本專案自身產生的小型設定資產，只含 OOBE/Desktop/HideOobe=True，不包含帳密或 Microsoft 編譯工具。原始 XML、固定官方 ICD 身分與輸出 SHA256 都由 provenance 追溯；產物不是位元完全可重現，不能只以重新編譯 hash 相同作驗收。
 
-目前工作分支的真設定包與已審查內容基線仍未完成，因此不能視為已可發布的完整工具包。缺檔、hash、來源 XML、package ID／名稱／版本不符時，入口在帳號建立前拒絕。單元測試使用的合成檔案不能代替真包。
+設定包與已審查的 payload_baseline.json 一同保存；基線由 CI 真正抽取的七份 XML 逐檔重算 SHA256，經主代理及獨立代理確認。缺檔、hash、來源 XML、package ID／名稱／版本不符時，入口在帳號建立前拒絕。單元測試使用的合成檔案不能代替真包。
 
 ## OOBE 安全順序
 
