@@ -11,6 +11,8 @@ function Invoke-CINative {param($File,$Arguments) $script:calls.Add(@{File=$File
 try {
  $output=Join-Path $temp 'result'
  Invoke-RepoCoveragePipeline -SourceRoot $root -PublicDirectory $public -GoCoverageDirectory (Join-Path $temp 'go') -ManagedEvidencePath (Join-Path $temp 'managed/evidence.json') -OutputDirectory $output
+ $workers=@($script:calls|Where-Object {$_.Arguments -contains (Join-Path $root 'script/test/powershell_coverage.ps1')})
+ Assert ($workers.Count -eq 1 -and $workers[0].Arguments -contains '-ThrottleLimit' -and $workers[0].Arguments[[Array]::IndexOf($workers[0].Arguments,'-ThrottleLimit')+1] -eq '2') '正式整體收集明確只開兩個worker而非預設序列'
  $collect=@($script:calls|Where-Object {$_.Arguments -contains 'collect'})
  Assert ($collect.Count -eq 1 -and ($collect[0].Arguments -contains '--go-evidence') -and ($collect[0].Arguments -contains '--powershell-evidence') -and ($collect[0].Arguments -contains '--cmd-evidence') -and ($collect[0].Arguments -contains '--managed-evidence')) '四種語言原始證據一起收集'
  $verify=@($script:calls|Where-Object {$_.Arguments -contains 'verify'})
