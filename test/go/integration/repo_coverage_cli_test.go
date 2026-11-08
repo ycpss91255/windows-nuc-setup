@@ -1,13 +1,13 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"encoding/json"
 	"time"
 	a "windows_setup/script/test/acceptance"
 	rc "windows_setup/script/test/repo_coverage"
@@ -97,24 +97,69 @@ func TestRepoCoverageCLIValidatesArtifacts(t *testing.T) {
 }
 
 func TestRepoCoverageCLICollectsCleanSources(t *testing.T) {
- repo,_:=filepath.Abs("../../..");fixture:=t.TempDir();external:=t.TempDir()
- source:="package logic\nfunc Value() int { return 1 }\n"
- if err:=os.MkdirAll(filepath.Join(fixture,"script/test/logic"),0700);err!=nil{t.Fatal(err)}
- if err:=os.WriteFile(filepath.Join(fixture,"script/test/logic/logic.go"),[]byte(source),0600);err!=nil{t.Fatal(err)}
- git:=func(args ...string)string{t.Helper();c:=exec.Command("git",append([]string{"-C",fixture},args...)...);out,err:=c.CombinedOutput();if err!=nil{t.Fatalf("git: %v %s",err,out)};return strings.TrimSpace(string(out))}
- git("init");git("config","user.name","Coverage Fixture");git("config","user.email","fixture@example.invalid");git("add",".");git("commit","-m","fixture");sha:=git("rev-parse","HEAD")
- profile:=[]byte("mode: set\nwindows_setup/script/test/logic/logic.go:2.18,2.30 1 1\n")
- evidence,profile,err:=a.CreateCoverageEvidence([][]byte{profile},[]string{"windows_setup/script/test/logic/logic.go"},a.CoverageProvenance{Commit:sha,MeasuredAt:time.Now().UTC().Format(time.RFC3339),SourceState:"Clean",GoVersion:"go1.27.3",Environment:"fixture"});if err!=nil{t.Fatal(err)}
- data,_:=json.Marshal(evidence);ep:=filepath.Join(external,"go.json");pp:=filepath.Join(external,"go.out");os.WriteFile(ep,data,0600);os.WriteFile(pp,profile,0600)
- goexe:=filepath.Join(runtime.GOROOT(),"bin","go");if runtime.GOOS=="windows"{goexe+=".exe"};bin:=filepath.Join(external,"tool.exe")
- build:=exec.Command(goexe,"build","-mod=vendor","-cover","-coverpkg=./script/test/...","-o",bin,"./script/test/repo_coverage_tool");build.Dir=repo;if out,err:=build.CombinedOutput();err!=nil{t.Fatalf("build %v %s",err,out)}
- dest:=filepath.Join(external,"results")
- args:=[]string{"collect","--source-root",fixture,"--output-dir",dest,"--expected-sha",sha,"--go-evidence",ep,"--go-profile",pp}
- run:=func(ok bool,argv ...string){t.Helper();cmd:=exec.Command(bin,argv...);cmd.Env=os.Environ();if d:=os.Getenv("WINDOWS_SETUP_CLI_COVERAGE_DIR");d!=""{cmd.Env=append(cmd.Env,"GOCOVERDIR="+d)};out,err:=cmd.CombinedOutput();if (err==nil)!=ok{t.Fatalf("%v: %v %s",argv,err,out)}}
- run(true,args...)
- run(true,"verify","--artifact-dir",dest,"--expected-sha",sha,"--source-root",fixture,"--require-complete","--minimum-percent","80")
- run(false,args...) // immutable existing output
- os.WriteFile(filepath.Join(fixture,"script/test/logic/logic.go"),[]byte(source+"// changed\n"),0600)
- args[4]=filepath.Join(external,"dirty")
- run(false,args...) // HEAD alone cannot identify modified bytes
+	repo, _ := filepath.Abs("../../..")
+	fixture := t.TempDir()
+	external := t.TempDir()
+	source := "package logic\nfunc Value() int { return 1 }\n"
+	if err := os.MkdirAll(filepath.Join(fixture, "script/test/logic"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fixture, "script/test/logic/logic.go"), []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git := func(args ...string) string {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", fixture}, args...)...)
+		out, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git: %v %s", err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init")
+	git("config", "user.name", "Coverage Fixture")
+	git("config", "user.email", "fixture@example.invalid")
+	git("add", ".")
+	git("commit", "-m", "fixture")
+	sha := git("rev-parse", "HEAD")
+	profile := []byte("mode: set\nwindows_setup/script/test/logic/logic.go:2.18,2.30 1 1\n")
+	evidence, profile, err := a.CreateCoverageEvidence([][]byte{profile}, []string{"windows_setup/script/test/logic/logic.go"}, a.CoverageProvenance{Commit: sha, MeasuredAt: time.Now().UTC().Format(time.RFC3339), SourceState: "Clean", GoVersion: "go1.27.3", Environment: "fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(evidence)
+	ep := filepath.Join(external, "go.json")
+	pp := filepath.Join(external, "go.out")
+	os.WriteFile(ep, data, 0600)
+	os.WriteFile(pp, profile, 0600)
+	goexe := filepath.Join(runtime.GOROOT(), "bin", "go")
+	if runtime.GOOS == "windows" {
+		goexe += ".exe"
+	}
+	bin := filepath.Join(external, "tool.exe")
+	build := exec.Command(goexe, "build", "-mod=vendor", "-cover", "-coverpkg=./script/test/...", "-o", bin, "./script/test/repo_coverage_tool")
+	build.Dir = repo
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build %v %s", err, out)
+	}
+	dest := filepath.Join(external, "results")
+	args := []string{"collect", "--source-root", fixture, "--output-dir", dest, "--expected-sha", sha, "--go-evidence", ep, "--go-profile", pp}
+	run := func(ok bool, argv ...string) {
+		t.Helper()
+		cmd := exec.Command(bin, argv...)
+		cmd.Env = os.Environ()
+		if d := os.Getenv("WINDOWS_SETUP_CLI_COVERAGE_DIR"); d != "" {
+			cmd.Env = append(cmd.Env, "GOCOVERDIR="+d)
+		}
+		out, err := cmd.CombinedOutput()
+		if (err == nil) != ok {
+			t.Fatalf("%v: %v %s", argv, err, out)
+		}
+	}
+	run(true, args...)
+	run(true, "verify", "--artifact-dir", dest, "--expected-sha", sha, "--source-root", fixture, "--require-complete", "--minimum-percent", "80")
+	run(false, args...) // immutable existing output
+	os.WriteFile(filepath.Join(fixture, "script/test/logic/logic.go"), []byte(source+"// changed\n"), 0600)
+	args[4] = filepath.Join(external, "dirty")
+	run(false, args...) // HEAD alone cannot identify modified bytes
 }
