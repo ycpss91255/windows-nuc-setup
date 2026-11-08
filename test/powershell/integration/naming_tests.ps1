@@ -13,7 +13,7 @@ Assert ((Resolve-NucPath 'Apply-Debloat.ps1') -eq (Join-Path $fixture 'modules/d
 Assert ((Resolve-NucModuleName 'Apply-Debloat.ps1') -ceq 'apply_debloat.ps1') 'legacy failed module id normalizes before allowlist'
 Assert ((Resolve-NucPath 'Setup-Result.json') -eq (Join-Path $fixture 'reports/Setup-Result.json')) 'existing per-machine result filename remains compatible'
 # Execute the actual restart retry block with a legacy failure record and harmless module.
-$source=[IO.File]::ReadAllText((Join-Path $root 'core/verify_after_restart.ps1'))
+$source=[IO.File]::ReadAllText((Join-Path $root 'core/after_restart_library.ps1'))
 $start=$source.IndexOf("`$resultPath=Resolve-NucPath")
 $end=$source.IndexOf("Write-Host '重新掃描更新",$start)
 $retry=[scriptblock]::Create($source.Substring($start,$end-$start))

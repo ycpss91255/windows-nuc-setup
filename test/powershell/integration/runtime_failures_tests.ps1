@@ -121,8 +121,11 @@ $verifyAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root '
 $verifyFunction=$verifyAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-SetupVerification'},$true)
 $verifyStarted=$false
 $verifyTail=(@(foreach($statement in $verifyFunction.Body.EndBlock.Statements){if($statement.Extent.Text.StartsWith('$result=[ordered]')){$verifyStarted=$true};if($verifyStarted){$statement.Extent.Text}}) -join "`r`n")
-$afterSource=[IO.File]::ReadAllText((Join-Path $root 'core/verify_after_restart.ps1'))
-$afterTail=$afterSource.Substring($afterSource.IndexOf('$verificationRunId='))
+$afterSource=[IO.File]::ReadAllText((Join-Path $root 'core/after_restart_library.ps1'))
+$tokens=$null;$parseErrors=$null;$afterAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/after_restart_library.ps1'),[ref]$tokens,[ref]$parseErrors)
+$afterFunction=$afterAst.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Invoke-SetupAfterRestart'},$true)
+$afterStarted=$false
+$afterTail=(@(foreach($statement in $afterFunction.Body.EndBlock.Statements){if($statement.Extent.Text.StartsWith('$verificationRunId=')){$afterStarted=$true};if($afterStarted){$statement.Extent.Text}}) -join "`r`n")
 foreach($mode in @('fresh-failure','stale-success')){
  $dir=Join-Path $fixture $mode;New-Item -ItemType Directory $dir|Out-Null
  $verifyPrefix=@'

@@ -13,7 +13,7 @@ foreach($status in @('PendingSignIn','LegacyPendingApply','ConfirmedBad','Confir
  & ([scriptblock]::Create($check.Extent.Text))
  Assert ($script:passed -eq ($status -eq 'Confirmed')) ('actual aggregate checks native result instead of absence of throw '+$status)
 }
-$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'core/verify_after_restart.ps1'),[ref]$t,[ref]$e)
+$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'core/after_restart_library.ps1'),[ref]$t,[ref]$e)
 $retry=$ast.FindAll({param($a) $a -is [Management.Automation.Language.TryStatementAst] -and $a.Extent.Text.Contains("if(`$file -eq 'install_drivers.ps1')")},$true)|Select-Object -First 1
 $file='apply_start_menu_settings.ps1';$errors=@();$remaining=@();$global:startVerifiedCall=$false
 & ([scriptblock]::Create($retry.Extent.Text))
