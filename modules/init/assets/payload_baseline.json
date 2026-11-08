@@ -1,0 +1,49 @@
+{
+  "SchemaVersion": 1,
+  "PackageSHA256": "8DCCA6F6D857F204B1DF6EB35891A50519AD64FF5B74559BDCFE6C2B3B4791E0",
+  "OnlySetting": "OOBE/Desktop/HideOobe=True",
+  "Files": [
+    {
+      "Path": "Multivariant/Multivariant.xml",
+      "SHA256": "581318275951CCEAF26A132813E661E982651CFA485481F48F85A8468A145654",
+      "RootName": "Elements",
+      "Namespace": ""
+    },
+    {
+      "Path": "Multivariant/0/customizations.xml",
+      "SHA256": "8C8B606C98BDCF7CB78BFECC153D67E43EB44BC3A8C59D2AB86459881AC8D4FC",
+      "RootName": "WindowsCustomizations",
+      "Namespace": ""
+    },
+    {
+      "Path": "Multivariant/0/MasterDatastore.xml",
+      "SHA256": "9101F028C2288850BE393281297500902B297C8B6ECF793292678B04A72709C9",
+      "RootName": "ConfigurationSourceList",
+      "Namespace": ""
+    },
+    {
+      "Path": "Multivariant/0/Prov/RunTime.xml",
+      "SHA256": "31DFBDA9A1DC86E5815966DEDCBE8747DA95A67EC9AB035C7490CB1624562F77",
+      "RootName": "ConfigurationSource",
+      "Namespace": ""
+    },
+    {
+      "Path": "Multivariant/0/Prov/RunTime/0__OOBE_Desktop_HideOobe.provxml",
+      "SHA256": "B06C02424BB8F11C2BD14486679A80CEC0ADB4A11390BF6794702969AA93B932",
+      "RootName": "wap-provisioningdoc",
+      "Namespace": ""
+    },
+    {
+      "Path": "CommonSettings/CommonSettings.xml",
+      "SHA256": "E3F96B8EB067500E207494579F9306AF70819CAFD91A10AF73A9BBFFA6077396",
+      "RootName": "Elements",
+      "Namespace": ""
+    },
+    {
+      "Path": "CommonSettings/1/AnswerFile.xml",
+      "SHA256": "722E0945F9AD12E9297638FD0A7BCD8B1C4C05D377B3C87425FABF85E3B8C06C",
+      "RootName": "Settings",
+      "Namespace": "urn:schemas-microsoft-com:windows-provisioning"
+    }
+  ]
+}
