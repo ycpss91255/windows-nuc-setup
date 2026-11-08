@@ -50,3 +50,14 @@ foreach($name in @('./license','sub/../license','sub\\..\\license','/license','l
  try{$entry=$archive.CreateEntry($name);$stream=$entry.Open();try{$bytes=[Text.Encoding]::UTF8.GetBytes('not the approved license');$stream.Write($bytes,0,$bytes.Length)}finally{$stream.Dispose()}}finally{$archive.Dispose()}
  Reject {Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $bad)} ('ZIP不得以Windows路徑別名覆寫已核對檔案：'+$name)
 }
+foreach($before in @($false,$true)){
+ $bad=Join-Path $temp ('prefix_'+$before+'.zip')
+ $inputArchive=[IO.Compression.ZipFile]::OpenRead($good)
+ $archive=[IO.Compression.ZipFile]::Open($bad,[IO.Compression.ZipArchiveMode]::Create)
+ try{
+  if($before){$entry=$archive.CreateEntry('license/notice.txt');$s=$entry.Open();$s.Dispose()}
+  foreach($originalEntry in $inputArchive.Entries){$entry=$archive.CreateEntry($originalEntry.FullName);$i=$originalEntry.Open();$o=$entry.Open();try{$i.CopyTo($o)}finally{$i.Dispose();$o.Dispose()}}
+  if(-not $before){$entry=$archive.CreateEntry('license/notice.txt');$s=$entry.Open();$s.Dispose()}
+ }finally{$archive.Dispose();$inputArchive.Dispose()}
+ Reject {Assert-LocalDriverReleaseAsset -Directory $temp -Asset (LocalAsset $bad)} ('檔案不得同時作為目錄前綴，與ZIP入口順序無關：'+$before)
+}
