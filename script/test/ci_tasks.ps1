@@ -5,6 +5,14 @@ function Invoke-CINative {
  try{$ErrorActionPreference='Continue';$global:LASTEXITCODE=0;& $File @Arguments;$code=$LASTEXITCODE}finally{$ErrorActionPreference=$previous}
  if($code -ne 0){$failure=[Exception]::new(('CI command failed: '+$File+' / '+$code));$failure.Data['ExitCode']=$code;throw $failure}
 }
+function Export-CIPowerShellRawEvidence {
+ param([Parameter(Mandatory=$true)][string]$SourceRoot,[Parameter(Mandatory=$true)][string]$RunnerTemp)
+ $tool=Join-Path $RunnerTemp 'repo-coverage/repo_coverage_tool.exe'
+ $evidence=Join-Path $RunnerTemp 'repo-coverage/powershell'
+ if(-not(Test-Path -LiteralPath (Join-Path $evidence 'evidence.json') -PathType Leaf)){Write-Host 'No completed PowerShell raw evidence to export.';return}
+ if(-not(Test-Path -LiteralPath $tool -PathType Leaf)){throw 'Completed raw evidence has no export verification tool.'}
+ Invoke-CINative -File $tool -Arguments @('export-powershell','--source-root',$SourceRoot,'--evidence-dir',$evidence,'--output-dir',(Join-Path $RunnerTemp 'powershell-raw-public'))
+}
 function Assert-CIResults {
  param([hashtable]$Results)
  foreach($name in @('Tests','Requirements','Docker','Payload')){if(-not $Results.ContainsKey($name) -or $Results[$name] -cne 'success'){throw ('必要工作失敗、取消或跳過：'+$name)}}
