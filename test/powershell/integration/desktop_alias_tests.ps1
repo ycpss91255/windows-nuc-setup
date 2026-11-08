@@ -1,4 +1,5 @@
 ﻿#Requires -Version 5.1
+param([switch]$SimulateNoShortAlias)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../../../modules/desktop/desktop_safety.ps1')
 function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Message}}
@@ -15,7 +16,7 @@ Assert $refused 'reject source ancestor junction outside desktop pointing inside
 $refused=$false;try{Assert-DesktopSourceLocation $safe @($alias)}catch{$refused=$true}
 Assert $refused 'reject desktop ancestor reparse instead of assuming distinct physical roots'
 $fso=New-Object -ComObject Scripting.FileSystemObject
-$short=$fso.GetFolder($desktop).ShortPath
+$short=if($SimulateNoShortAlias){$desktop}else{$fso.GetFolder($desktop).ShortPath}
 Assert ($short -ne $desktop) 'fixture actually provides an 8.3 alternate path'
 $refused=$false;try{Assert-DesktopSourceLocation (Join-Path $short 'windows_setup') @($desktop)}catch{$refused=$true}
 Assert $refused 'reject short source ancestor alias within long desktop'
