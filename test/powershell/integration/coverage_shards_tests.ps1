@@ -39,7 +39,8 @@ Assert ($LASTEXITCODE -eq 0) '跨分片真Pester命令證據通過完整聚合'
 $result=Get-Content -LiteralPath (Join-Path $merged 'evidence.json') -Raw -Encoding UTF8|ConvertFrom-Json
 Assert ($result.Workers.Count -eq 2 -and $result.Total -eq 2 -and $result.Covered -eq 1) '先union同一行互補命令，再保留nevercall完整零命中分母'
 $file=Join-Path $parts 'shard_1/shard.json';$old=[IO.File]::ReadAllText($file);$bad=Get-Content $file -Raw|ConvertFrom-Json;$bad.RunAttempt=2;[IO.File]::WriteAllText($file,($bad|ConvertTo-Json -Depth 12),[Text.UTF8Encoding]::new($false))
-& $tool powershell-shard-merge --source-root $source --manifest $manifest --input-dir $parts --output-dir (Join-Path $temp 'wrong_attempt') --expected-sha $commit --expected-run-url $run --run-attempt 1 --shard-count 2 *> (Join-Path $temp 'bad.private.log')
-Assert ($LASTEXITCODE -ne 0 -and -not(Test-Path (Join-Path $temp 'wrong_attempt/evidence.json'))) '跨attempt證據不能合併或發布完整結論'
+$previous=$ErrorActionPreference
+try{$ErrorActionPreference='Continue';& $tool powershell-shard-merge --source-root $source --manifest $manifest --input-dir $parts --output-dir (Join-Path $temp 'wrong_attempt') --expected-sha $commit --expected-run-url $run --run-attempt 1 --shard-count 2 *> (Join-Path $temp 'bad.private.log');$exitCode=$LASTEXITCODE}finally{$ErrorActionPreference=$previous}
+Assert ($exitCode -ne 0 -and -not(Test-Path (Join-Path $temp 'wrong_attempt/evidence.json'))) '跨attempt證據不能合併或發布完整結論'
 [IO.File]::WriteAllText($file,$old,[Text.UTF8Encoding]::new($false))
 $global:LASTEXITCODE=0

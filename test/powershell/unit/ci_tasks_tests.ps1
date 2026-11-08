@@ -10,7 +10,7 @@ Reject {Invoke-CINative -File cmd.exe -Arguments @('/d','/c','exit 7')} '原生�
 Reject {Invoke-CINative -File '__missing_ci_executable__.exe'} '不存在的工具不能冒稱成功'
 $passing=@{Tests='success';Requirements='success';Docker='success';Payload='success';PowerShellCoverage='success'}
 Assert-CIResults $passing
-Assert $true '四個必要工作成功才通過'
+Assert $true '五個必要工作成功才通過'
 foreach($name in @('Tests','Requirements','Docker','Payload','PowerShellCoverage')){foreach($state in @('failure','cancelled','skipped','')){$copy=$passing.Clone();$copy[$name]=$state;Reject {Assert-CIResults $copy} ('必要工作拒絕 '+$name+' '+$state)}}
 $copy=$passing.Clone();$copy.Remove('PowerShellCoverage');Reject {Assert-CIResults $copy} '完整PowerShell矩陣結果不可遺漏'
 $copy=$passing.Clone();$copy.Remove('Payload');Reject {Assert-CIResults $copy} '設定包工作不可遺漏'

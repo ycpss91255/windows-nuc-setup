@@ -57,6 +57,16 @@ function Test-EngineVersion([string]$Engine,[string]$Version){
  if($Engine -eq 'pwsh'){return $actual.Major -eq 7 -and $actual -ge [version]'7.4'}
  return $actual.Major -eq 5 -and $actual.Minor -eq 1
 }
+$shardContext=$null
+if($null -ne $manifest.PSObject.Properties['ShardContext']){
+ $shardContext=$manifest.ShardContext
+ $contextKeys=@('Commit','RunUrl','RunAttempt','ShardIndex','ShardCount','GlobalIndices')
+ if($shardContext -isnot [pscustomobject] -or @($shardContext.PSObject.Properties).Count -ne $contextKeys.Count -or @($shardContext.PSObject.Properties|Where-Object {$_.Name -cnotin $contextKeys}).Count){throw '分片執行context欄位不完整或不合法。'}
+ foreach($key in @('RunAttempt','ShardIndex','ShardCount')){if($shardContext.$key -isnot [int] -and $shardContext.$key -isnot [long]){throw '分片context的數字必須為整數。'}}
+ if($shardContext.Commit -isnot [string] -or $shardContext.Commit -cnotmatch '^[a-f0-9]{40}$' -or $shardContext.RunUrl -isnot [string] -or $shardContext.RunUrl -cnotmatch '^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+$' -or $shardContext.RunAttempt -lt 1 -or $shardContext.ShardCount -lt 1 -or $shardContext.ShardCount -gt 4 -or $shardContext.ShardIndex -lt 0 -or $shardContext.ShardIndex -ge $shardContext.ShardCount -or $shardContext.GlobalIndices -isnot [array] -or @($shardContext.GlobalIndices).Count -ne $tests.Count){throw '分片執行context身分或完整索引不合法。'}
+ $seenIndices=@{};$lastIndex=-1
+ foreach($globalIndex in $shardContext.GlobalIndices){if(($globalIndex -isnot [int] -and $globalIndex -isnot [long]) -or $globalIndex -lt 0 -or $globalIndex -le $lastIndex -or $globalIndex%$shardContext.ShardCount -ne $shardContext.ShardIndex -or $seenIndices.ContainsKey($globalIndex)){throw '分片globalindex必須依序、唯一且符合分配。'};$seenIndices[$globalIndex]=$true;$lastIndex=$globalIndex}
+}
 $hashes=@($sources|ForEach-Object {[pscustomobject]@{File=$_.Substring($source.Length+1).Replace('\','/');SHA256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
 $output=[IO.Path]::GetFullPath($OutputDirectory)
 if($WorkerIndex -ge 0){
@@ -67,6 +77,12 @@ if($WorkerIndex -ge 0){
  if(-not(Test-EngineVersion $engine $PSVersionTable.PSVersion.ToString())){throw '子程序實際引擎不符合指定版本；pwsh 必須為 7.4 以上的 7.x。'}
  $engineExecutable=[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
  $engineHash=(Get-FileHash -LiteralPath $engineExecutable -Algorithm SHA256).Hash.ToLowerInvariant()
+ $testContext=$null
+ if($null -ne $shardContext){
+  $suiteFile=$tests[$WorkerIndex]
+  $testContext=[ordered]@{Commit=$shardContext.Commit;RunUrl=$shardContext.RunUrl;RunAttempt=$shardContext.RunAttempt;ShardIndex=$shardContext.ShardIndex;ShardCount=$shardContext.ShardCount;GlobalIndex=$shardContext.GlobalIndices[$WorkerIndex];ProcessId=$PID;TestFile=$suiteFile.Substring($source.Length+1).Replace('\','/');TestSHA256=(Get-FileHash -LiteralPath $suiteFile).Hash.ToLowerInvariant();WrapperFile='';WrapperSHA256=''}
+  if($wrapper){$testContext.WrapperFile=$wrapper.Substring($source.Length+1).Replace('\','/');$testContext.WrapperSHA256=(Get-FileHash -LiteralPath $wrapper).Hash.ToLowerInvariant()}
+ }
  Import-Module -Name $PesterModule -Force
  if((Get-Module Pester).Version.ToString() -cne $version){throw 'Pester 版本不符。'}
  $config=New-PesterConfiguration
@@ -77,6 +93,7 @@ if($WorkerIndex -ge 0){
  $config.CodeCoverage.CoveragePercentTarget=0
  $result=Invoke-Pester -Configuration $config
  if($result.FailedCount -gt 0 -or $result.PassedCount -lt 1 -or $result.Result -ne 'Passed'){throw 'Pester 測試未全部成功。'}
+ if($null -ne $testContext -and ((Get-FileHash -LiteralPath $suiteFile).Hash.ToLowerInvariant() -cne $testContext.TestSHA256 -or ($wrapper -and (Get-FileHash -LiteralPath $wrapper).Hash.ToLowerInvariant() -cne $testContext.WrapperSHA256))){throw '測試或wrapper在原生量測期間變更。'}
  $commands=@($result.CodeCoverage.CommandsExecuted)+@($result.CodeCoverage.CommandsMissed)
  if(-not $commands.Count){throw '沒有真實命令覆蓋率證據。'}
  $rows=@(foreach($command in $commands){
@@ -85,7 +102,9 @@ if($WorkerIndex -ge 0){
   [pscustomobject]@{File=$file.Substring($source.Length+1).Replace('\','/');Line=[int]$command.StartLine;Column=[int]$command.StartColumn;EndLine=[int]$command.EndLine;EndColumn=[int]$command.EndColumn;Hit=([int]$command.HitCount -gt 0)}
  })
  foreach($expected in $hashes){if($expected.File -notin $rows.File){throw ('Pester 未提供完整來源分母：'+$expected.File)}}
- Write-Json (Join-Path $output ('worker_'+$WorkerIndex+'.json')) ([ordered]@{ProcessId=$PID;PesterVersion=$version;Engine=$engine;EngineVersion=$PSVersionTable.PSVersion.ToString();EngineSHA256=$engineHash;Sources=$hashes;Commands=$rows})
+ $workerProof=[ordered]@{ProcessId=$PID;PesterVersion=$version;Engine=$engine;EngineVersion=$PSVersionTable.PSVersion.ToString();EngineSHA256=$engineHash;Sources=$hashes;Commands=$rows}
+ if($null -ne $testContext){$workerProof.Context=$testContext}
+ Write-Json (Join-Path $output ('worker_'+$WorkerIndex+'.json')) $workerProof
  exit 0
 }
 if(Test-Path -LiteralPath $output){throw '輸出目錄必須是全新目錄。'}

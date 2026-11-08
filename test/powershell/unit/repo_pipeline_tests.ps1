@@ -18,6 +18,17 @@ try {
  $verify=@($script:calls|Where-Object {$_.Arguments -contains 'verify'})
  Assert ($verify.Count -eq 1 -and ($verify[0].Arguments -contains '--require-complete') -and ($verify[0].Arguments -contains '--minimum-percent') -and ($verify[0].Arguments -contains '80')) '正式門檻要求完整與八成'
  Assert ($script:calls[-1].Arguments -contains (Join-Path $root 'script/test/attach_repo_coverage.ps1')) '通過門檻才附加正式報告'
+ $script:calls.Clear();$script:failAt=''
+ $shards=Join-Path $temp 'shards'
+ Invoke-RepoCoveragePipeline -SourceRoot $root -PublicDirectory $public -GoCoverageDirectory (Join-Path $temp 'go') -ManagedEvidencePath (Join-Path $temp 'managed/evidence.json') -OutputDirectory (Join-Path $temp 'sharded') -PowerShellShardDirectory $shards -RunAttempt 2
+ $merge=@($script:calls|Where-Object {$_.Arguments -contains 'powershell-shard-merge'})
+ Assert ($merge.Count -eq 1 -and $merge[0].Arguments -contains $shards -and $merge[0].Arguments -contains '--expected-sha' -and $merge[0].Arguments -contains '--expected-run-url') '同job從完整分片聚合並重新核對原提交與執行身分'
+ Assert ($merge[0].Arguments[[Array]::IndexOf($merge[0].Arguments,'--run-attempt')+1] -eq '2' -and $merge[0].Arguments[[Array]::IndexOf($merge[0].Arguments,'--shard-count')+1] -eq '4') '正式聚合要求同attempt與四片完整集合'
+ Assert (@($script:calls|Where-Object {$_.Arguments -contains (Join-Path $root 'script/test/powershell_coverage.ps1')}).Count -eq 0) '分片路線不在host重跑整輪量測或退回部分清單'
+ Assert (@($script:calls|Where-Object {$_.Arguments -contains 'collect' -and $_.Arguments -contains '--managed-evidence'}).Count -eq 1) '原Go與managed仍於同host完整驗證後收集'
+ $script:calls.Clear();$script:failAt='powershell-shard-merge'
+ Reject {Invoke-RepoCoveragePipeline -SourceRoot $root -PublicDirectory $public -GoCoverageDirectory 'go' -ManagedEvidencePath 'managed' -OutputDirectory (Join-Path $temp 'missing_shards') -PowerShellShardDirectory $shards -RunAttempt 2} '分片不足或不合法不得產生整體成功'
+ Assert (@($script:calls|Where-Object {$_.Arguments -contains 'collect' -or $_.Arguments -contains (Join-Path $root 'script/test/attach_repo_coverage.ps1')}).Count -eq 0) '分片驗證失敗時不可用其他語言掩蓋缺少的PowerShell'
  Reject {Invoke-RepoCoveragePipeline -SourceRoot $root -PublicDirectory $public -GoCoverageDirectory 'go' -ManagedEvidencePath 'managed' -OutputDirectory $output} '不得混入已有量測目錄'
  $script:calls.Clear();$script:failAt='verify'
  Reject {Invoke-RepoCoveragePipeline -SourceRoot $root -PublicDirectory $public -GoCoverageDirectory 'go' -ManagedEvidencePath 'managed' -OutputDirectory (Join-Path $temp 'failed')} 'strict失敗必須停止'
