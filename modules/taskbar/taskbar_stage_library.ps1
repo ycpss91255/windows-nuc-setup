@@ -16,7 +16,8 @@ function Get-SetupTaskbarLayoutBinding {
  $apply=Get-SetupGuiRunPaths -CommonDataRoot $CommonDataRoot -Role Taskbar -RunId $record.ApplyRunID
  Assert-SetupGuiProtectedPath $apply.DataRoot -Directory -UserSid $Context.UserSID
  $layout=Join-Path $apply.DataRoot 'TaskbarLayout.xml';Assert-SetupGuiProtectedPath $layout -UserSid $Context.UserSID
- [pscustomobject]@{ApplyRunID=$record.ApplyRunID;LayoutPath=$layout;FinalizeCommand=(Get-SetupTaskbarFinalizeCommand $record.ApplyRunID)}
+ $pending=Get-ScheduledTask -TaskName ('WindowsSetup-Gui-TaskbarFinalize-'+$record.ApplyRunID) -ErrorAction SilentlyContinue
+ [pscustomobject]@{ApplyRunID=$record.ApplyRunID;LayoutPath=$layout;FinalizeCommand=(Get-SetupTaskbarFinalizeCommand $record.ApplyRunID);PendingFinalizeTask=($null -ne $pending)}
 }
 function Register-SetupTaskbarFinalize {
  param($Stage,$Scope)

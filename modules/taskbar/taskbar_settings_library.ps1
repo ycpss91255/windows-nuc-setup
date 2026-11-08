@@ -9,7 +9,7 @@ function Test-SetupTaskbarLayout {
  return ($pins.Count -eq 1 -and $pins[0].LocalName -ceq 'DesktopApp' -and $pins[0].DesktopApplicationID -ceq 'MSEdge' -and $collections.Count -eq 1 -and $collections[0].PinListPlacement -ceq 'Replace')
 }
 function Invoke-SetupTaskbarSettings {
- param([Parameter(Mandatory=$true)][string]$OutputRoot,[Parameter(Mandatory=$true)][string]$LayoutPath,[switch]$VerifyOnly,[string]$ExpectedFinalizeCommand)
+ param([Parameter(Mandatory=$true)][string]$OutputRoot,[Parameter(Mandatory=$true)][string]$LayoutPath,[switch]$VerifyOnly,[string]$ExpectedFinalizeCommand,[switch]$PendingFinalizeTask)
  if(-not $VerifyOnly){
   Export-SetupTaskbarBackup -Path (Join-Path $OutputRoot ('Taskbar-Before-'+(Get-Date -Format yyyyMMdd-HHmmss)+'.reg'))
 $search='HKCU:\Software\Microsoft\Windows\CurrentVersion\Search'
@@ -50,7 +50,7 @@ New-ItemProperty $policy -Name LockedStartLayout -Value 1 -PropertyType DWord -F
  $widgetsValue=(Get-ItemProperty $widgets -ErrorAction SilentlyContinue).AllowNewsAndInterests
  $policy=Get-ItemProperty 'HKCU:\Software\Policies\Microsoft\Windows\Explorer' -ErrorAction SilentlyContinue
  $runOnce=(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -ErrorAction SilentlyContinue).NUC8FinalizeTaskbar
- $pending=($null -ne $runOnce -or $null -ne $policy.StartLayoutFile -or $null -ne $policy.LockedStartLayout)
+ $pending=($PendingFinalizeTask -or $null -ne $runOnce -or $null -ne $policy.StartLayoutFile -or $null -ne $policy.LockedStartLayout)
  $layoutOK=Test-SetupTaskbarLayout $LayoutPath
  $bindingOK=($null -eq $policy.StartLayoutFile -or $policy.StartLayoutFile -ceq $LayoutPath) -and ($null -eq $runOnce -or ($ExpectedFinalizeCommand -and $runOnce -ceq $ExpectedFinalizeCommand))
  $configured=($search -eq 0 -and $advancedValues.ShowTaskViewButton -eq 0 -and $widgetsValue -eq 0 -and $layoutOK)
