@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-param([switch]$PackageOnly,[ValidateSet('Auto','Generic','NUC8')][string]$HardwareProfile='Auto',[string]$DriverPackagePath)
+param([switch]$PackageOnly,[ValidateSet('Auto','Generic','NUC8')][string]$HardwareProfile='Auto',[string]$DriverPackagePath,[string]$ConfirmedBoard,[string]$ConfirmationComputer)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'paths.ps1')
 foreach($entry in @('init.cmd','windows.cmd','readme.md')){if(-not(Test-Path -LiteralPath (Join-Path $script:NucPackageRoot $entry) -PathType Leaf)){throw ('缺少根目錄入口或說明：'+$entry)}}
@@ -15,7 +15,7 @@ foreach($file in $scriptFiles){
  if($errors.Count){throw ('腳本語法錯誤：'+$file.Name+'；'+$errors[0].Message)}
 }
 if(-not $PackageOnly -and $HardwareProfile -ne 'Auto'){throw '硬體設定檔覆寫只可用於 PackageOnly 離線檢查。'}
-$hardware=if($HardwareProfile -eq 'NUC8'){Get-SetupHardwareProfile -BoardProduct 'NUC8i7HVB'}elseif($HardwareProfile -eq 'Generic'){Get-SetupHardwareProfile -BoardProduct 'Generic'}else{Get-SetupHardwareProfile}
+$hardware=if($HardwareProfile -eq 'NUC8'){Get-SetupHardwareProfile -BoardProduct 'NUC8i7HVB'}elseif($HardwareProfile -eq 'Generic'){Get-SetupHardwareProfile -BoardProduct 'Generic'}else{Get-SetupHardwareProfile -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}
 $payload=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $DriverPackagePath
 Write-Host ('硬體設定檔：'+$hardware.Name+'；'+$payload.Reason)
 if(-not $PackageOnly){

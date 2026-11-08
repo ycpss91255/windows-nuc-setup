@@ -1,20 +1,21 @@
 ﻿#Requires -Version 5.1
-param([string]$UserName=$env:USERNAME,[string]$AutoLogonPassword,[string]$DriverPackagePath,[string]$ExpectedUserSID)
+param([string]$UserName=$env:USERNAME,[string]$AutoLogonPassword,[string]$DriverPackagePath,[string]$ExpectedUserSID,[string]$ConfirmedBoard,[string]$ConfirmationComputer)
 $ErrorActionPreference='Stop'
 $currentSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 if($ExpectedUserSID -and $ExpectedUserSID -ne $currentSID){throw '提權後帳號已改變，請使用原帳號的管理員權限。'}
 if($DriverPackagePath){$DriverPackagePath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DriverPackagePath)}
 . (Join-Path $PSScriptRoot 'paths.ps1')
 Initialize-NucReports
-$hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath
+$hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer
 $skippedModules=@()
 $principal=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $command="& '"+$PSCommandPath.Replace("'","''")+"' -ExpectedUserSID '"+$currentSID+"' -DriverPackagePath '"+$DriverPackagePath.Replace("'","''")+"'"
+ if($ConfirmedBoard){$command+=" -ConfirmedBoard '"+$ConfirmedBoard.Replace("'","''")+"' -ConfirmationComputer '"+$ConfirmationComputer.Replace("'","''")+"'"}
     Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)))
     exit
 }
-& (Resolve-NucPath 'test_setup_prerequisites.ps1') -DriverPackagePath $DriverPackagePath
+& (Resolve-NucPath 'test_setup_prerequisites.ps1') -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer
 if($hardware.IsNuc8 -and $DriverPackagePath){$hardware|Add-Member -NotePropertyName DriverSelection -NotePropertyValue (New-SetupDriverSelection -PackageRoot $script:NucPackageRoot -DriverPackagePath $DriverPackagePath) -Force}
 if($UserName -ine $env:USERNAME){throw '自動登入帳號必須與目前執行帳號相同。'}
 $log=Resolve-NucPath ('Setup-'+(Get-Date -Format yyyyMMdd-HHmmss)+'.log')
@@ -53,7 +54,7 @@ try {
         @{Step=$stageIndex;Total=19;Stage=$stage.Name;UpdatedAt=(Get-Date).ToString('o')}|ConvertTo-Json|Set-Content (Resolve-NucPath 'Setup-Progress.json') -Encoding UTF8
         $decision=Get-SetupModuleDecision -Module $stage.File -Hardware $hardware
         if(-not $decision.Applicable){$skippedModules+=$decision;Write-Host ('[略過] '+$stage.Name+'：'+$decision.Reason) -ForegroundColor Yellow;continue}
-        try { if($stage.File -eq 'install_drivers.ps1'){& (Resolve-NucPath $stage.File) -DriverPackagePath $DriverPackagePath}else{& (Resolve-NucPath $stage.File)} }
+        try { if($stage.File -eq 'install_drivers.ps1'){& (Resolve-NucPath $stage.File) -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer}else{& (Resolve-NucPath $stage.File)} }
         catch { $failedModules+=$stage.File;$stageErrors+=($stage.Name+'：'+$_.Exception.Message);Write-Warning $stageErrors[-1] }
     }
     $problems=@(Get-PnpDevice -PresentOnly|Where-Object Status -ne 'OK')

@@ -8,7 +8,8 @@ if($ExpectedUserSID -and $ExpectedUserSID -ne $currentSID){throw '提權後帳�
 . (Resolve-NucPath 'ssh_firewall.ps1')
 Initialize-NucReports
 $DriverPackagePath=Get-SetupSavedDriverSelection -ResultPath (Resolve-NucPath 'Setup-Result.json')
-$hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath
+$confirmation=Get-SetupSavedHardwareConfirmation -ResultPath (Resolve-NucPath 'Setup-Result.json')
+$hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath @confirmation
 $p=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if(-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
  $command="& '"+$PSCommandPath.Replace("'","''")+"' -ExpectedUserSID '"+$currentSID+"'"

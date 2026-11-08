@@ -94,3 +94,13 @@ function Get-SetupSavedDriverSelection {
  }
  return $candidate
 }
+
+function Get-SetupSavedHardwareConfirmation {
+ param([string]$ResultPath,[string]$Computer=$env:COMPUTERNAME,[string]$UserSID)
+ if(-not(Test-Path -LiteralPath $ResultPath -PathType Leaf)){return @{}}
+ if(-not $UserSID){$UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}
+ $saved=Get-Content -LiteralPath $ResultPath -Raw -ErrorAction Stop|ConvertFrom-Json
+ if($saved.Computer -ne $Computer -or $saved.UserSID -ne $UserSID -or -not $saved.HardwareProfile.ConfirmedBoard){return @{}}
+ if($saved.HardwareProfile.ConfirmationComputer -ine $Computer){throw '保存的手動硬體確認不屬於目前電腦。'}
+ return @{ConfirmedBoard=[string]$saved.HardwareProfile.ConfirmedBoard;ConfirmationComputer=[string]$saved.HardwareProfile.ConfirmationComputer}
+}

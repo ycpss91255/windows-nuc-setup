@@ -24,4 +24,28 @@ foreach($file in @('core/configure_nuc.ps1','core/run_module.ps1','modules/drive
  $decoded=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($capturedState.Args -split '-EncodedCommand ')[1]))
  $result=& ([scriptblock]::Create($decoded))
  Assert ($result.Board -eq $ConfirmedBoard -and $result.Computer -eq $ConfirmationComputer) ('真提權命令保留本機驅動確認：'+$file)
+}# Execute actual downstream invocation ASTs against a capture-only target.
+$forwardStub=Join-Path $fixture 'forward.ps1'
+[IO.File]::WriteAllText($forwardStub,'param($DriverPackagePath,$ConfirmedBoard,$ConfirmationComputer);[pscustomobject]@{Board=$ConfirmedBoard;Computer=$ConfirmationComputer;Path=$DriverPackagePath}',[Text.UTF8Encoding]::new($true))
+function Resolve-NucPath {param($Name);$forwardStub}
+$path=$forwardStub;$stage=@{File='install_drivers.ps1'};$file='install_drivers.ps1';$DriverPackagePath='dynamic_driver_path'
+foreach($relative in @('core/configure_nuc.ps1','core/run_module.ps1','core/verify_after_restart.ps1')){
+ $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root $relative),[ref]$tokens,[ref]$errors)
+ $calls=@($ast.FindAll({param($a) $a -is [Management.Automation.Language.CommandAst] -and $a.InvocationOperator -eq 'Ampersand' -and $a.Extent.Text -match '-DriverPackagePath'},$true))
+ Assert ($calls.Count -eq $(if($relative -eq 'core/verify_after_restart.ps1'){3}elseif($relative -eq 'core/configure_nuc.ps1'){2}else{1})) ('完整下游調用數：'+$relative)
+ foreach($call in $calls){$result=& ([scriptblock]::Create($call.Extent.Text));Assert ($result.Board -eq 'NUC8i7HVB' -and $result.Computer -eq $env:COMPUTERNAME -and $result.Path -eq $DriverPackagePath) ('真下游呼叫傳遞型號與機器身分：'+$relative)}
 }
+# Rehydrate and evaluate the real verification profile assignments.
+function Resolve-NucPath {param($Name);$resultPath}
+function Get-CimInstance {param($ClassName,$ErrorAction);[pscustomobject]@{Product=''}}
+function Get-SetupSavedHardwareConfirmation {param($ResultPath);@{ConfirmedBoard='NUC8i7HVB';ConfirmationComputer=$env:COMPUTERNAME}}
+foreach($relative in @('core/verify_only.ps1','core/verify_after_restart.ps1')){
+ $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root $relative),[ref]$tokens,[ref]$errors)
+ foreach($name in @('confirmation','hardware')){$statement=$ast.Find({param($a) $a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -eq ('$'+$name)},$true);. ([scriptblock]::Create($statement.Extent.Text))}
+ Assert ($hardware.DriverBoard -eq 'NUC8i7HVB' -and $hardware.BoardProduct -eq '') ('真驗證入口恢復確認並重新偵測：'+$relative)
+}$payload=Join-Path $fixture 'payload'
+New-Item -ItemType Directory $payload|Out-Null
+$manifest=@(foreach($name in @('Chipset.zip','SerialIO.zip','UCM.zip','GFX-Radeon.zip')){$item=Join-Path $payload $name;[IO.File]::WriteAllText($item,'fixture');@{File=$name;SHA256=(Get-FileHash $item -Algorithm SHA256).Hash}})
+$manifest|ConvertTo-Json|Set-Content (Join-Path $payload 'manifest.json') -Encoding UTF8
+@{SchemaVersion=1;HardwareProfile='NUC8';Architecture='x64';SupportedBoards=@('NUC8i7HVB','NUC8i7HNB')}|ConvertTo-Json|Set-Content (Join-Path $payload 'package.json') -Encoding UTF8
+Assert ((Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $payload).Status -eq 'Passed') '真payload驗證使用確認DriverBoard，原始未知板號仍保留'

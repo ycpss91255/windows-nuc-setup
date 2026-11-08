@@ -6,14 +6,15 @@ if($ExpectedUserSID -and $ExpectedUserSID -ne $currentSID){throw '提權後帳�
 . (Join-Path $PSScriptRoot 'paths.ps1')
 Initialize-NucReports
 $DriverPackagePath=Get-SetupSavedDriverSelection -ResultPath (Resolve-NucPath 'Setup-Result.json')
-$hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath
+$confirmation=Get-SetupSavedHardwareConfirmation -ResultPath (Resolve-NucPath 'Setup-Result.json')
+$hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath @confirmation
 $skippedModules=@(@('install_drivers.ps1','apply_amd_privacy_settings.ps1','desktop_icon_layout.ps1')|ForEach-Object {Get-SetupModuleDecision -Module $_ -Hardware $hardware}|Where-Object {-not $_.Applicable})
 $p=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if(-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
  $command="& '"+$PSCommandPath.Replace("'","''")+"' -ExpectedUserSID '"+$currentSID+"'"
  Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)));exit
 }
-& (Resolve-NucPath 'test_setup_prerequisites.ps1') -DriverPackagePath $DriverPackagePath
+& (Resolve-NucPath 'test_setup_prerequisites.ps1') -DriverPackagePath $DriverPackagePath @confirmation
 if($hardware.IsNuc8 -and $DriverPackagePath){$hardware|Add-Member -NotePropertyName DriverSelection -NotePropertyValue (New-SetupDriverSelection -PackageRoot $script:NucPackageRoot -DriverPackagePath $DriverPackagePath) -Force}
 $errors=@();$remaining=@()
 $resultPath=Resolve-NucPath 'Setup-Result.json'
@@ -28,13 +29,13 @@ if(Test-Path $resultPath){
    $decision=Get-SetupModuleDecision -Module $file -Hardware $hardware
    if(-not $decision.Applicable){Write-Host ('[略過] '+$decision.Reason);continue}
    Write-Host ('重試未完成模組：'+$file) -ForegroundColor Cyan
-   try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -DriverPackagePath $DriverPackagePath}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
+   try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -DriverPackagePath $DriverPackagePath @confirmation}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
   }
  }
 }
 Write-Host '重新掃描更新；完成後再次清理預載程式並驗證。' -ForegroundColor Cyan
 foreach($file in @('install_windows_updates.ps1','apply_debloat.ps1','apply_copilot_settings.ps1','remove_setup_residue.ps1')){
- try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -DriverPackagePath $DriverPackagePath}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
+ try{ if($file -eq 'install_drivers.ps1'){& (Resolve-NucPath $file) -DriverPackagePath $DriverPackagePath @confirmation}else{& (Resolve-NucPath $file)} }catch{$errors+=($file+'：'+$_.Exception.Message);$remaining+=$file;Write-Warning $errors[-1]}
 }
 if($previous -and $previous.Computer -eq $env:COMPUTERNAME -and $previous.UserSID -eq $sid){
  $previous|Add-Member -NotePropertyName HardwareProfile -NotePropertyValue $hardware -Force
