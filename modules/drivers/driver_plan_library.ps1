@@ -58,9 +58,12 @@ function Get-SetupDriverDeviceInventory {
   [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;HardwareIds=$ids;Status=$device.Status;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion}
  }
 }
+function Get-SetupDriverPnpTool {
+ return Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'pnputil.exe'
+}
 function Invoke-SetupDriverInfInstall {
  param([Parameter(Mandatory=$true)][string]$InfPath,[Parameter(Mandatory=$true)][string]$LogPath)
- $output=& "$env:SystemRoot\System32\pnputil.exe" /add-driver $InfPath /install 2>&1
+ $output=& (Get-SetupDriverPnpTool) /add-driver $InfPath /install 2>&1
  $code=$LASTEXITCODE
  $output|Out-File -LiteralPath $LogPath -Append -Encoding utf8
  [pscustomobject]@{ExitCode=$code}
