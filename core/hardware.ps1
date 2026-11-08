@@ -31,6 +31,28 @@ function Get-SetupModuleDecision {
  if($Module -eq 'desktop_icon_layout.ps1' -and $Hardware.UICulture -ne 'zh-TW'){$skip=$true;$reason='目前排列範本使用繁體中文圖示名稱，略過其他語系的座標套用'}
  [pscustomobject]@{Module=$Module;Applicable=(-not $skip);Status=$(if($skip){'Skipped'}else{'Applicable'});Reason=$(if($skip){$reason}else{'適用目前硬體設定檔'})}
 }
+function Get-SetupDriverManifestEntries {
+ param([Parameter(Mandatory=$true)]$Manifest)
+ if($Manifest.SchemaVersion -eq 2){
+  $entries=@($Manifest.Packages)
+  if($entries.Count -lt 1 -or $entries.Count -gt 128 -or @($entries.Id|Select-Object -Unique).Count -ne $entries.Count){throw '版本2驅動清單數量或識別重複。'}
+  foreach($entry in $entries){
+   $uri=$null
+   if(-not [Uri]::TryCreate([string]$entry.SourceUrl,[UriKind]::Absolute,[ref]$uri) -or $uri.Scheme -ne 'https' -or $uri.UserInfo -or $uri.Host -notin @('www.intel.com','downloadmirror.intel.com','www.asus.com','dlcdnets.asus.com','www.amd.com')){throw '驅動來源必須是已允許的官方 HTTPS 主機。'}
+   if($entry.Id -notmatch '^[a-z0-9][a-z0-9_]{0,63}$' -or $entry.PackageVersion -notmatch '^\d+(\.\d+){1,3}$' -or $entry.DriverVersion -notmatch '^\d+(\.\d+){3}$' -or -not $entry.Provider -or $entry.Architecture -ne 'amd64' -or $entry.MinimumBuild -lt 10240 -or $entry.MinimumBuild -gt 99999){throw '驅動版本、架構或最低作業系統規格不合法。'}
+   if(@($entry.HardwareIds).Count -lt 1 -or @($entry.InfPaths).Count -lt 1){throw '驅動需要明確硬體 ID 與 INF 清單。'}
+   foreach($id in $entry.HardwareIds){if($id -notmatch '^(PCI|ACPI|HDAUDIO|USB)\\[A-Z0-9_&]+$'){throw '驅動硬體 ID 不合法。'}}
+   foreach($inf in $entry.InfPaths){if($inf -notmatch '^[a-zA-Z0-9_ .()/-]+\.inf$' -or $inf -match '(^|/)\.\.(/|$)' -or [IO.Path]::IsPathRooted($inf)){throw '驅動 INF 路徑必須是安全相對路徑。'}}
+  }
+ }else{
+  if($Manifest.PSObject.Properties['SchemaVersion']){throw '不支援的驅動清單版本。'}
+  $entries=@($Manifest)
+  if($entries.Count -ne 4){throw '舊版 NUC 驅動清單必須包含四個封存檔。'}
+ }
+ if(@($entries.File|Select-Object -Unique).Count -ne $entries.Count){throw '驅動清單含重複封存檔。'}
+ foreach($entry in $entries){if($entry.File -notmatch '^[^\\/:]+\.zip$' -or $entry.File -match '^\.\.' -or $entry.SHA256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'NUC 驅動清單格式不合法。'}}
+ return $entries
+}
 function Test-SetupDriverPayload {
  param([Parameter(Mandatory=$true)]$Hardware,[string]$DriverPackagePath,[switch]$AllowLegacyManifest)
  if(-not $Hardware.IsNuc8){return [pscustomobject]@{Status='Skipped';Count=0;Reason='通用電腦不需要 NUC 驅動封存檔'}}
@@ -41,7 +63,7 @@ function Test-SetupDriverPayload {
   if($identity.SchemaVersion -ne 1 -or $identity.HardwareProfile -ne 'NUC8' -or $identity.Architecture -ne 'x64' -or @($identity.SupportedBoards).Count -ne 2 -or 'NUC8i7HVB' -notin $identity.SupportedBoards -or 'NUC8i7HNB' -notin $identity.SupportedBoards -or $Hardware.DriverBoard -notin $identity.SupportedBoards){throw '驅動包機型或架構識別不符合目前硬體。'}
  }
  $manifest=Get-Content -LiteralPath (Join-Path $driverRoot 'manifest.json') -Raw -ErrorAction Stop|ConvertFrom-Json
- if($manifest.Count -ne 4 -or @($manifest.File|Select-Object -Unique).Count -ne 4){throw 'NUC 驅動清單必須包含四個封存檔。'}
+  $manifest=@(Get-SetupDriverManifestEntries -Manifest $manifest)
  foreach($entry in $manifest){
   if($entry.File -notmatch '^[^\\/:]+\.zip$' -or $entry.File -match '^\.\.' -or $entry.SHA256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'NUC 驅動清單格式不合法。'}
   $path=Join-Path $driverRoot $entry.File
