@@ -716,13 +716,14 @@ CI 的 `docker-tests` 使用真正的 `windows-2022` runner 執行 Docker build/
 
 ### 準備版本與 Pull Request
 
-日常變更寫入 `doc/changelog/changelog.md` 的 `## [Unreleased]`。要發布時，在工作分支執行：
+日常變更寫入 `doc/changelog/changelog.md` 的 `## [Unreleased]`。要發布時，先選擇尚未使用的新版本（不是目前 `.version` 或既有標籤），在工作分支執行：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\prepare_release.ps1 -Version v0.2.0
+$newVersion = Read-Host '輸入尚未使用的新版本（vX.Y.Z 或 vX.Y.Z-rcN）'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\prepare_release.ps1 -Version $newVersion
 ```
 
-此命令將 Unreleased 區段提升為指定版本、寫入 `.version`，不提交、不建立標籤也不推送。審查版本內容後，以中文提交並開啟 Pull Request。主分支要求 `ci-rollup` 通過；使用保留各階段提交的 rebase merge，不以 squash 抹掉 TDD 證據。版本必須符合 `vX.Y.Z` 或 `vX.Y.Z-rcN`。
+此命令將 Unreleased 區段提升為指定版本、寫入 `.version`，不提交、不建立標籤也不推送。審查版本內容後，以中文提交並開啟 Pull Request。主分支要求 `ci-rollup` 通過；使用保留各階段提交的 rebase merge，或儲存庫允許時使用 merge commit，不以 squash 抹掉 TDD 證據。版本必須符合 `vX.Y.Z` 或 `vX.Y.Z-rcN`。
 
 ### 標籤與發布門檻
 
@@ -731,8 +732,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\prepare
 ```powershell
 git switch main
 git pull --ff-only
-git tag -a v0.2.0 -m "發布 v0.2.0：通用 Windows 設定與版本流程"
-git push origin v0.2.0
+$version = (Get-Content -LiteralPath .\.version -Raw).Trim()
+git tag -a $version -m $version
+git push origin "refs/tags/$version"
 ```
 
 同一個 Windows workflow 接受 main 推送、Pull Request、手動執行與版本標籤。`isolated-tests` 完成後由 `ci-rollup` 統一回報；只有版本標籤通過測試，且提交位於 main 歷史、`.version` 與 changelog 精確匹配，才發布 Release。RC 標為預覽版；正式版本整合同版 RC 的版本紀錄。既有標籤與版本不應刪除、移動或重用。
