@@ -53,6 +53,10 @@ func TestRawEvidenceWorkflowRunsAsRunnerUTF8WithoutBOM(t *testing.T) {
 	}
 	shell := filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
 	command := exec.Command(shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script)
+	command.Dir, err = filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
 	command.Env = append(os.Environ(), "RUNNER_TEMP="+directory)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("real PS5.1 no-BOM workflow step failed: %v %s", err, output)

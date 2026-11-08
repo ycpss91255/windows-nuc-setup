@@ -146,14 +146,8 @@ jobs:
       - name: 彙整失敗仍匯出安全 PowerShell 原始證據
         if: always()
         run: |
-          $tool = Join-Path $env:RUNNER_TEMP 'repo-coverage/repo_coverage_tool.exe'
-          $input = Join-Path $env:RUNNER_TEMP 'repo-coverage/powershell'
-          if ((Test-Path -LiteralPath $tool -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $input 'evidence.json') -PathType Leaf)) {
-            . .\script\test\ci_tasks.ps1
-            Invoke-CINative -File $tool -Arguments @('export-powershell','--source-root',$PWD.Path,'--evidence-dir',$input,'--output-dir',(Join-Path $env:RUNNER_TEMP 'powershell-raw-public'))
-          } else {
-            Write-Host 'No completed PowerShell raw evidence to export.'
-          }
+          . .\script\test\ci_tasks.ps1
+          Export-CIPowerShellRawEvidence -SourceRoot $PWD.Path -RunnerTemp $env:RUNNER_TEMP
       - name: 僅保留安全 PowerShell 原始證據七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
