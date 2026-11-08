@@ -5,6 +5,7 @@
 ![Language](https://img.shields.io/badge/Language-Go%20%2F%20PowerShell-blue?style=flat-square)
 ![Testing](https://img.shields.io/badge/Testing-Go%20test%20%2F%20PS5.1-orange?style=flat-square)
 [![Coverage](https://ycpss91255.github.io/windows_setup/main/coverage.svg)](https://ycpss91255.github.io/windows_setup/main/index.html)
+[![License](https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square)](license)
 
 [最新已發布 main 報表](https://ycpss91255.github.io/windows_setup/) · [Actions 與七天報告附件](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
 
@@ -597,7 +598,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_
 發布前仍須掃描來源與提交歷史，確認沒有密碼、私鑰、個人網路規則或實機報告。Git 作者資訊應使用適合公開的身分。
 
 - 發布前核對目前 remote 指向的 windows_setup 儲存庫。
-- 自有程式對外使用的授權；目前沒有擅自加入 MIT 或其他授權。
+- 自有程式與文件採用 [Apache License 2.0](license)；第三方內容維持各自原有授權。
 - 若要提供完整二進位下載包，先確認各第三方再散布權限；不能直接把忽略中的驅動和 EXE 全數上傳。
 
 第三方來源與各自授權見 [第三方來源與授權](doc/third_party.md)。儲存庫可設定 remote 並依維護者授權發布；請以目前 Git remote 與 GitHub 狀態為準。
