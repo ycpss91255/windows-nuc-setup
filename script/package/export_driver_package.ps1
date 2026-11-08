@@ -10,8 +10,8 @@ $profile=Get-SetupDriverProfile -ProfileId $ProfileId -ProfilesRoot $ProfilesRoo
 if(-not $profile){throw '找不到指定的驅動設定檔。'}
 $hardware=Get-SetupHardwareProfile -BoardProduct $profile.SupportedBoards[0] -ProfilesRoot $ProfilesRoot
 $null=Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $source -AllowLegacyManifest
-$sourceManifest=Get-Content -LiteralPath (Join-Path $source 'manifest.json') -Raw|ConvertFrom-Json
-$manifest=@(Get-SetupDriverManifestEntries -Manifest (Get-Content -LiteralPath (Join-Path $source 'manifest.json') -Raw|ConvertFrom-Json))
+$sourceManifest=Get-Content -LiteralPath (Join-Path $source 'manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json
+$manifest=@(Get-SetupDriverManifestEntries -Manifest (Get-Content -LiteralPath (Join-Path $source 'manifest.json') -Raw -Encoding UTF8|ConvertFrom-Json))
 New-Item -ItemType Directory -Path (Join-Path $output 'core'),(Join-Path $output 'modules\drivers') -Force|Out-Null
 foreach($entry in $manifest){Copy-Item -LiteralPath (Join-Path $source $entry.File) -Destination $output}
 Copy-Item -LiteralPath (Join-Path $source 'manifest.json') -Destination $output

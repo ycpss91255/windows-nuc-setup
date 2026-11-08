@@ -82,9 +82,10 @@ foreach($name in $workers){
  Assert ($text -notmatch 'Resolve-NucPath|Get-NucDriverRoot|core\\Paths|NucPackageRoot') ('copied worker has no package path helper dependency: '+$name)
 }
 # Exercise only the dispatcher against harmless stub entries in a temporary fixture.
-$fixture=Join-Path ([IO.Path]::GetTempPath()) ('NUC-Routing-'+[guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $fixture|Out-Null
+$fixture=Join-Path ([IO.Path]::GetTempPath()) ('NUC-Routing-'+[guid]::NewGuid().ToString('N')+'/core')
+New-Item -ItemType Directory -Path $fixture -Force|Out-Null
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'core\start_windows.ps1') -Destination (Join-Path $fixture 'start_windows.ps1')
+Copy-Item -LiteralPath (Join-Path $PackageRoot 'drivers') -Destination (Split-Path $fixture -Parent) -Recurse
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'core/hardware.ps1') -Destination (Join-Path $fixture 'hardware.ps1')
 function Get-CimInstance {param($ClassName,$ErrorAction);[pscustomobject]@{Product='NUC8i7HVB'}}
 $driverFixture=Join-Path $fixture 'driver_pack'
