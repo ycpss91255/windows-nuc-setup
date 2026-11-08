@@ -17,9 +17,9 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 
 ### A．還在地區／Wi-Fi 初始設定畫面
 
-使用完整發行包：`modules/init/assets` 必須包含 `hide_oobe.ppkg`、`hide_oobe.xml` 與 `provenance.json`。缺少或驗證失敗時，Init 會在詢問帳密、建立帳號前停止；不能只複製腳本或自行用空檔代替。當前工作分支的真設定包與內容驗收仍待完成，不應當作已完成的發行包使用。
+使用完整發行包：`modules/init/assets` 必須包含 `hide_oobe.ppkg`、`hide_oobe.xml`、`provenance.json` 與 `payload_baseline.json`。缺少或驗證失敗時，Init 會在詢問帳密、建立帳號前停止；不能只複製腳本或自行用空檔代替。設定包已附來源紀錄及經逐檔審查的 `payload_baseline.json`，CI 會獨立核對內容。
 
-1. 插入 USB，按 `Shift+F10`（部分鍵盤需加 Fn）。在 CMD 輸入以下一行找入口，不需要 diskpart：
+1. 將完整工具包命名為 `windows_setup`，放在 USB 根目錄。插入 USB，按 `Shift+F10`（部分鍵盤需加 Fn）。在 CMD 輸入以下一行找入口，不需要 diskpart：
 
 ```cmd
 for %d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do @if exist "%d:\windows_setup\init.cmd" echo %d:\windows_setup\init.cmd
@@ -612,7 +612,7 @@ git push origin v0.2.0
 
 ### 下載內容與保留期限
 
-從 GitHub Release 使用內建 **Source code (zip)** 或 **Source code (tar.gz)** 下載來源，不額外上傳重複來源 ZIP／SHA256。內建來源封存檔的根目錄名稱由 GitHub 決定，解壓後可自行改名。
+從 GitHub Release 使用內建 **Source code (zip)** 或 **Source code (tar.gz)** 下載來源，不額外上傳重複來源 ZIP／SHA256。內建來源封存檔的根目錄名稱由 GitHub 決定。若使用快速開始的 USB 自動尋找指令，請改名為 `windows_setup` 並放在 USB 根目錄；腳本本身可放任意路徑，手動呼叫該位置的 `init.cmd` 即可。
 
 - 來源不包含 `.git`、驅動 ZIP、Autologon EXE、實機 Reports 或密碼暫存；來源檢查會拒絕錯誤追蹤的敏感檔案。
 - 依 [來源包準備說明](#從原始碼準備完整工具包) 補齊所選功能需要的二進位，不能把來源 ZIP 當成完整離線安裝包。
