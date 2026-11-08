@@ -5,7 +5,7 @@ $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 Assert ([bool](Get-Command Invoke-InitOobeFlow -ErrorAction SilentlyContinue)) 'real OOBE flow validates context and assets before prompts or account creation'
 $script:assetOK=$false;$script:accounts=0;$script:prompts=0;$script:staged=$false;$script:applied=$false
-function Get-InitProvisioningContext { @{Sid='S-1-5-18';Build=22631;ProductType=1;Is64Bit=$true;IsWinPE=$false;OobeInProgress=1;SetupInProgress=1;OobeProcessInSession=$true;MachineGuid='fixture';ComputerName='TEST'} }
+function Get-InitProvisioningContext { @{Sid='S-1-5-18';Build=22631;ProductType=1;Is64Bit=$true;IsWinPE=$false;OobeInProgress=1;SetupInProgress=1;OobeProcessInSession=$true;OobeApiSucceeded=$true;OobeComplete=$false;MachineGuid='fixture';ComputerName='TEST'} }
 function Assert-InitProvisioningAsset {param($AssetRoot) if(-not $script:assetOK){throw 'synthetic missing package'};[pscustomobject]@{PackageSHA256=('e'*64)}}
 function New-InitProvisioningStage {param($SourceRoot,$StageRoot) $script:staged=$true}
 function Save-InitProvisioningState {param($State,$StatePath) if(-not $script:staged){throw 'not staged'}}

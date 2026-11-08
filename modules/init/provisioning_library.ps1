@@ -3,8 +3,8 @@
 . (Join-Path $PSScriptRoot 'oobe_library.ps1')
 . (Join-Path $PSScriptRoot 'provisioning_asset_library.ps1')
 function Test-InitProvisioningContext {
- param([string]$Sid,[int]$Build,[int]$ProductType,[bool]$Is64Bit,[bool]$IsWinPE,[int]$OobeInProgress,[int]$SetupInProgress,[bool]$OobeProcessInSession)
- return ($Sid -eq 'S-1-5-18' -and $Build -ge 22621 -and $ProductType -eq 1 -and $Is64Bit -and -not $IsWinPE -and $OobeInProgress -eq 1 -and $SetupInProgress -eq 1 -and $OobeProcessInSession)
+ param([string]$Sid,[int]$Build,[int]$ProductType,[bool]$Is64Bit,[bool]$IsWinPE,[int]$OobeInProgress,[int]$SetupInProgress,[bool]$OobeProcessInSession,[bool]$OobeApiSucceeded,[bool]$OobeComplete)
+ return ($Sid -eq 'S-1-5-18' -and $Build -ge 22621 -and $ProductType -eq 1 -and $Is64Bit -and -not $IsWinPE -and $OobeApiSucceeded -and -not $OobeComplete)
 }
 function New-InitProvisioningState {
  param([string]$MachineGuid,[string]$ComputerName,[string]$SourceRoot,[string]$PackageHash)
@@ -180,7 +180,7 @@ function Read-InitProvisioningState {
 function Invoke-InitOobeFlow {
  param([string]$SourceRoot,[string]$StageRoot)
  $context=Get-InitProvisioningContext
- if(-not(Test-InitProvisioningContext -Sid $context.Sid -Build $context.Build -ProductType $context.ProductType -Is64Bit $context.Is64Bit -IsWinPE $context.IsWinPE -OobeInProgress $context.OobeInProgress -SetupInProgress $context.SetupInProgress -OobeProcessInSession $context.OobeProcessInSession)){throw '目前不是可確認的 Windows 11 22H2 以上初始設定環境；未建立帳號或套用設定。'}
+ if(-not(Test-InitProvisioningContext -Sid $context.Sid -Build $context.Build -ProductType $context.ProductType -Is64Bit $context.Is64Bit -IsWinPE $context.IsWinPE -OobeApiSucceeded $context.OobeApiSucceeded -OobeComplete $context.OobeComplete)){throw '目前不是可確認的 Windows 11 22H2 以上初始設定環境；未建立帳號或套用設定。'}
  $asset=Assert-InitProvisioningAsset -AssetRoot (Join-Path $SourceRoot 'modules/init/assets')
  $statePath=Join-Path $StageRoot 'state.json'
  if(Test-Path -LiteralPath $StageRoot){
@@ -225,5 +225,21 @@ function Get-InitProvisioningContext {
   $registered=[Environment]::ExpandEnvironmentVariables([string]$profile.ProfileImagePath)
   foreach($process in @($session|Where-Object {$_.Name -eq 'explorer.exe'})){if((Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop).Sid -eq $identity.Sid){$desktop=$true}}
  }
- return @{Sid=$identity.Sid;IsAdministrator=$identity.IsAdministrator;Build=[int]$os.BuildNumber;ProductType=[int]$os.ProductType;Is64Bit=([Environment]::Is64BitProcess -and $env:PROCESSOR_ARCHITECTURE -eq 'AMD64');IsWinPE=[bool](Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT');OobeInProgress=[int]$setup.OOBEInProgress;SetupInProgress=[int]$setup.SystemSetupInProgress;OobeProcessInSession=$oobe;MachineGuid=[string]$machine.MachineGuid;ComputerName=$env:COMPUTERNAME;ImageState=[string]$image.ImageState;DesktopOwned=$desktop;ProfilePath=$env:USERPROFILE;RegisteredProfile=$registered}
+ $completion=Invoke-InitOobeCompleteNative
+ return @{Sid=$identity.Sid;IsAdministrator=$identity.IsAdministrator;Build=[int]$os.BuildNumber;ProductType=[int]$os.ProductType;Is64Bit=([Environment]::Is64BitProcess -and $env:PROCESSOR_ARCHITECTURE -eq 'AMD64');IsWinPE=[bool](Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT');OobeInProgress=[int]$setup.OOBEInProgress;SetupInProgress=[int]$setup.SystemSetupInProgress;OobeProcessInSession=$oobe;OobeApiSucceeded=[bool]$completion.Succeeded;OobeComplete=[bool]$completion.Complete;MachineGuid=[string]$machine.MachineGuid;ComputerName=$env:COMPUTERNAME;ImageState=[string]$image.ImageState;DesktopOwned=$desktop;ProfilePath=$env:USERPROFILE;RegisteredProfile=$registered}
+}
+function Invoke-InitOobeCompleteNative {
+ if(-not ('WindowsSetup.InitOobeNative' -as [type])){
+  Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+namespace WindowsSetup { public static class InitOobeNative {
+ [DllImport("kernel32.dll", SetLastError=true)]
+ [return: MarshalAs(UnmanagedType.Bool)]
+ public static extern bool OOBEComplete([MarshalAs(UnmanagedType.Bool)] out bool complete);
+} }
+'@
+ }
+ $complete=$false
+ $success=[WindowsSetup.InitOobeNative]::OOBEComplete([ref]$complete)
+ return [pscustomobject]@{Succeeded=$success;Complete=$complete;ErrorCode=$(if($success){0}else{[Runtime.InteropServices.Marshal]::GetLastWin32Error()})}
 }
