@@ -26,6 +26,7 @@ type Result struct {
 	Covered, Executable int
 	Percent             *float64
 	Missing             []string
+	Blockers            []string
 	Languages           map[string]Counts
 }
 
