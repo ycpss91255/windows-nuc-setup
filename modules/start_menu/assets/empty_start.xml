@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsCustomizations>
+  <PackageConfig xmlns="urn:schemas-Microsoft-com:Windows-ICD-Package-Config.v1.0">
+    <ID>{73C18F23-529E-4379-A458-4C9B3A8D5B92}</ID>
+    <Name>windows_setup_empty_start</Name>
+    <Version>1.0</Version>
+    <OwnerType>ITAdmin</OwnerType>
+    <Rank>0</Rank>
+  </PackageConfig>
+  <Settings xmlns="urn:schemas-microsoft-com:windows-provisioning">
+    <Customizations><Common><Policies><Start><ConfigureStartPins>{"pinnedList":[]}</ConfigureStartPins></Start></Policies></Common></Customizations>
+  </Settings>
+</WindowsCustomizations>
