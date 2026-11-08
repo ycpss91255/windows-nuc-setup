@@ -7,7 +7,7 @@ function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{N
 . (Join-Path $PackageRoot 'core\paths.ps1')
 $root=[IO.Path]::GetFullPath($PackageRoot).TrimEnd('\')+'\'
 # Windows resolves case-insensitively; verify the portable Git names explicitly.
-$tracked=if(Test-Path -LiteralPath (Join-Path $PackageRoot '.git')){@(& git -C $PackageRoot -c core.quotePath=false ls-files)}else{@(Get-ChildItem $PackageRoot -Recurse -File|ForEach-Object {$_.FullName.Substring($PackageRoot.TrimEnd('\').Length+1).Replace('\','/')})}
+$tracked=if(Test-Path -LiteralPath (Join-Path $PackageRoot '.git')){@(& git -C $PackageRoot -c core.quotePath=false ls-files)}else{@(Get-ChildItem -LiteralPath $PackageRoot -Recurse -File|ForEach-Object {$_.FullName.Substring($PackageRoot.TrimEnd('\').Length+1).Replace('\','/')})}
 foreach($license in @('vendor/golang.org/x/net/LICENSE','vendor/golang.org/x/net/PATENTS')){Assert ($tracked -ccontains $license) ('official HTML parser license retains upstream spelling: '+$license)}
 foreach($path in $tracked){
  if($path -cmatch '^(modules/debloat/win11debloat/|vendor/golang.org/x/net/)'){continue}
@@ -57,7 +57,7 @@ foreach($entry in $driverManifest){
  Assert ($entry.File -match '^[^\\/:]+\.zip$' -and $entry.File -notmatch '^\.\.') 'driver manifest filename is a local ZIP name'
  Assert ($entry.SHA256 -match '^[A-Fa-f0-9]{64}$') 'driver manifest SHA256 is valid metadata'
 }
-$owned=@(Get-ChildItem (Join-Path $PackageRoot 'core') -Filter '*.ps1')+@(Get-ChildItem (Join-Path $PackageRoot 'modules') -Recurse -Filter '*.ps1'|Where-Object FullName -notmatch '[\\/]Win11Debloat[\\/]')
+$owned=@(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'core') -Filter '*.ps1')+@(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'modules') -Recurse -Filter '*.ps1'|Where-Object FullName -notmatch '[\\/]Win11Debloat[\\/]')
 foreach($file in $owned){
  $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$tokens,[ref]$errors)
  Assert ($errors.Count -eq 0) ('PS5.1 parses: '+$file.Name)
@@ -68,7 +68,7 @@ foreach($file in $owned){
   }
  }
 }
-$cmds=@(Get-ChildItem $PackageRoot -Filter '*.cmd')+@(Get-ChildItem (Join-Path $PackageRoot 'modules') -Recurse -Filter '*.cmd'|Where-Object FullName -notmatch '[\\/]Win11Debloat[\\/]')+@(Get-ChildItem (Join-Path $PackageRoot 'core') -Filter '*.cmd')
+$cmds=@(Get-ChildItem -LiteralPath $PackageRoot -Filter '*.cmd')+@(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'modules') -Recurse -Filter '*.cmd'|Where-Object FullName -notmatch '[\\/]Win11Debloat[\\/]')+@(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'core') -Filter '*.cmd')
 foreach($file in $cmds){
  $cmdBytes=[IO.File]::ReadAllBytes($file.FullName)
  Assert (-not($cmdBytes.Length -ge 3 -and $cmdBytes[0] -eq 239 -and $cmdBytes[1] -eq 187 -and $cmdBytes[2] -eq 191)) ('CMD has no UTF-8 BOM: '+$file.Name)
