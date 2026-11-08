@@ -36,6 +36,7 @@ function Resolve-InputFile([string]$Relative){
 }
 $sources=@($manifest.Sources|ForEach-Object {Resolve-InputFile $_})
 $tests=@($manifest.Tests|ForEach-Object {Resolve-InputFile $_})
+$wrapper=if($manifest.Wrapper){Resolve-InputFile $manifest.Wrapper}else{$null}
 if(-not $sources.Count -or -not $tests.Count -or @($sources|Select-Object -Unique).Count -ne $sources.Count -or @($tests|Select-Object -Unique).Count -ne $tests.Count){throw '來源或測試清單不可空白或重複。'}
 if(@($sources|Where-Object {$_ -in $tests -or [IO.Path]::GetExtension($_) -ine '.ps1'}).Count){throw '正式來源必須為 PS1，且不可與測試重疊。'}
 $hashes=@($sources|ForEach-Object {[pscustomobject]@{File=$_.Substring($source.Length+1).Replace('\','/');SHA256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
@@ -46,6 +47,7 @@ if($WorkerIndex -ge 0){
  if((Get-Module Pester).Version.ToString() -cne $version){throw 'Pester 版本不符。'}
  $config=New-PesterConfiguration
  $config.Run.Path=@($tests[$WorkerIndex]);$config.Run.RepoRoot=$source;$config.Run.PassThru=$true
+ if($wrapper){$config.Run.Path=@();$config.Run.Container=@(New-PesterContainer -Path $wrapper -Data @{SuitePath=$tests[$WorkerIndex];SourceRoot=$source})}
  $config.CodeCoverage.Enabled=$true;$config.CodeCoverage.Path=$sources;$config.CodeCoverage.ExcludeTests=$false
  $config.CodeCoverage.OutputFormat='Cobertura';$config.CodeCoverage.OutputPath=Join-Path $output ('worker_'+$WorkerIndex+'.xml')
  $config.CodeCoverage.CoveragePercentTarget=0
@@ -91,6 +93,7 @@ foreach($item in $hashes){
  [void]$xml.SelectSingleNode('/coverage/packages/package/classes').AppendChild($class)
 }
 if(-not $total){throw '可執行行分母為空。'}
+foreach($item in $hashes){$item|Add-Member -NotePropertyName ExpectedLines -NotePropertyValue @($merged.Values|Where-Object File -ceq $item.File|Select-Object -ExpandProperty Line -Unique|Sort-Object)}
 $xml.coverage.SetAttribute('lines-covered',$covered.ToString());$xml.coverage.SetAttribute('lines-valid',$total.ToString());$xml.coverage.SetAttribute('line-rate',($covered/[double]$total).ToString([Globalization.CultureInfo]::InvariantCulture))
 Write-Json (Join-Path $output 'evidence.json') ([ordered]@{SchemaVersion=1;PesterVersion=$version;PackageSHA512=$packageHash;Sources=$hashes;Workers=$workers;Metric='FullyCoveredCommandStartLines';Covered=$covered;Total=$total})
 $xml.Save((Join-Path $output 'coverage.xml'))
