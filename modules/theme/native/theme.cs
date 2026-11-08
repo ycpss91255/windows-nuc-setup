@@ -42,10 +42,11 @@ public static class NUC8Theme {
   if(dc==IntPtr.Zero)throw new Exception("Unable to acquire screen context.");
   try{
    Rect clip;int region=api.Clip(dc,out clip);
-   if(region<2||clip.Right<=clip.Left||clip.Bottom<=clip.Top)throw new Exception("Unable to inspect screen clipping region.");
+   if((region!=2&&region!=3)||clip.Right<=clip.Left||clip.Bottom<=clip.Top)throw new Exception("Unable to inspect screen clipping region.");
    int x=r.Left+Math.Min(8,(r.Right-r.Left)/2),y=r.Top+(r.Bottom-r.Top)/2;
    if(x<clip.Left||x>=clip.Right||y<clip.Top||y>=clip.Bottom){
-    if((api.State()&1)!=0)return new TaskbarSample{RGB=new int[0],AutoHidden=true};
+    uint state=api.State();if(state>3)throw new Exception("Unknown taskbar state.");
+    if((state&1)!=0)return new TaskbarSample{RGB=new int[0],AutoHidden=true};
     throw new Exception("Taskbar sample is outside the visible region without confirmed autohide.");
    }
    uint color=api.Pixel(dc,x,y);
