@@ -12,6 +12,7 @@ function Get-SetupDriverTargetPlan {
   if(-not [version]::TryParse([string]$Target.DriverVersion,[ref]$desired)){throw '目標驅動版本無法解析。'}
   if($device.DriverProvider -eq 'Microsoft' -and $Target.Provider -ne 'Microsoft'){$status='UpdateRequired';$reason='原廠目標取代通用驅動'}
   elseif(-not $comparable -or -not [version]::TryParse([string]$device.DriverVersion,[ref]$current)){$status='Unverified';$reason='目前供應商或版本無法安全比較'}
+  elseif($current -ge $desired -and $device.Status -ne 'OK'){$status='Unverified';$reason='版本已達目標但裝置狀態異常'}
   elseif($current -gt $desired){$status='NewerInstalled';$reason='保留目前較新版本'}
   elseif($current -eq $desired){$status='Current';$reason='已符合目標版本'}
   else{$status='UpdateRequired';$reason='目前版本低於已核目標'}
