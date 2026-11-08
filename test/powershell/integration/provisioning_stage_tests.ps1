@@ -21,6 +21,7 @@ $rejected=$false;try{New-InitProvisioningStage $source $stage $initial}catch{$re
 Assert ($rejected -and -not(Test-Path $stage)) 'asset failure causes no stage creation'
 $script:assetOK=$true
 New-InitProvisioningStage $source $stage $initial
+Assert (Test-Path -LiteralPath (Join-Path $stage 'runtime/modules/init/init_entry_library.ps1')) 'F10續跑暫存必須攜帶Init原始library'
 Assert ($script:protected -and -not(Test-Path (Join-Path $stage 'runtime/modules/ssh'))) 'new account-only Init stage does not copy SSH implementation'
 Assert (-not(Test-Path (Join-Path $stage 'runtime/modules/ssh/custom_hosts_sync/runtime.json'))) 'source machine state is never staged'
 $launcher=[IO.File]::ReadAllText((Join-Path $stage 'resume_init.cmd'))
