@@ -1,0 +1,27 @@
+name: 巢狀短TEMP原生容器定位
+on:
+  push:
+    branches: [diagnostic/nested_stage_container]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-stage-probe:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 建置相同Windows容器映像
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\docker\docker.ps1 -Action build -Isolation process
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 同ContainerUser與短TEMP比較原入口及診斷入口
+        run: |
+          . .\script\docker\library.ps1
+          $context = Get-ContainerContext -Root $env:GITHUB_WORKSPACE -ReportDirectory (Join-Path $env:RUNNER_TEMP 'probe-unused') -Isolation process
+          Invoke-ContainerDocker -Arguments @('run','--rm','--network','none','--isolation','process','--user','ContainerUser','--mount',('type=bind,source='+$context.Root+',target=C:\workspace,readonly'),'--entrypoint','powershell.exe',$context.Image,'-NoProfile','-ExecutionPolicy','Bypass','-File','C:/workspace/test/powershell/support/nested_stage_probe.ps1')

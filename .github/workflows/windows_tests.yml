@@ -1,10 +1,11 @@
-name: 巢狀短TEMP容器診斷
+name: Windows 測試
 
 on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 env:
   GOTOOLCHAIN: local
@@ -12,7 +13,211 @@ env:
   GOFLAGS: "-mod=vendor"
   CGO_ENABLED: "0"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  oobe_payload_inspection:
+    name: 設定包唯讀內容驗證
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - name: 取得原始碼
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 檢查設定包三檔來源與實際雜湊
+        shell: powershell
+        run: |
+          .\test\powershell\integration\provisioning_source_tests.ps1
+      - name: 唯讀抽取並核對已審查內容
+        id: payload
+        if: always()
+        shell: powershell
+        run: |
+          $evidence = Join-Path ([IO.Path]::GetTempPath()) ('windows-setup-oobe-' + [guid]::NewGuid().ToString('N'))
+          "evidence=$evidence" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          .\script\test\verify_oobe_payload.ps1 -PackagePath .\modules\init\assets\hide_oobe.ppkg -EvidenceDirectory $evidence -BaselinePath .\modules\init\assets\payload_baseline.json
+      - name: 保留內容驗證證據七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: oobe-payload-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.payload.outputs.evidence }}
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: 唯讀抽取開始功能表設定包並保留待審查內容
+        id: start_payload
+        if: always()
+        shell: powershell
+        run: |
+          $evidence = Join-Path ([IO.Path]::GetTempPath()) ('windows-setup-start-pins-' + [guid]::NewGuid().ToString('N'))
+          "evidence=$evidence" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          .\script\test\verify_start_pins_payload.ps1 -PackagePath .\modules\start_menu\assets\empty_start.ppkg -EvidenceDirectory $evidence -BaselinePath .\modules\start_menu\assets\payload_baseline.json
+      - name: 保留開始功能表七個 XML 與未通過診斷七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: start-pins-payload-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.start_payload.outputs.evidence }}/evidence.json
+            ${{ steps.start_payload.outputs.evidence }}/payload/**/*.xml
+            ${{ steps.start_payload.outputs.evidence }}/payload/**/*.provxml
+          retention-days: 7
+          if-no-files-found: warn
+
+  isolated-tests:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: 取得原始碼
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: 準備固定 Go 覆蓋率工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 準備固定 managed 維護編譯器
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: '10.0.300'
+          cache: false
+      - name: 列出 runner 本機 SDK
+        run: |
+          dotnet --list-sdks
+      - name: 準備固定的 workflow 語義檢查器
+        run: |
+          . .\script\docker\install_managed_tools.ps1
+          $artifact = Get-ContainerWorkflowLintArtifact
+          $directory = Join-Path $env:RUNNER_TEMP 'actionlint-1.7.12'
+          Install-ContainerToolArtifact -Artifact $artifact -Destination $directory -ArchiveDirectory (Join-Path $env:RUNNER_TEMP 'actionlint-download')
+          "WINDOWS_SETUP_ACTIONLINT=$(Join-Path $directory 'actionlint.exe')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: 執行 Windows PowerShell 5.1 隔離測試
+        run: |
+          & .\script\test\run_ci.ps1 -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results')
+      - name: 顯示固定失敗測試的有限診斷
+        if: failure()
+        run: |
+          . .\script\test\ci_tasks.ps1
+          Write-CIFailureDiagnostics -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results') -SuiteNames @('Unit.uac_helpers','Integration.managed_catalog','Unit.driver_cache_cleanup','Integration.init_runtime','Integration.driver_full_source_coverage')
+      - name: 產生明確標示的合成首頁驗收樣本
+        if: always()
+        run: |
+          & .\script\test\create_portal_fixture.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'requirements-fixture')
+      - name: 量測全部自有 Go 與 CLI 並要求八成
+        env:
+          WINDOWS_SETUP_ARTIFACT_DIR: ${{ runner.temp }}/NUC-CI-Results/public
+          WINDOWS_SETUP_PORTAL_FIXTURE_DIR: ${{ runner.temp }}/requirements-fixture/portal
+        run: |
+          & .\script\test\measure_go_coverage.ps1 -SourceRoot $PWD.Path -ReportDirectory $env:WINDOWS_SETUP_ARTIFACT_DIR -OutputDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage')
+      - name: 附加分項 Go 證據
+        if: github.ref_type != 'tag'
+        run: |
+          & .\script\test\attach_go_coverage.ps1 -PublicDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public') -CoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage')
+      - name: 量測 managed 原生程式的完整計數點
+        run: |
+          & .\script\test\managed_coverage.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'managed-coverage')
+      - name: 收集四語言整體覆蓋率並強制完整八成
+        run: |
+          & .\script\test\run_repo_coverage.ps1 -SourceRoot $PWD.Path -PublicDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public') -GoCoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage') -ManagedEvidencePath (Join-Path $env:RUNNER_TEMP 'managed-coverage/evidence.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'repo-coverage')
+      - name: 短期保留去識別整體證據七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: repo-coverage-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/repo-coverage/coverage/repo_coverage.json
+            ${{ runner.temp }}/repo-coverage/coverage/coverage_inventory.json
+            ${{ runner.temp }}/repo-coverage/coverage/coverage.xml
+          retention-days: 7
+          if-no-files-found: error
+      - name: 彙整失敗仍匯出安全 PowerShell 原始證據
+        if: always()
+        run: |
+          . .\script\test\ci_tasks.ps1
+          Export-CIPowerShellRawEvidence -SourceRoot $PWD.Path -RunnerTemp $env:RUNNER_TEMP
+      - name: 僅保留安全 PowerShell 原始證據七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: powershell-raw-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/powershell-raw-public/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: 保留獨立 Go 覆蓋率證據七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/go-coverage/
+          retention-days: 7
+          if-no-files-found: error
+      - name: 保留合成驗收樣本七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: requirements-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/requirements-fixture/portal/
+          retention-days: 7
+          if-no-files-found: error
+      - name: 測試報告短期保留七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/NUC-CI-Results/public/
+          retention-days: 7
+          if-no-files-found: warn
+
+  requirements-gate:
+    name: requirements-gate
+    if: always() && needs.isolated-tests.result != 'cancelled'
+    needs: [isolated-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 取得本次來源
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 下載同次 PS5.1 真實報告
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: acceptance-artifact
+      - name: 下載本次實際產生的合成首頁樣本
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: requirements-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: acceptance-fixture
+      - name: 準備固定 Go 工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 執行需求驗收與破壞性負例
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WINDOWS_SETUP_ARTIFACT_DIR: ${{ github.workspace }}/acceptance-artifact
+          WINDOWS_SETUP_PORTAL_FIXTURE_DIR: ${{ github.workspace }}/acceptance-fixture
+        run: |
+          go test -count=1 ./...
+          go run ./script/test/requirements_gate --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
+          go run ./script/test/repo_coverage_tool verify --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --require-complete --minimum-percent 80
+
   docker-tests:
     name: docker-tests
     runs-on: windows-2022
@@ -63,3 +268,184 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  ci-rollup:
+    name: ci-rollup
+    if: always()
+    needs: [isolated-tests, requirements-gate, docker-tests, oobe_payload_inspection]
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - name: 取得已測試的工作門檻
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 確認全部必要測試成功
+        shell: pwsh
+        env:
+          TEST_RESULT: ${{ needs.isolated-tests.result }}
+          REQUIREMENTS_RESULT: ${{ needs.requirements-gate.result }}
+          DOCKER_RESULT: ${{ needs.docker-tests.result }}
+          OOBE_PAYLOAD_RESULT: ${{ needs.oobe_payload_inspection.result }}
+        run: |
+          . .\script\test\ci_tasks.ps1
+          Assert-CIResults @{Tests=$env:TEST_RESULT;Requirements=$env:REQUIREMENTS_RESULT;Docker=$env:DOCKER_RESULT;Payload=$env:OOBE_PAYLOAD_RESULT}
+
+  release:
+    name: 發布 GitHub 來源版本
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [ci-rollup]
+    runs-on: windows-2022
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: 取得完整已驗證歷史
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 驗證版本並產生當版說明
+        shell: powershell
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          . .\script\release\release.ps1
+          Assert-ReleaseOnMain -PackageRoot $PWD.Path -Revision $env:SOURCE_COMMIT
+          $release = .\script\release\build_source_release.ps1 -Version $env:RELEASE_TAG -Revision $env:SOURCE_COMMIT -OutputDirectory "$env:RUNNER_TEMP\release-notes"
+          "prerelease=$($release.Prerelease.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+        id: release
+      - name: 準備固定的證據驗證工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 建立真正整體覆蓋率驗證器
+        shell: powershell
+        env:
+          WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
+        run: |
+          go build -o $env:WINDOWS_SETUP_COVERAGE_TOOL ./script/test/repo_coverage_tool
+      - name: 下載同一次執行的去識別品質證據
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-public
+      - name: 草稿附齊品質證據後發布不可變版本
+        shell: powershell
+        env:
+          WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          $arguments = @{PublicDirectory="$env:RUNNER_TEMP\release-public";Version=$env:RELEASE_TAG;Commit=$env:SOURCE_COMMIT;NotesPath="$env:RUNNER_TEMP\release-notes\release_notes.md";Repository=$env:GH_REPO;Prerelease=($env:IS_PRERELEASE -eq 'true')}
+          .\script\report\publish_quality_release.ps1 @arguments
+
+  build-portal:
+    name: 建立 main 與不可變版本品質索引
+    if: always() && needs.ci-rollup.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
+    needs: [isolated-tests, requirements-gate, docker-tests, release, ci-rollup]
+    runs-on: windows-2022
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+
+    concurrency:
+      group: pages-report
+      cancel-in-progress: false
+    steps:
+      - name: 取得受保護 main 的報表產生器
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: 準備固定的證據驗證工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 建立真正整體覆蓋率驗證器
+        shell: powershell
+        env:
+          WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
+        run: |
+          go build -o $env:WINDOWS_SETUP_COVERAGE_TOOL ./script/test/repo_coverage_tool
+      - name: 核對版本品質附件並本地產生索引
+        shell: powershell
+        env:
+          WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_REF: ${{ github.ref }}
+          CURRENT_RUN: ${{ github.run_id }}
+        run: |
+          . .\script\test\ci_tasks.ps1
+          $parameters = Get-CIPortalParameters -Repository $env:GH_REPO -OutputDirectory "$env:RUNNER_TEMP\portal-inputs" -EventRef $env:EVENT_REF -RunId $env:CURRENT_RUN
+          $inputs = .\script\report\get_portal_inputs.ps1 @parameters
+          .\script\report\build_portal.ps1 -CatalogPath $inputs.CatalogPath -MainSnapshotPath $inputs.MainSnapshotPath -OutputDirectory "$env:RUNNER_TEMP\quality-portal" -RequireGoCoverage
+      - name: 保存去識別 portal 供 Linux 部署
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: quality-portal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/quality-portal/
+          retention-days: 7
+          if-no-files-found: error
+
+  publish-reports:
+    name: 發布 Pages 品質入口
+    needs: [build-portal]
+    if: always() && needs.build-portal.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages-deployment
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 下載已驗證的品質入口
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: quality-portal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: portal
+      - name: 準備 Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: portal
+          retention-days: 7
+      - name: 發布 Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+  verify-deployment:
+    name: 公開部署需求驗收
+    needs: [publish-reports]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.publish-reports.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    permissions:
+      contents: read
+    steps:
+      - name: 取得本次驗收程式與 README
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 準備固定 Go 工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 匿名核對公開網站與本次來源
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          go run ./script/test/verify_deployment --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
