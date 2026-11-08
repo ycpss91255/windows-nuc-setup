@@ -52,6 +52,29 @@ function Assert-ContainerBuildReceipt {
  if($receipt.SourceCommit -cne (Get-ContainerSourceCommit -Root $Context.Root) -or $receipt.InputsSHA256 -cne $Context.InputsSHA256 -or $receipt.RootSHA256 -cne $Context.RootSHA256 -or $receipt.Image -cne $Context.Image -or $receipt.Isolation -cne $Context.Isolation -or $receipt.ImageId -cne (Get-ContainerBuiltImageId -Context $Context)){throw 'Container build receipt does not match current source, tool inputs, isolation and exact image.'}
  return $receipt.ImageId
 }
+function New-ContainerRuntimeComposeFile {
+ param([Parameter(Mandatory=$true)]$Context,[Parameter(Mandatory=$true)]$Configuration,[Parameter(Mandatory=$true)][string]$ImageId,[Parameter(Mandatory=$true)][string]$Directory)
+ if($ImageId -cnotmatch '^sha256:[a-f0-9]{64}$'){throw 'Runtime image must be an inspected immutable ID.'}
+ Assert-ContainerCompose -Configuration $Configuration -Isolation $Context.Isolation -Image $ImageId
+ if(@($Configuration.services.PSObject.Properties).Count -ne 1){throw 'Runtime configuration must contain only the validated tools service.'}
+ $runtime=($Configuration|ConvertTo-Json -Depth 100)|ConvertFrom-Json
+ $runtime.services.tools.PSObject.Properties.Remove('build')
+ $path=Get-ContainerReceiptPath -Context $Context -Path (Join-Path $Directory ('windows_container_runtime_'+[guid]::NewGuid().ToString('N')+'.json'))
+ $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($runtime|ConvertTo-Json -Depth 100))
+ $stream=[IO.File]::Open($path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+ try{$stream.Write($bytes,0,$bytes.Length)}finally{$stream.Dispose()}
+ return [pscustomobject]@{Path=$path;ExpectedService=$runtime.services.tools}
+}
+function Assert-ContainerRuntimeCompose {
+ param([Parameter(Mandatory=$true)]$Configuration,[Parameter(Mandatory=$true)]$ExpectedService)
+ $actual=$Configuration.services.tools
+ if(-not $actual -or @($Configuration.services.PSObject.Properties).Count -ne 1 -or $actual.PSObject.Properties.Name -ccontains 'build'){throw 'Runtime configuration must not contain build instructions.'}
+ $names=@($ExpectedService.PSObject.Properties.Name)
+ if(@($actual.PSObject.Properties).Count -ne $names.Count){throw 'Runtime service properties changed during Compose resolution.'}
+ foreach($name in $names){
+  if($actual.PSObject.Properties.Name -cnotcontains $name -or (ConvertTo-Json -InputObject $actual.$name -Depth 100 -Compress) -cne (ConvertTo-Json -InputObject $ExpectedService.$name -Depth 100 -Compress)){throw 'Runtime service must retain the validated image, source, reports, isolation and command.'}
+ }
+}
 function Invoke-ContainerDocker {
  param([string[]]$Arguments)
  $preference=$ErrorActionPreference
