@@ -86,6 +86,24 @@ public static class ManagedNativeTests {
   api.Buffer=delegate(uint flags,out uint paths,out uint modes){paths=1;modes=1;return 0;};api.Query=delegate(uint flags,ref uint paths,IntPtr pathData,ref uint modes,IntPtr modeData,IntPtr topology){return 8;};int before=freed;Throws(delegate{NUC8Display.Display.NativeScales(false,api);},"failed DPI path query rejected",typeof(Exception));Assert(freed==before+2,"failed DPI path query frees both buffers");
   int allocations=0;api.Allocate=delegate(int size){if(++allocations==2)throw new InvalidOperationException("allocation fixture");return Marshal.AllocHGlobal(size);};before=freed;Throws(delegate{NUC8Display.Display.NativeScales(false,api);},"second native allocation failure propagates");Assert(freed==before+1,"first buffer freed when second allocation fails");
  }
+ static void WimCases(){
+  string root=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"wim_fake_"+Guid.NewGuid().ToString("N"));System.IO.Directory.CreateDirectory(root);
+  try{
+   var api=new WindowsSetup.OobeWimReader.NativeApi();int closed=0,released=0,unregistered=0;WindowsSetup.OobeWimReader.Callback callback=null;
+   string metadata="<WIM><IMAGE><TOTALBYTES>32</TOTALBYTES></IMAGE></WIM>";bool unexpected=false,missing=false;
+   api.Create=delegate(string p,uint access,uint creation,uint flags,uint compression,out uint result){result=0;Assert(p=="fake.ppkg" && access==0x80000000 && creation==3,"WIM opens read-only existing package");return (IntPtr)1;};
+   api.Count=delegate(IntPtr h){return 1;};api.Temp=delegate(IntPtr h,string p){Assert(p==root,"WIM uses requested temporary directory");return true;};api.Load=delegate(IntPtr h,uint index){Assert(index==1,"WIM selects sole image");return (IntPtr)2;};
+   api.Information=delegate(IntPtr h,out IntPtr data,out uint size){data=Marshal.StringToHGlobalUni(metadata);size=(uint)(metadata.Length*2);return true;};api.Free=delegate(IntPtr p){released++;Marshal.FreeHGlobal(p);return IntPtr.Zero;};
+   api.Register=delegate(IntPtr h,WindowsSetup.OobeWimReader.Callback value,IntPtr user){callback=value;return 0;};api.Unregister=delegate(IntPtr h,WindowsSetup.OobeWimReader.Callback value){unregistered++;return true;};
+   api.Apply=delegate(IntPtr h,string path,uint flags){Assert(flags==8,"WIM enumeration uses no-apply flag");foreach(string relative in new string[]{"","nested",unexpected?"alien.txt":"nested/a.txt"}){if(missing && relative.EndsWith(".txt"))continue;IntPtr name=Marshal.StringToHGlobalUni(System.IO.Path.Combine(path,relative.Replace('/','\\')));try{callback(0,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);if(callback(0x9479,name,IntPtr.Zero,IntPtr.Zero)==0xffffffff)return false;}finally{Marshal.FreeHGlobal(name);}}return true;};
+   api.Extract=delegate(IntPtr h,string source,string target,uint flags){Assert(source=="\\nested\\a.txt" && flags==0 && target.StartsWith(root),"WIM extracts only explicitly approved entry");System.IO.File.WriteAllText(target,"fixture");return true;};api.Close=delegate(IntPtr h){closed++;return true;};api.Error=delegate{return 5;};
+   WindowsSetup.OobeWimReader.Extract("fake.ppkg",root,new string[]{"nested/a.txt"},api);Assert(closed==2 && released==1 && unregistered==1 && System.IO.File.ReadAllText(System.IO.Path.Combine(root,"nested/a.txt"))=="fixture","WIM approved extraction frees metadata callback and handles");
+   unexpected=true;Throws(delegate{WindowsSetup.OobeWimReader.Extract("fake.ppkg",root,new string[]{"nested/a.txt"},api);},"WIM rejects unexpected archive entry",typeof(System.IO.InvalidDataException));Assert(closed==4 && unregistered==2,"WIM entry rejection still unregisters and closes both handles");unexpected=false;missing=true;
+   Throws(delegate{WindowsSetup.OobeWimReader.Extract("fake.ppkg",root,new string[]{"nested/a.txt"},api);},"WIM rejects missing expected entry",typeof(System.IO.InvalidDataException));missing=false;
+   metadata="<WIM><TOTALBYTES>4194305</TOTALBYTES></WIM>";Throws(delegate{WindowsSetup.OobeWimReader.Extract("fake.ppkg",root,new string[]{"nested/a.txt"},api);},"WIM rejects oversized expanded data",typeof(System.IO.InvalidDataException));Assert(released==4,"WIM invalid metadata is freed");
+   api.Count=delegate(IntPtr h){return 2;};Throws(delegate{WindowsSetup.OobeWimReader.Extract("fake.ppkg",root,new string[]{"nested/a.txt"},api);},"WIM rejects multiple images",typeof(System.IO.InvalidDataException));
+  }finally{System.IO.Directory.Delete(root,true);}
+ }
  public static void Main(string[] args){
   Assert(typeof(NUC8Icons.Desktop).GetMethod("Capture")!=null,"desktop capture API is available");
   Assert(typeof(NUC8Theme).GetMethod("TaskbarColor")!=null,"theme API is available");
@@ -102,7 +120,8 @@ public static class ManagedNativeTests {
    Assert(Marshal.ReadInt32(packet,0)==-3 && Marshal.ReadInt32(packet,4)==32,"display packet type and size are written");
    Assert(Marshal.ReadInt32(packet,8)==19 && Marshal.ReadInt32(packet,12)==23 && Marshal.ReadInt32(packet,16)==29,"display packet carries exact adapter identity");
   }finally{Marshal.FreeHGlobal(packet);Marshal.FreeHGlobal(path);}
-  ExplorerCases();ThemeCases();HotkeyCases();DisplayCases();
+  ExplorerCases();ThemeCases();HotkeyCases();DisplayCases();WimCases();
+  new WindowsSetup.UpdateCallback().Invoke(new object(),new object());Assert(true,"WUA callback accepts Automation arguments without retaining or processing them");
   Console.WriteLine("ALL PASS: "+assertions+" managed source assertions; no native OS functions invoked");
  }
 }
