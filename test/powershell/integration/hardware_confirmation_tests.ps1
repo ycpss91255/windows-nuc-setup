@@ -35,7 +35,7 @@ foreach($relative in @('core/configure_nuc.ps1','core/run_module.ps1','core/veri
  if($relative -eq 'core/configure_nuc.ps1'){$combined=[IO.File]::ReadAllText((Join-Path $root $relative))+[IO.File]::ReadAllText((Join-Path $root 'core/configuration_library.ps1'));$ast=[Management.Automation.Language.Parser]::ParseInput($combined,[ref]$tokens,[ref]$errors)}
  if($relative -eq 'core/verify_after_restart.ps1'){$combined=[IO.File]::ReadAllText((Join-Path $root $relative))+[IO.File]::ReadAllText((Join-Path $root 'core/after_restart_library.ps1'));$ast=[Management.Automation.Language.Parser]::ParseInput($combined,[ref]$tokens,[ref]$errors)}
  $calls=@($ast.FindAll({param($a) $a -is [Management.Automation.Language.CommandAst] -and $a.InvocationOperator -eq 'Ampersand' -and ($a.Extent.Text -match '-DriverPackagePath|@driverArguments')},$true))
- Assert ($calls.Count -eq $(if($relative -eq 'core/verify_after_restart.ps1'){3}elseif($relative -eq 'core/configure_nuc.ps1'){2}else{1})) ('完整下游調用數：'+$relative)
+ Assert ($calls.Count -eq $(if($relative -eq 'core/verify_after_restart.ps1'){4}elseif($relative -eq 'core/configure_nuc.ps1'){2}else{1})) ('完整下游調用數：'+$relative)
  foreach($call in $calls){$result=& ([scriptblock]::Create($call.Extent.Text));Assert ($result.Board -eq 'NUC8i7HVB' -and $result.Computer -eq $env:COMPUTERNAME -and $result.Path -eq $DriverPackagePath) ('真下游呼叫傳遞型號與機器身分：'+$relative)}
 }
 # Rehydrate and evaluate the real verification profile assignments.
