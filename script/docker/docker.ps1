@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][ValidateSet('doctor','build','test','shell')][string]$Action,[string]$ReportDirectory,[ValidateSet('process','hyperv')][string]$Isolation='process')
+param([Parameter(Mandatory=$true)][ValidateSet('doctor','build','test','test-built','shell')][string]$Action,[string]$ReportDirectory,[ValidateSet('process','hyperv')][string]$Isolation='process',[string]$BuildReceiptPath)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'library.ps1')
 $previous=@{}
@@ -18,12 +18,16 @@ try {
  $compose=@('compose','--project-name',$context.Project,'--file',(Join-Path $context.Root 'compose.yaml'))
  $configuration=(Invoke-ContainerDocker -Arguments ($compose+@('config','--format','json'))) -join "`n"
  Assert-ContainerCompose -Configuration ($configuration|ConvertFrom-Json) -Isolation $context.Isolation -Image $context.Image
- Invoke-ContainerDocker -Arguments ($compose+@('build','--pull','tools'))
- if($Action -eq 'build'){Write-Host ('Built '+$context.Image);exit 0}
+ if($Action -eq 'test-built'){$null=Assert-ContainerBuildReceipt -Context $context -Path $BuildReceiptPath}
+ else{Invoke-ContainerDocker -Arguments ($compose+@('build','--pull','tools'))}
+ if($Action -eq 'build'){
+  if($BuildReceiptPath){Save-ContainerBuildReceipt -Context $context -Path $BuildReceiptPath}
+  Write-Host ('Built '+$context.Image);exit 0
+ }
  if(Test-Path -LiteralPath $context.Reports){throw 'Report destination must be a new directory to avoid mixing runs.'}
  New-Item -ItemType Directory -Path $context.Reports|Out-Null
  Write-Host ('Container report directory: '+$context.Reports)
- if($Action -eq 'test'){
+ if($Action -in @('test','test-built')){
   Invoke-ContainerDocker -Arguments ($compose+@('run','--rm','--no-deps','-T','tools'))
  }else{
   Invoke-ContainerDocker -Arguments ($compose+@('run','--rm','--no-deps','tools','powershell.exe','-NoLogo','-NoProfile','-NoExit','-Command','git.exe config --global --add safe.directory C:/workspace; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; . C:/workspace/script/docker/acceptance.ps1; Initialize-ContainerGoEnvironment -SourceRoot C:/workspace -CacheRoot (Join-Path $env:TEMP (''container_go_''+[guid]::NewGuid().ToString(''N''))); Set-Location C:/workspace'))

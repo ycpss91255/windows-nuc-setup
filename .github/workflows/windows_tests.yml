@@ -276,7 +276,7 @@ jobs:
   docker-tests:
     name: docker-tests
     runs-on: windows-2022
-    timeout-minutes: 50
+    timeout-minutes: 120
     defaults:
       run:
         shell: pwsh
@@ -294,17 +294,25 @@ jobs:
         run: |
           . .\script\test\ci_tasks.ps1
           Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\script\docker\docker.ps1','-Action','doctor','-Isolation','process')
-      - name: 建置並在 Windows 容器執行全部隔離測試
+      - name: 建置同來源的 Windows 工具映像並保存精確收據
+        timeout-minutes: 60
         run: |
           . .\script\test\ci_tasks.ps1
-          Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\script\docker\docker.ps1','-Action','test','-Isolation','process','-ReportDirectory',(Join-Path $env:RUNNER_TEMP 'windows-container-results'))
+          Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\script\docker\docker.ps1','-Action','build','-Isolation','process','-BuildReceiptPath',(Join-Path $env:RUNNER_TEMP 'windows-container-image.json'))
+      - name: 在已核對映像執行全部 Windows 隔離測試
+        timeout-minutes: 35
+        run: |
+          . .\script\test\ci_tasks.ps1
+          Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\script\docker\docker.ps1','-Action','test-built','-Isolation','process','-BuildReceiptPath',(Join-Path $env:RUNNER_TEMP 'windows-container-image.json'),'-ReportDirectory',(Join-Path $env:RUNNER_TEMP 'windows-container-results'))
       - name: 證明真實容器失敗會保留非零退出碼
+        timeout-minutes: 5
         run: |
           . .\script\docker\library.ps1
           . .\script\test\ci_tasks.ps1
           $context = Get-ContainerContext -Root $env:GITHUB_WORKSPACE -ReportDirectory (Join-Path $env:RUNNER_TEMP 'failure-probe-unused') -Isolation process
           Assert-CIDockerFailure -Image $context.Image
       - name: 驗證容器真實報告與來源
+        timeout-minutes: 5
         if: always()
         env:
           EXPECTED_SHA: ${{ github.sha }}
