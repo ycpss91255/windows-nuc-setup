@@ -256,7 +256,7 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 
 偵測失敗或板號空白／明確未知時，選 R 重新偵測、G 或 Enter 使用通用設定，或依下表選擇實際 NUC 整機，再輸入完整板號確認。回報已知其他板號、同時回報多塊板，或重新偵測與確認不符時，不允許強制套用 NUC 驅動。手動確認只影響驅動；AMD 位置設定仍只依自動偵測。原始板號、偵測錯誤與確認值分開保存在該機 reports。獨立包可自行執行 `install.cmd`；只核對完整性用 `install.cmd -PackageOnly`。獨立安裝器使用相同偵測與未知型號確認流程；已知其他機型略過，不能拿 NUC 驅動套用其他硬體。`-PackageOnly` 是離線驗包，不可與手動確認參數混用。續跑只沿用同一電腦與使用者先前明確選擇的驅動包，並核對 package.json／manifest.json 的雜湊；同 USB 相對位置可隨盤符變動解析，包身分變更則拒絕。整包複製至其他電腦不沿用舊選擇。
 
-`-NonInteractive` 僅關閉驅動選擇的詢問，並不代表 Windows 全流程無人值守；自動登入等模組仍可能詢問密碼。無互動主控台時也不等待驅動輸入，未選包即略過。需自動化處理「未知」且已人工確認的實機時，可明確傳入 `-ConfirmedBoard NUC8i7HVB -ConfirmationComputer $env:COMPUTERNAME -DriverPackagePath $driverPath -NonInteractive`（HNK 使用 HNB）；已知其他機型仍拒絕。`windows.cmd -VerifyOnly`／`-AfterRestart` 不接受新的型號或包選擇，只恢復同機同帳號紀錄；重新選擇請走一般入口。明確傳入空路徑表示略過，未提供路徑才允許互動選包。
+`-NonInteractive` 關閉驅動選擇及舊版開始選單政策的詢問，並不代表 Windows 全流程無人值守；自動登入等模組仍可能詢問密碼。無互動主控台時也不等待驅動輸入，未選包即略過。需自動化處理「未知」且已人工確認的實機時，可明確傳入 `-ConfirmedBoard NUC8i7HVB -ConfirmationComputer $env:COMPUTERNAME -DriverPackagePath $driverPath -NonInteractive`（HNK 使用 HNB）；已知其他機型仍拒絕。`windows.cmd -VerifyOnly`／`-AfterRestart` 不接受新的型號或包選擇，只恢復同機同帳號紀錄；重新選擇請走一般入口。明確傳入空路徑表示略過，未提供路徑才允許互動選包。
 
 不要只複製單一 `.cmd`／`.ps1`；主程式與獨立驅動包各自保留完整結構。`.git` 僅在維護版本時需要，執行設定與獨立驅動包不依賴它。
 工具包不要放在桌面或其子資料夾內，以免桌面清理刪到工具包。直接使用 USB 時，USB 必須可寫入且本輪全程保持連接；下一輪仍從同一完整副本續跑。若自行改用本機完整副本，才改從本機該份執行。
@@ -392,6 +392,20 @@ Home 或無法辨識／未支援的版本會明確回報 `Unsupported`，不寫�
 這些設定不代表電腦完全不傳送資料：專業版仍有必要診斷，Windows Update、安全服務，以及 Edge、Office 或其他應用程式也各有自己的資料控制。本模組不關閉 Defender、Windows Update、防火牆，不加入安全例外，不封鎖遙測網域，也不一概停用相機、麥克風等應用程式權限。
 
 政策與支援範圍依 Microsoft 官方文件：[Windows 診斷資料級別](https://learn.microsoft.com/en-us/windows/privacy/configure-windows-diagnostic-data-in-your-organization)、[廣告 ID／語音／活動政策](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy)、[個人化推薦與回饋提示](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience)、[手寫及輸入資料分享](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-textinput#allowlinguisticdatacollection)。這是政策設定與讀回檢查，並非封包監測結果。
+
+### 開始選單政策與待處理狀態
+
+第 11 階段準備開始選單設定。支援新版政策的 Windows 使用 GPO；較舊的 Windows 11 22H2／23H2 或尚未具備該政策的版本使用隨包附帶的獨立開始選單設定包，沒有提高 Windows 最低版本。
+
+舊版設定包是整臺電腦的政策，會在每次登入重新清空釘選。主流程先跑完全部 19 階段與最後檢查；只有其他步驟和裝置沒有錯誤，才詢問是否套用。Windows 可能要求重新登入或重新啟動，必須明確輸入 `YES` 才安裝；拒絕、非互動執行或其餘步驟失敗會保留 `LegacyPendingApply`，不會偷裝或自行重新啟動。
+
+稍後要處理尚未套用的政策，先確認其他工作已完成，再從工具包根目錄執行：
+
+```cmd
+modules\start_menu\apply_start_menu_settings.cmd -ApplyPolicy
+```
+
+政策已準備但尚未由原生匯出確認空白時，結果為 `PendingSignIn`，不是已清空。待處理項目列在 `Setup-Result.json` 的 `PendingModules`，與真正失敗的 `StageErrors` 分開。手動重新登入後執行 `windows.cmd -AfterRestart`；此入口只驗證開始選單，不安裝其設定包。只有原生匯出確認零釘選才是 `Confirmed`，續跑會移除已確認的待處理項目。
 
 ## 19 個模組的執行順序
 
