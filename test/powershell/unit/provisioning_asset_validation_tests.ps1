@@ -14,8 +14,11 @@ $xml=Get-InitProvisioningSourceXml
 $manifest=New-InitProvisioningProvenance -SourcePath (Join-Path $temp 'hide_oobe.xml') -PackagePath (Join-Path $temp 'hide_oobe.ppkg')
 function WriteManifest {[IO.File]::WriteAllText((Join-Path $temp 'provenance.json'),($manifest|ConvertTo-Json -Depth 4))}
 WriteManifest
-$script:metadataCalls=0;$script:badMetadata=$false
-function Get-ProvisioningPackage {param($PackagePath,$LogsDirectoryPath,$ErrorAction) $script:metadataCalls++;[pscustomobject]@{PackageID='1c2605ea-96ae-42fc-8f11-45fc0cb9d133';PackageName=$(if($script:badMetadata){'other'}else{'windows_setup_hide_oobe'});Version='1.0';Rank=0;OwnerType=5000}}
+$script:metadataCalls=0;$script:badMetadata=$false;$script:missingMetadata=$false
+function Get-ProvisioningPackage {param($PackagePath,$LogsDirectoryPath,$ErrorAction) $script:metadataCalls++;if($script:missingMetadata){throw (New-Object Management.Automation.CommandNotFoundException('Get-ProvisioningPackage unavailable'))};[pscustomobject]@{PackageID='1c2605ea-96ae-42fc-8f11-45fc0cb9d133';PackageName=$(if($script:badMetadata){'other'}else{'windows_setup_hide_oobe'});Version='1.0';Rank=0;OwnerType=5000}}
+Assert ([bool](Get-Command Assert-InitProvisioningAssetSource -ErrorAction SilentlyContinue)) 'source verification is independent of Windows client provisioning API'
+$sourceResult=Assert-InitProvisioningAssetSource $temp
+Assert ($sourceResult.PackageSHA256 -eq $manifest.PackageSHA256 -and $script:metadataCalls -eq 0) 'pure source check never claims or invokes native metadata'
 $result=Assert-InitProvisioningAsset -AssetRoot $temp
 Assert ($result.PackageSHA256 -eq $manifest.PackageSHA256 -and $script:metadataCalls -eq 1) 'source and package hashes precede read-only metadata validation'
 [IO.File]::AppendAllText((Join-Path $temp 'hide_oobe.ppkg'),'tampered')
@@ -33,6 +36,10 @@ $script:badMetadata=$true
 $failed=$false;try{Assert-InitProvisioningAsset $temp}catch{$failed=$true}
 Assert $failed 'package metadata identity mismatch is rejected'
 $script:badMetadata=$false
+$script:missingMetadata=$true
+$failed=$false;try{Assert-InitProvisioningAsset $temp}catch [Management.Automation.CommandNotFoundException]{$failed=$true}
+Assert $failed 'runtime wrapper fails when native cmdlet is unavailable without fallback'
+$script:missingMetadata=$false
 $manifest|Add-Member NoteProperty Password 'forbidden';WriteManifest
 $failed=$false;try{Assert-InitProvisioningAsset $temp}catch{$failed=$true}
 Assert $failed 'manifest refuses unknown secret fields'
