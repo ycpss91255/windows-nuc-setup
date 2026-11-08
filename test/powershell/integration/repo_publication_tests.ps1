@@ -40,6 +40,10 @@ Assert (-not $global:repoPublicationRemoteCalled) 'legacy只能讀歷史，發�
 Remove-Item Function:\gh
 $report.RefType='Release';$report.RefName='v1.0.0';$report.Version='v1.0.0';$report.Environment='Fixture'
 . (Join-Path $root 'script/report/portal.ps1')
+$goProfileText="mode: set`nwindows_setup/script/test/example/value.go:1.1,1.2 8 1`nwindows_setup/script/test/example/value.go:2.1,2.2 2 0`n"
+[IO.File]::WriteAllText((Join-Path $public 'go_coverage.out'),$goProfileText,$utf8)
+$go=[pscustomobject]@{SchemaVersion=1;Scope='all-owned-go-including-cli';Metric='statements';Covered=8;TotalStatements=10;Percent=80.0;Threshold=80;Commit=$identity.Commit;RunUrl=$identity.RunUrl;MeasuredAt=$identity.MeasuredAt;SourceState='Clean';GoVersion='go1.27.3';Environment='windows/amd64';ProfileSHA256=(Get-FileHash (Join-Path $public 'go_coverage.out')).Hash.ToLowerInvariant();Packages=@('windows_setup/script/test/example')}
+$report|Add-Member -NotePropertyName GoCoverage -NotePropertyValue $go
 Write-SnapshotView $report $public
 function gh {
  $words=@($args);$global:LASTEXITCODE=0
@@ -67,7 +71,7 @@ foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immu
  $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool|Out-Null}catch{$accepted=$false}
  Assert ($accepted -eq ($mode -eq 'success')) ('Schema2只發布真完整不可變證據：'+$mode)
  Assert ($global:repoPublicationTitle -ceq 'v1.0.0' -and $global:repoPublicationDraft) ('版本標題及草稿先行：'+$mode)
- Assert ($global:repoPublicationAssets.Count -eq 11) ('新Release精確11附件：'+$mode)
+ Assert ($global:repoPublicationAssets.Count -eq 12) ('含Go原始檔的新Release精確12附件：'+$mode)
  Assert ($global:repoPublicationPublished -eq $(if($mode -eq 'bad-digest'){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
 }
 Remove-Item Function:\gh
