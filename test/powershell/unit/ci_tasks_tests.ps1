@@ -4,6 +4,10 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 . (Join-Path $root 'script/test/ci_tasks.ps1')
 function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{Name=$Message;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Message}}
 function Reject([scriptblock]$Action,[string]$Name){$caught=$false;try{& $Action|Out-Null}catch{$caught=$true};Assert $caught $Name}
+Invoke-CINative -File cmd.exe -Arguments @('/d','/c','exit 0')
+Assert $true '原生成功返回保留'
+Reject {Invoke-CINative -File cmd.exe -Arguments @('/d','/c','exit 7')} '原生非零返回拒絕'
+Reject {Invoke-CINative -File '__missing_ci_executable__.exe'} '不存在的工具不能冒稱成功'
 $passing=@{Tests='success';Requirements='success';Docker='success';Payload='success'}
 Assert-CIResults $passing
 Assert $true '四個必要工作成功才通過'
