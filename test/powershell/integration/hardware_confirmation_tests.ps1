@@ -49,3 +49,6 @@ $manifest=@(foreach($name in @('Chipset.zip','SerialIO.zip','UCM.zip','GFX-Radeo
 $manifest|ConvertTo-Json|Set-Content (Join-Path $payload 'manifest.json') -Encoding UTF8
 @{SchemaVersion=1;HardwareProfile='NUC8';Architecture='x64';SupportedBoards=@('NUC8i7HVB','NUC8i7HNB')}|ConvertTo-Json|Set-Content (Join-Path $payload 'package.json') -Encoding UTF8
 Assert ((Test-SetupDriverPayload -Hardware $hardware -DriverPackagePath $payload).Status -eq 'Passed') '真payload驗證使用確認DriverBoard，原始未知板號仍保留'
+$mixedRejected=$false
+try{& (Join-Path $root 'modules/drivers/install_drivers.ps1') -PackageOnly -ConfirmedBoard NUC8i7HNB -ConfirmationComputer $env:COMPUTERNAME -DriverPackagePath $payload}catch{$mixedRejected=$_.Exception.Message -match 'PackageOnly.*手動'}
+Assert $mixedRejected '離線驗包拒絕混用手動實機確認，不依假的HVB報衝突'
