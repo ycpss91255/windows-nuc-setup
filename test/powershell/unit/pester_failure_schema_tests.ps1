@@ -17,6 +17,7 @@ $cases=@(
  $valid.Replace('"Line":1','"Line":"1"'),
  $valid.Replace('"Line":1','"Line":0'),
  $valid.Replace('ContainerDiscovery','PRIVATE'),
+ $valid.Replace('ContainerDiscovery','BlockSetup'),
  $valid.Replace('RuntimeException','PRIVATE'),
  $valid.Replace('suite.ps1','/private/suite.ps1'),
  $valid.Replace('suite.ps1','../suite.ps1'),

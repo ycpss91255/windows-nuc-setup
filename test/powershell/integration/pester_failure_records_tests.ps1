@@ -8,7 +8,7 @@ function Put([string]$Name,[string]$Text){[IO.File]::WriteAllText((Join-Path $fi
 Put 'source.ps1' 'function Example {return 1}'
 $cases=@(
  @{Name='discovery';Phase='ContainerDiscovery';Text="throw 'PRIVATE-PESTER-FAILURE-SENTINEL'"},
- @{Name='block';Phase='BlockSetup';Text="Describe 'block' {BeforeAll {throw 'PRIVATE-PESTER-FAILURE-SENTINEL'};It 'not reached' {1|Should-Be 1}}"},
+ @{Name='block';Phase='BlockLifecycle';Text="Describe 'block' {BeforeAll {throw 'PRIVATE-PESTER-FAILURE-SENTINEL'};It 'not reached' {1|Should-Be 1}}"},
  @{Name='teardown';Phase='BlockLifecycle';Text="Describe 'block teardown' {It 'actually passes' {Write-Host '@@ASSERT@@{`"Name`":`"owned teardown fixture executed`",`"Passed`":true}';1|Should-Be 1};AfterAll {throw 'PRIVATE-PESTER-FAILURE-SENTINEL'}}"},
  @{Name='test';Phase='TestRun';Text="Describe 'test' {It 'fails' {throw 'PRIVATE-PESTER-FAILURE-SENTINEL'}}"},
  @{Name='parse';Phase='ContainerDiscovery';Text="Describe 'PRIVATE-PESTER-FAILURE-SENTINEL' {It 'broken' {"}
@@ -30,6 +30,7 @@ foreach($case in $cases){
  Assert (-not($text.Contains('PRIVATE-PESTER-FAILURE-SENTINEL') -or $safe.Contains('PRIVATE-PESTER-FAILURE-SENTINEL') -or $text.Contains('C:\private\secret.txt') -or $safe.Contains('C:\private\secret.txt') -or $safe.Contains($fixture))) ($case.Name+' manager與sidecar均不洩漏訊息或私有路徑')
  $marker=@(Get-Content -LiteralPath $log|Where-Object {$_ -like '*PowerShell worker failure diagnostic: *'})
  Assert ($marker.Count -eq 1 -and $marker[0].Contains('PesterFailures')) ($case.Name+' parent只轉出通過schema驗證的typed診斷')
+ if($case.Name -eq 'teardown'){$observed=$marker[0].Substring($marker[0].IndexOf('diagnostic: ')+12)|ConvertFrom-Json;Assert ($observed.CompletedAssertions -eq 1 -and $observed.FailedAssertionIndices.Count -eq 0) '真AfterAll前已執行1成功斷言，不誤報test assertion失敗'}
 }
 Put 'null.Tests.ps1' @'
 Describe 'real pinned Pester finalize failure' {
