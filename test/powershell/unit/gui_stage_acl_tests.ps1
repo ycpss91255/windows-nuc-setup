@@ -37,5 +37,6 @@ if($owner.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin @('S-1-
 $link=Join-Path $temp 'junction';$null=New-Item -ItemType Junction -Path $link -Target $existing
 Reject {Assert-SetupGuiPlainPath (Join-Path $link 'missing.ps1')} '重新解析' 'GUI source rejects junction ancestors even for nonexistent child'
 $admin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if($env:GITHUB_ACTIONS -eq 'true' -and $env:WINDOWS_SETUP_TEST_CONTEXT -ne 'Windows container' -and -not $admin){throw 'CI_GUI_NATIVE_ADMIN_REQUIRED: GitHub host must execute the real elevated TEMP ACL creation proof.'}
 if($admin){$native=Join-Path $temp 'native_code';New-SetupGuiProtectedDirectory $native;Assert-SetupGuiProtectedPath $native -Directory;$nativeData=Join-Path $temp 'native_data';New-SetupGuiProtectedDirectory $nativeData -UserSid $user;Assert-SetupGuiProtectedPath $nativeData -Directory -UserSid $user;Assert $true 'elevated Windows creates code/data with native descriptor and validates actual ACL'}else{Write-Host 'NATIVE_ADMIN_CREATE_NOT_RUN: standard token; no elevation attempted'}
 Write-Host ('ALL PASS: '+$script:count+' GUI ACL assertions; only isolated TEMP objects and in-memory security descriptors')
