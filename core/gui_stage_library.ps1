@@ -193,3 +193,59 @@ function Read-SetupGuiResult {
  if($result.Schema -ne 1 -or $result.Role -cne $context.Role -or $result.RunId -cne $context.RunId -or $result.UserSID -cne $context.UserSID -or $result.Computer -cne $context.Computer -or $result.SessionId -ne $context.DesktopSession -or $result.VerifyOnly -isnot [bool] -or $result.VerifyOnly -ne $context.VerifyOnly -or $result.Success -isnot [bool]){throw 'GUI worker結果身分或本輪ID不符。'}
  return $result
 }
+function Get-SetupGuiIdentity {
+ $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+ [pscustomobject]@{UserSID=$identity.User.Value;Computer=$env:COMPUTERNAME;SessionId=[Diagnostics.Process]::GetCurrentProcess().SessionId;CommonDataRoot=[Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData);PowerShell=(Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe')}
+}
+function Get-SetupGuiDesktopSession {
+ param($Scope)
+ $matching=@(foreach($process in @(Get-CimInstance -ClassName Win32_Process -Filter "Name='explorer.exe'" -ErrorAction Stop)){
+  if($process.SessionId -le 0 -or ($Scope.SessionId -gt 0 -and $Scope.SessionId -ne $process.SessionId)){continue}
+  $owner=Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop
+  if($owner.ReturnValue -eq 0 -and $owner.Sid -ceq $Scope.UserSID){[int]$process.SessionId}
+ })
+ $sessions=@($matching|Select-Object -Unique)
+ if($sessions.Count -ne 1){throw 'GUI worker找不到同一使用者唯一的互動桌面，未啟動工作。'}
+ return $sessions[0]
+}
+function Invoke-SetupGuiLocalWorker {
+ param($Stage,$Scope)
+ & (Join-Path $Stage.CodeRoot 'core/gui_worker.ps1') -Role $Stage.Context.Role -RunId $Stage.Context.RunId
+}
+function Invoke-SetupGuiScheduledWorker {
+ param($Stage,$Scope)
+ $context=$Stage.Context;$worker=Join-Path $Stage.CodeRoot 'core/gui_worker.ps1'
+ Assert-SetupGuiProtectedPath $worker
+ $name='WindowsSetup-Gui-'+$context.Role+'-'+$context.RunId
+ if(Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue){throw 'GUI worker本輪排程名稱已存在，拒絕接管。'}
+ $arguments='-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$worker+'" -Role '+$context.Role+' -RunId '+$context.RunId
+ $action=New-ScheduledTaskAction -Execute $Scope.PowerShell -Argument $arguments
+ $principal=New-ScheduledTaskPrincipal -UserId $context.UserSID -LogonType Interactive -RunLevel Highest
+ $registered=$false
+ try{
+  Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -ErrorAction Stop|Out-Null
+  $registered=$true;Start-ScheduledTask -TaskName $name -ErrorAction Stop
+  $resultPath=Join-Path $Stage.DataRoot (Get-SetupGuiResultName $context);$deadline=(Get-Date).AddSeconds(60)
+  do{Start-Sleep -Seconds 2;if(Test-Path -LiteralPath $resultPath){return}}while((Get-Date) -lt $deadline)
+  throw '尚未取得受保護的本輪GUI worker結果；請確認原帳號已登入桌面。'
+ }finally{
+  if($registered){$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;if($task -and $task.State -ne 'Running'){Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction Stop}}
+ }
+}
+function Invoke-SetupGuiRole {
+ param([Parameter(Mandatory=$true)][string]$PackageRoot,[string]$Role,[switch]$Worker,[switch]$VerifyOnly)
+ $ErrorActionPreference='Stop'
+ $null=Get-SetupGuiStageFiles $Role
+ $scope=Get-SetupGuiIdentity
+ if($Worker -and $scope.SessionId -eq 0){throw 'GUI -Worker不能在session 0繞過原使用者桌面身分。'}
+ $desktop=Get-SetupGuiDesktopSession $scope
+ $stage=New-SetupGuiStage -SourceRoot $PackageRoot -CommonDataRoot $scope.CommonDataRoot -Role $Role -UserSid $scope.UserSID -CallerSession $scope.SessionId -DesktopSession $desktop -Computer $scope.Computer -VerifyOnly:$VerifyOnly
+ try{
+  $context=Read-SetupGuiContext -CodeRoot $stage.CodeRoot -CommonDataRoot $stage.CommonDataRoot -Role $Role -RunId $stage.Context.RunId
+  if(($context|ConvertTo-Json -Depth 8 -Compress) -cne ($stage.Context|ConvertTo-Json -Depth 8 -Compress)){throw 'GUI worker啟動前context已改變。'}
+  if($scope.SessionId -eq 0){Invoke-SetupGuiScheduledWorker -Stage $stage -Scope $scope}else{Invoke-SetupGuiLocalWorker -Stage $stage -Scope $scope}
+  $result=Read-SetupGuiResult -Stage $stage
+  if(-not $result.Success){throw $result.Error}
+  return $result
+ }finally{$stage.Lock.Dispose()}
+}
