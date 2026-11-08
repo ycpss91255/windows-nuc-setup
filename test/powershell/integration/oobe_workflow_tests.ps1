@@ -15,7 +15,7 @@ Assert $true 'actual ci-rollup accepts all required jobs succeeding'
 $job=[regex]::Match($workflow,'(?ms)^  oobe_payload_inspection:\r?\n(?<body>.*?)(?=^  [a-z][a-z_-]+:)').Groups['body'].Value
 Assert ($job -match 'runs-on: windows-2022' -and $job -notmatch '(?m)^    needs:') 'payload inspection runs independently on Windows'
 Assert ($job.Contains('verify_oobe_payload.ps1') -and $job.Contains('payload_baseline.json') -and $job.Contains('if: always()') -and $job.Contains('retention-days: 7')) 'CI invokes real reader with reviewed baseline and preserves failure evidence seven days'
-Assert ($job -match '(?s)name:.*?原生 metadata\r?\n\s+shell: powershell\r?\n\s+run: \|\r?\n\s+.*provisioning_asset_tests\.ps1' -and $job -match '(?s)id: payload\r?\n\s+if: always\(\)') 'CI exposes real metadata failure while payload extraction still runs afterward'
+Assert ($job -match '(?s)name:.*?三檔來源與實際雜湊\r?\n\s+shell: powershell\r?\n\s+run: \|\r?\n\s+.*provisioning_source_tests\.ps1' -and $job -match '(?s)id: payload\r?\n\s+if: always\(\)') 'CI names real source verification accurately and preserves independent native WIM inspection'
 Assert ($rollup.Contains('oobe_payload_inspection') -and $rollup.Contains('needs.oobe_payload_inspection.result')) 'rollup dependency and result refer to real payload job'
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('oobe_workflow_'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path (Join-Path $fixture 'script/test') -Force|Out-Null
