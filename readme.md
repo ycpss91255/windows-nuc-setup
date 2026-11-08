@@ -243,7 +243,7 @@ windows_setup\
 │  ├─ debloat\                清理與 Win11Debloat
 │  └─ …                        帳號、記憶體、電源、桌面、輸入法等
 ├─ reports\                   本機整體進度、結果與紀錄（不納入 Git）
-├─ test\powershell\          unit／integration／system 分層測試
+├─ test\powershell\          unit／integration 分層測試
 └─ doc\changelog\            版本摘要與紀錄規範
 ```
 
@@ -606,7 +606,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_
 | `script/test` | 測試調度與報告產生 |
 | `script/release` | 版本準備、發布門檻與 Release 說明 |
 | `script/package` | 從可信來源建立獨立驅動包 |
-| `test/powershell/unit`、`integration`、`system` | 各層測試案例；system 需明確指定可丟棄環境 |
+| `test/powershell/unit`、`integration` | 單元及隔離整合測試案例 |
 | `.github/workflows` | 雲端 CI 與發布編排 |
 
 依賴方向為維護工具／測試 → 交付執行樹。`core`／`modules` 不依賴 `script`、`test` 或 `.github`；一般使用與獨立驅動安裝不需要儲存庫維護工具。
