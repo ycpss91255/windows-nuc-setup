@@ -100,6 +100,7 @@ id_ecdsa*
 /modules/init/answer.xml
 /modules/init/state.json
 /modules/init/cleanup-result.json
+/modules/init/assets/*.cat
 NUC-Init/
 
 # Win11Debloat 上游原始資產；不是安裝程式或每機資料。
