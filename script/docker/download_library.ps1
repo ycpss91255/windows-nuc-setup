@@ -27,14 +27,16 @@ function Invoke-ContainerOfficialDownload {
  for($attempt=1;$attempt -le 3;$attempt++){
   $partial=Join-Path ([IO.Path]::GetDirectoryName($output)) ([guid]::NewGuid().ToString('N')+'.partial')
   Write-Host ('Official download attempt '+$attempt+'/3.')
+  $watch=[Diagnostics.Stopwatch]::StartNew()
   try{
    Invoke-WebRequest -UseBasicParsing -Uri $Uri.AbsoluteUri -OutFile $partial -TimeoutSec 120 -ErrorAction Stop
    if(-not(Test-Path -LiteralPath $partial -PathType Leaf) -or (Get-Item -LiteralPath $partial).Length -le 0){throw 'Official download produced no complete file.'}
    [IO.File]::Move($partial,$output)
+   Write-Host ('Official download complete; bytes='+([IO.FileInfo]$output).Length+'; elapsed_ms='+$watch.ElapsedMilliseconds+'.')
    return
   }catch{
    $retry=($attempt -lt 3 -and (Test-ContainerTransientDownload -Exception $_.Exception))
-   Write-Host ('Official download failure: '+(Get-ContainerDownloadFailureKind -Exception $_.Exception)+'; retry='+$retry.ToString().ToLowerInvariant()+'.')
+   Write-Host ('Official download failure: '+(Get-ContainerDownloadFailureKind -Exception $_.Exception)+'; retry='+$retry.ToString().ToLowerInvariant()+'; elapsed_ms='+$watch.ElapsedMilliseconds+'.')
    if(-not $retry){throw}
   }finally{if(Test-Path -LiteralPath $partial){Remove-Item -LiteralPath $partial -Force}}
   Start-Sleep -Seconds $attempt
