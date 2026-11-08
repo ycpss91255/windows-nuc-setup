@@ -54,6 +54,13 @@ foreach($identity in @(@{},@{GITHUB_ACTIONS='true';RUNNER_ENVIRONMENT='self-host
  Assert (-not(Invoke-Scenario running $identity)) '非 hosted Windows 不取得服務恢復權限'
  Assert (@($script:calls|Where-Object{$_ -like 'sc.exe*'}).Count -eq 0) '本機與 self-hosted 零服務呼叫'
 }
+foreach($key in @('GITHUB_ACTIONS','RUNNER_ENVIRONMENT','RUNNER_OS')){
+ foreach($value in @($true,@($hosted[$key]),@())){
+  $identity=$hosted.Clone();$identity[$key]=$value
+  Assert (-not(Invoke-Scenario running $identity)) ('hosted 身份必須是實際 string 而非 bool／array：'+$key)
+  Assert (@($script:calls|Where-Object{$_ -like 'sc.exe*'}).Count -eq 0) '未知身份型別零服務呼叫'
+ }
+}
 $watch=[Diagnostics.Stopwatch]::StartNew();$timedOut=$false
 try{Invoke-RunnerBoundedProcess -File (Join-Path $PSHOME 'powershell.exe') -Arguments @('-NoProfile','-Command','Start-Sleep -Seconds 60') -TimeoutMilliseconds 250|Out-Null}catch{$timedOut=$true}
 Assert ($timedOut -and $watch.ElapsedMilliseconds -lt 5000) '真 owned 睡眠子程序在期限內被終止並傳遞失敗'
