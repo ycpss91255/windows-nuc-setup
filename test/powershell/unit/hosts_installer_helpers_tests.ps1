@@ -13,11 +13,11 @@ $profile=Join-Path $fixture 'profile';$runtime=Join-Path $fixture 'runtime';$win
 [IO.File]::WriteAllText((Join-Path $windows 'System32/drivers/etc/hosts'),'127.0.0.1 localhost')
 $identity=[pscustomobject]@{User=[pscustomobject]@{Value='S-1-5-21-123-456-789-1001'};Name='fixture'}
 $call=@{RuntimeRoot=$runtime;ProfilePath=$profile;UserIdentity=$identity;WindowsRoot=$windows}
-$script:taskState='';$script:stuck=$false;$script:registered=0;$script:started=0;$script:aclWrites=0
+$script:fixtureRuntime=$runtime;$script:taskState='';$script:stuck=$false;$script:registered=0;$script:started=0;$script:aclWrites=0
 function Get-ItemProperty {param($Path) [pscustomobject]@{ProfileImagePath=$profile}}
 function Get-ScheduledTask {param($TaskName,$ErrorAction) if($script:taskState){[pscustomobject]@{State=$script:taskState}}}
 function Stop-ScheduledTask {param($TaskName) if(-not $script:stuck){$script:taskState='Ready'}}
-function Start-ScheduledTask {param($TaskName) $script:started++;$script:taskState='Running';$p=Join-Path $runtime 'status.json';if(Test-Path $p){$j=Get-Content $p -Raw|ConvertFrom-Json;$j.CheckedAt=(Get-Date).AddSeconds(1).ToString('o');$j|ConvertTo-Json -Depth 10|Set-Content $p -Encoding UTF8}}
+function Start-ScheduledTask {param($TaskName) $script:started++;$script:taskState='Running';$p=Join-Path $script:fixtureRuntime 'status.json';if(Test-Path $p){$j=Get-Content $p -Raw|ConvertFrom-Json;$j.CheckedAt=(Get-Date).AddSeconds(1).ToString('o');$j|ConvertTo-Json -Depth 10|Set-Content $p -Encoding UTF8}}
 function New-ScheduledTaskAction {param($Execute,$Argument) [pscustomobject]@{Execute=$Execute;Argument=$Argument}}
 function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel) [pscustomobject]@{UserId=$UserId}}
 function New-ScheduledTaskSettingsSet {param($ExecutionTimeLimit,$MultipleInstances,$RestartCount,$RestartInterval,[switch]$StartWhenAvailable,[switch]$AllowStartIfOnBatteries,[switch]$DontStopIfGoingOnBatteries) @{}}
