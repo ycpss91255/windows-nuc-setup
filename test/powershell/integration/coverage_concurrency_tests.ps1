@@ -59,7 +59,7 @@ try{
  Assert ($b.Covered -eq 1 -and $b.Total -eq 2) '互補同一行完整命中且nevercalled仍零命中'
  foreach($invalid in @(0,3)){$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $manifest -OutputDirectory (Join-Path $temp ('invalid_'+$invalid)) -ThrottleLimit $invalid *> (Join-Path $temp ('invalid_'+$invalid+'.private.log'));$code=$LASTEXITCODE;$ErrorActionPreference='Stop';Assert ($code -ne 0) ('拒絕超出1到2範圍 '+$invalid)}
  Write-Fixture 'failed.Tests.ps1' @'
-Describe 'failure' {It 'fails after peer starts' {$watch=[Diagnostics.Stopwatch]::StartNew();while(-not(Test-Path (Join-Path $PSScriptRoot 'pending_pid.json'))){if($watch.Elapsed.TotalSeconds -gt 15){throw 'pending peer never started'};Start-Sleep -Milliseconds 50};1|Should-Be 2}}
+Describe 'failure' {It 'fails after peer starts' {$watch=[Diagnostics.Stopwatch]::StartNew();while(-not(Test-Path (Join-Path $PSScriptRoot 'pending_pid.json'))){if($watch.Elapsed.TotalSeconds -gt 15){throw 'pending peer never started'};Start-Sleep -Milliseconds 50};Write-Host 'PRIVATE-FAILURE-STDOUT-SENTINEL';1|Should-Be 2}}
 '@
  Write-Fixture 'pending.Tests.ps1' @'
 Describe 'pending' {It 'waits until coordinator terminates it' {[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'pending_pid.json'),$PID.ToString());Start-Sleep -Seconds 30}}
@@ -70,6 +70,8 @@ Describe 'pending' {It 'waits until coordinator terminates it' {[IO.File]::Write
  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $collector -ManifestPath $manifest -OutputDirectory $failed -ThrottleLimit 2 *> (Join-Path $temp 'failure.private.log')
  $code=$LASTEXITCODE;$ErrorActionPreference='Stop'
  Assert ($code -ne 0 -and -not(Test-Path (Join-Path $failed 'evidence.json'))) '失敗 worker 保留非零且不發布彙總'
+ $failureLog=[IO.File]::ReadAllText((Join-Path $temp 'failure.private.log'))
+ Assert ($failureLog.Contains('PowerShell worker failure diagnostic: ') -and -not $failureLog.Contains('PRIVATE-FAILURE-STDOUT-SENTINEL')) '真失敗程序只輸出限型別診斷，不外洩原stdout'
  $pendingId=[int]([IO.File]::ReadAllText((Join-Path $temp 'pending_pid.json')))
  Assert ($null -eq (Get-Process -Id $pendingId -ErrorAction SilentlyContinue)) '失敗後其他自建 native worker 已終止不殘留'
 }finally{$env:WINDOWS_SETUP_SYNTHETIC_OVERLAP=$prior}
