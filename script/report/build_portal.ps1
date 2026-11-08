@@ -19,11 +19,16 @@ foreach($entry in $catalog){
   try{$evidence=Test-PortalReleaseEvidence $entry}catch{$reason='品質證據未通過驗證：'+(Protect-ReportText $_.Exception.Message);$state='Invalid'}
  }
  if($evidence){
-  New-Item -ItemType Directory $dir -Force|Out-Null
+  Write-SnapshotView $evidence.Snapshot $dir
   foreach($file in $evidence.Manifest.Files){
+   if($file.Name -eq 'index.html'){continue}
    $source=if($file.Name -eq 'summary.json'){$entry.SnapshotPath}else{Join-Path $entry.AssetDirectory $file.Name}
    Copy-Item -LiteralPath $source -Destination (Join-Path $dir $file.Name)
   }
+  $rendered=Join-Path $dir 'index.html'
+  $releaseLink=[Net.WebUtility]::HtmlEncode($entry.ReleaseUrl)
+  $notice='<p>此頁依原始版本紀錄整理；<a href="'+$releaseLink+'">不可變原始附件見 Release</a>。</p>'
+  [IO.File]::WriteAllText($rendered,([IO.File]::ReadAllText($rendered)).Replace('</body>',$notice+'</body>'),$utf8)
   $snapshots[$entry.Version]=$evidence.Snapshot;$state='Verified';$reason='原始量測與不可變 Release digest 已核對。'
  }else{
   New-Item -ItemType Directory $dir -Force|Out-Null
