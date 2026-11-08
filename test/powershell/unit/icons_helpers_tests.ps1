@@ -1,0 +1,23 @@
+﻿#Requires -Version 5.1
+$ErrorActionPreference='Stop'
+$root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
+$library=Join-Path $root 'modules/desktop/icons_settings_library.ps1'
+Assert (Test-Path -LiteralPath $library) 'Icons native algorithm has a named original-source leaf'
+. $library
+Add-Type -TypeDefinition 'using System;using System.Collections.Generic;namespace NUC8Icons{public static class Desktop{public static Queue<object> Frames=new Queue<object>();public static int Moves;public static object Capture(){return Frames.Dequeue();}public static void Position(int i,int x,int y){Moves++;}}}'
+function Frame($names=@('控制台','本機','網路','資源回收筒'),$offset=0){$i=0;[pscustomobject]@{Width=1920;Height=1080;Icons=@(foreach($n in $names){[pscustomobject]@{Name=$n;Index=$i;X=($i*100+$offset);Y=10};$i++})}}
+$reference=Frame
+function Get-ItemProperty {param($Path,$ErrorAction) [pscustomobject]@{FFlags=3}}
+$script:flags=-1
+function Set-ItemProperty {param($Path,$Name,$Value) if($Name -ne 'FFlags'){throw 'unexpected icons registry write'};$script:flags=$Value}
+function Start-Sleep {param($Milliseconds) if($Milliseconds -ne 500){throw 'unexpected icons wait'}}
+[NUC8Icons.Desktop]::Frames.Enqueue((Frame));[NUC8Icons.Desktop]::Frames.Enqueue((Frame -offset 2))
+$r=Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Load -Reference $reference
+Assert ($r.Success -and [NUC8Icons.Desktop]::Moves -eq 4 -and $script:flags -eq 2) 'Icons retains four native positions, disables auto-arrange, and accepts two-pixel tolerance'
+[NUC8Icons.Desktop]::Frames.Enqueue((Frame));[NUC8Icons.Desktop]::Frames.Enqueue((Frame -offset 3))
+$r=Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Verify -Reference $reference
+Assert (-not $r.Success -and $r.Differences.Count -eq 4) 'Icons Verify rejects three-pixel mismatch without moving icons'
+[NUC8Icons.Desktop]::Frames.Enqueue((Frame));$bad=Frame;$bad.Width=1280;$errorText=''
+try{Invoke-SetupIconsSettings -ModuleRoot (Join-Path $root 'modules/desktop') -Mode Load -Reference $bad|Out-Null}catch{$errorText=$_.Exception.Message}
+Assert ($errorText.Contains('桌面範圍與範本不同') -and [NUC8Icons.Desktop]::Moves -eq 4) 'Icons refuses mismatched desktop dimensions before Position'
