@@ -214,25 +214,39 @@ func TestRepoCoverageCannotHideExecutableCatalog(t *testing.T) {
 }
 
 func TestRepoGoCoverageNormalizesCountersBeforeCompleteLines(t *testing.T) {
-	source:=[]byte("package sample\n// not executable\nfunc choose(v bool) int {\n if v { return 1 }; return 2\n}\n")
+	source := []byte("package sample\n// not executable\nfunc choose(v bool) int {\n if v { return 1 }; return 2\n}\n")
 	// The compiler instruments the condition, taken return and untaken return
 	// separately even though all three executable points share source line 4.
-	baseline:=[]byte("mode: set\nexample/logic.go:3.25,4.7 1 1\nexample/logic.go:4.7,4.19 1 1\nexample/logic.go:4.21,4.29 1 0\n")
-	other:=[]byte("mode: count\nexample/logic.go:3.25,4.7 1 1\nexample/logic.go:4.7,4.19 1 0\nexample/logic.go:4.21,4.29 1 1\n")
-	partial,catalog,err:=rc.NormalizeGo([][]byte{baseline},map[string][]byte{"logic.go":source},"example")
-	if err!=nil{t.Fatal(err)}
-	if len(catalog)!=1||len(catalog[0].Lines)!=1||catalog[0].Lines[0]!=4||len(partial.Files["logic.go"])!=1||partial.Files["logic.go"][4]{t.Fatalf("partial same-line blocks falsely covered: %+v %+v",partial,catalog)}
-	complete,_,err:=rc.NormalizeGo([][]byte{baseline,other},map[string][]byte{"logic.go":source},"example")
-	if err!=nil||!complete.Files["logic.go"][4]{t.Fatalf("complementary counters not merged before normalization: %+v %v",complete,err)}
-	for _,profile:=range []string{
+	baseline := []byte("mode: set\nexample/logic.go:3.25,4.7 1 1\nexample/logic.go:4.7,4.19 1 1\nexample/logic.go:4.21,4.29 1 0\n")
+	other := []byte("mode: count\nexample/logic.go:3.25,4.7 1 1\nexample/logic.go:4.7,4.19 1 0\nexample/logic.go:4.21,4.29 1 1\n")
+	partial, catalog, err := rc.NormalizeGo([][]byte{baseline}, map[string][]byte{"logic.go": source}, "example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog) != 1 || len(catalog[0].Lines) != 1 || catalog[0].Lines[0] != 4 || len(partial.Files["logic.go"]) != 1 || partial.Files["logic.go"][4] {
+		t.Fatalf("partial same-line blocks falsely covered: %+v %+v", partial, catalog)
+	}
+	complete, _, err := rc.NormalizeGo([][]byte{baseline, other}, map[string][]byte{"logic.go": source}, "example")
+	if err != nil || !complete.Files["logic.go"][4] {
+		t.Fatalf("complementary counters not merged before normalization: %+v %v", complete, err)
+	}
+	for _, profile := range []string{
 		"mode: bogus\n",
 		"mode: set\nexample/other.go:1.1,2.2 1 1\n",
 		"mode: set\nexample/logic.go:3.25,4.7 1 -1\n",
 		"mode: set\nexample/logic.go:3.25,40.7 1 1\n",
 		"mode: set\nexample/logic.go:3.25,4.7 1 1\n",
-	}{if _,_,err:=rc.NormalizeGo([][]byte{[]byte(profile)},map[string][]byte{"logic.go":source},"example");err==nil{t.Fatalf("invalid compiler evidence accepted: %q",profile)}}
-	bad:=[]byte(strings.Replace(string(other),"4.21,4.29 1 1","4.21,4.29 2 1",1))
-	if _,_,err:=rc.NormalizeGo([][]byte{baseline,bad},map[string][]byte{"logic.go":source},"example");err==nil{t.Fatal("contradictory statement denominator accepted")}
-	zero,cat,err:=rc.NormalizeGo([][]byte{[]byte("mode: set\n")},map[string][]byte{"types.go":[]byte("package sample\ntype Value struct { X int }\n")},"example")
-	if err!=nil||len(zero.Files["types.go"])!=0||cat[0].Lines==nil||len(cat[0].Lines)!=0{t.Fatalf("declaration-only Go manufactured executable lines: %+v %+v %v",zero,cat,err)}
+	} {
+		if _, _, err := rc.NormalizeGo([][]byte{[]byte(profile)}, map[string][]byte{"logic.go": source}, "example"); err == nil {
+			t.Fatalf("invalid compiler evidence accepted: %q", profile)
+		}
+	}
+	bad := []byte(strings.Replace(string(other), "4.21,4.29 1 1", "4.21,4.29 2 1", 1))
+	if _, _, err := rc.NormalizeGo([][]byte{baseline, bad}, map[string][]byte{"logic.go": source}, "example"); err == nil {
+		t.Fatal("contradictory statement denominator accepted")
+	}
+	zero, cat, err := rc.NormalizeGo([][]byte{[]byte("mode: set\n")}, map[string][]byte{"types.go": []byte("package sample\ntype Value struct { X int }\n")}, "example")
+	if err != nil || len(zero.Files["types.go"]) != 0 || cat[0].Lines == nil || len(cat[0].Lines) != 0 {
+		t.Fatalf("declaration-only Go manufactured executable lines: %+v %+v %v", zero, cat, err)
+	}
 }
