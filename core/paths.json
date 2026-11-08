@@ -1,4 +1,4 @@
-{
+﻿{
   "gui_stage_library.ps1": "core/gui_stage_library.ps1",
   "gui_worker.ps1": "core/gui_worker.ps1",
   "explorer_settings_library.ps1": "modules/explorer/explorer_settings_library.ps1",
@@ -6,6 +6,7 @@
   "desktop_settings_library.ps1": "modules/desktop/desktop_settings_library.ps1",
   "icons_settings_library.ps1": "modules/desktop/icons_settings_library.ps1",
   "taskbar_settings_library.ps1": "modules/taskbar/taskbar_settings_library.ps1",
+  "taskbar.cs": "modules/taskbar/native/taskbar.cs",
   "taskbar_stage_library.ps1": "modules/taskbar/taskbar_stage_library.ps1",
   "start_menu_settings_library.ps1": "modules/start_menu/start_menu_settings_library.ps1",
   "theme_settings_library.ps1": "modules/theme/theme_settings_library.ps1",

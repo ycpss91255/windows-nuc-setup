@@ -6,6 +6,30 @@ public static class ManagedNativeTests {
  static int assertions;
  static void Assert(bool condition,string name){if(!condition)throw new Exception(name);assertions++;Console.WriteLine("PASS: "+name);}
  static void Throws(Action action,string name,Type expected=null){bool rejected=false;try{action();}catch(Exception error){rejected=error.GetType()==(expected??typeof(InvalidOperationException));}Assert(rejected,name);}
+ static void TaskbarAutoHideCases(){
+  ulong state=2;int writes=0,reads=0;bool discard=false;IntPtr window=(IntPtr)17;
+  var api=new WindowsSetup.Taskbar.NativeApi();
+  api.Find=delegate{ return window; };
+  api.CurrentSession=delegate{ return 7; };
+  api.WindowSession=delegate(IntPtr handle){Assert(handle==window,"auto-hide checks the discovered taskbar identity");return 7;};
+  api.Message=delegate(uint message,ref WindowsSetup.Taskbar.AppBarData data){
+   Assert(data.Size==Marshal.SizeOf(typeof(WindowsSetup.Taskbar.AppBarData)),"appbar ABI uses exact native structure size");
+   if(message==5){Assert(data.Window==window,"appbar position validates the current taskbar");return 1;}
+   if(message==4){reads++;return state;}
+   Assert(message==10 && data.Window==window && data.Parameter==(IntPtr)3,"only AUTOHIDE is added, preserving the other native bit");
+   writes++;if(!discard)state=(ulong)data.Parameter.ToInt64();return 1;
+  };
+  Assert(WindowsSetup.Taskbar.AutoHide(false,api)==2 && writes==0,"readonly native state never changes taskbar");
+  Assert(WindowsSetup.Taskbar.AutoHide(true,api)==3 && writes==1,"native auto-hide sets only missing bit and verifies readback");
+  Assert(WindowsSetup.Taskbar.AutoHide(true,api)==3 && writes==1,"already enabled auto-hide is idempotent");
+  state=2;discard=true;Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"always-TRUE SETSTATE cannot replace actual state readback");
+  state=4;int before=writes;Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"undocumented malformed state stops without writes");Assert(writes==before,"malformed state preserves original taskbar");
+  window=IntPtr.Zero;Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"missing taskbar stops");
+  window=(IntPtr)17;api.WindowSession=delegate(IntPtr handle){return 9;};Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"another session taskbar cannot be modified");
+  api.WindowSession=delegate(IntPtr handle){throw new InvalidOperationException("session query failed");};Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"failed native identity query cannot silently continue");
+  api.WindowSession=delegate(IntPtr handle){return 7;};api.Message=delegate(uint message,ref WindowsSetup.Taskbar.AppBarData data){return 0;};Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"unresponsive taskbar position query stops before interpreting zero state");
+  api.Message=delegate(uint message,ref WindowsSetup.Taskbar.AppBarData data){if(message==5)return 1;throw new InvalidOperationException("state query failed");};Throws(delegate{WindowsSetup.Taskbar.AutoHide(true,api);},"native state query failure propagates");
+ }
  static void ExplorerCases(){
   uint settings=4;int reads=0,writes=0,broadcasts=0,freed=0;
   var api=new NucExplorerLiveV2.NativeApi();
@@ -149,7 +173,7 @@ public static class ManagedNativeTests {
    Assert(Marshal.ReadInt32(packet,0)==-3 && Marshal.ReadInt32(packet,4)==32,"display packet type and size are written");
    Assert(Marshal.ReadInt32(packet,8)==19 && Marshal.ReadInt32(packet,12)==23 && Marshal.ReadInt32(packet,16)==29,"display packet carries exact adapter identity");
   }finally{Marshal.FreeHGlobal(packet);Marshal.FreeHGlobal(path);}
-  ExplorerCases();ThemeCases();HotkeyCases();DisplayCases();WimCases();DesktopCases();
+  TaskbarAutoHideCases();ExplorerCases();ThemeCases();HotkeyCases();DisplayCases();WimCases();DesktopCases();
   new WindowsSetup.UpdateCallback().Invoke(new object(),new object());Assert(true,"WUA callback accepts Automation arguments without retaining or processing them");
   Console.WriteLine("ALL PASS: "+assertions+" managed source assertions; no native OS functions invoked");
  }
