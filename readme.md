@@ -415,9 +415,9 @@ modules\start_menu\apply_start_menu_settings.cmd -ApplyPolicy
 | 02 | 停用磁碟分頁檔（虛擬記憶體） |
 | 03 | 插電時停用自動睡眠／休眠 |
 | 04 | OpenSSH Server、區域網路防火牆、SSH 目錄與 hosts／SSH 同步框架 |
-| 05 | NUC8 選擇獨立包才安裝；未選包或 Generic 顯示略過 |
-| 06 | NUC8 拒絕 AMD Software 位置存取；Generic 顯示略過 |
-| 07 | Windows Update 建議更新 |
+| 05 | Windows Update 建議更新 |
+| 06 | 已選機型獨立包的驅動檢查與更新；未選包或 Generic 顯示略過 |
+| 07 | NUC8 拒絕 AMD Software 位置存取；Generic 顯示略過 |
 | 08 | Win11Debloat、OneDrive 與可移除的預裝 App 清理 |
 | 09 | 獨立版 Copilot 清理 |
 | 10 | 工作列顯示與 Edge 釘選 |
@@ -430,6 +430,8 @@ modules\start_menu\apply_start_menu_settings.cmd -ApplyPolicy
 | 17 | 顯示一般隱藏項目與副檔名 |
 | 18 | 清除符合條件的舊系統／預設資料夾殘留 |
 | 19 | 最後套用桌面圖示排列 |
+
+驅動排在 Windows Update 之後，再套用畫面及工作列設定，避免更新顯示驅動後覆寫設定。初次整輪最後會重新盤點已選官方驅動目標；重開續跑先核對同機、同帳號與允許的失敗模組，再執行更新及驅動唯讀盤點。版本已達標或較新便不重新解壓安裝；需要更新才安裝，驅動未核正常時保留畫面重試，最後仍重新驗證。不會自動重新開機。
 
 第 15 模組會在缺少時新增英文（美國）`en-US`，並確保存在美式鍵盤 `0409:00000409`，再設為預設輸入法；保留中文、其他語言、既有鍵盤與順序，不安裝英文顯示語言包或切換 Windows 介面語言。若只要補英文鍵盤，可雙擊 `modules\input\apply_input_method_settings.cmd`；只檢查可在工具包目錄執行 `modules\input\apply_input_method_settings.cmd -VerifyOnly`。檢查會同時確認英文語言、美式鍵盤及預設輸入法，結果寫入 `%ProgramData%\NUC8-Setup\InputMethod-Result.json`。
 
