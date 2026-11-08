@@ -21,6 +21,28 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  oobe_payload_inspection:
+    name: 設定包唯讀內容驗證
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - name: 取得原始碼
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 唯讀抽取並核對已審查內容
+        shell: powershell
+        run: |
+          .\script\test\verify_oobe_payload.ps1 -PackagePath .\modules\init\assets\hide_oobe.ppkg -EvidenceDirectory (Join-Path $env:RUNNER_TEMP 'oobe-payload-evidence') -BaselinePath .\modules\init\assets\payload_baseline.json
+      - name: 保留內容驗證證據七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: oobe-payload-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/oobe-payload-evidence/
+          retention-days: 7
+          if-no-files-found: warn
+
   isolated-tests:
     runs-on: windows-2022
     timeout-minutes: 15
@@ -173,7 +195,7 @@ jobs:
   ci-rollup:
     name: ci-rollup
     if: always()
-    needs: [isolated-tests, requirements-gate, docker-tests]
+    needs: [isolated-tests, requirements-gate, docker-tests, oobe_payload_inspection]
     runs-on: windows-2022
     timeout-minutes: 5
     steps:
@@ -183,8 +205,9 @@ jobs:
           TEST_RESULT: ${{ needs.isolated-tests.result }}
           REQUIREMENTS_RESULT: ${{ needs.requirements-gate.result }}
           DOCKER_RESULT: ${{ needs.docker-tests.result }}
+          OOBE_PAYLOAD_RESULT: ${{ needs.oobe_payload_inspection.result }}
         run: |
-          if ($env:TEST_RESULT -ne 'success' -or $env:REQUIREMENTS_RESULT -ne 'success' -or $env:DOCKER_RESULT -ne 'success') { throw '必要測試失敗、取消或跳過，不能合併或發布。' }
+          if ($env:TEST_RESULT -ne 'success' -or $env:REQUIREMENTS_RESULT -ne 'success' -or $env:DOCKER_RESULT -ne 'success' -or $env:OOBE_PAYLOAD_RESULT -ne 'success') { throw '必要測試失敗、取消或跳過，不能合併或發布。' }
 
   release:
     name: 發布 GitHub 來源版本
@@ -230,8 +253,8 @@ jobs:
 
   build-portal:
     name: 建立 main 與不可變版本品質索引
-    if: always() && needs.isolated-tests.result == 'success' && needs.requirements-gate.result == 'success' && needs.docker-tests.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
-    needs: [isolated-tests, requirements-gate, docker-tests, release]
+    if: always() && needs.ci-rollup.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
+    needs: [isolated-tests, requirements-gate, docker-tests, release, ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 15
     permissions:
