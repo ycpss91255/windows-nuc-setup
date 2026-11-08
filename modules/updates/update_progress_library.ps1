@@ -40,6 +40,8 @@ function Invoke-SetupUpdateOperation {
   return $Client.$end($job)
  }catch{
   $failure=$_
+  # CleanUp can wait for WUA. Persist the failure before entering COM cancellation/cleanup.
+  try{Write-SetupUpdateProgress -Path $ProgressPath -Stage '更新未完成' -Detail ($failure.Exception.Message+'；正在等候WUA中止與清理，不代表已停止。')}catch{Write-Warning ('進度紀錄寫入失敗：'+$_.Exception.Message)}
   if($null -ne $job -and -not $ended){
    try{if(-not $job.IsCompleted){$job.RequestAbort()};if($job.IsCompleted){$ended=$true;$null=$Client.$end($job)}}catch{Write-Warning ('更新中止/結束失敗：'+$_.Exception.Message)}
   }
