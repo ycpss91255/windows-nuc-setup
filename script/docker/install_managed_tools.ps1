@@ -12,12 +12,18 @@ function Get-ContainerWorkflowLintArtifact {
  # Official release: https://github.com/rhysd/actionlint/releases/tag/v1.7.12
  [pscustomobject]@{Name='actionlint_1.7.12_windows_amd64.zip';Version='1.7.12';Uri='https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_windows_amd64.zip';Algorithm='SHA256';Hash='6e7241b51e6817ea6a047693d8e6fed13b31819c9a0dd6c5a726e1592d22f6e9';Kind='Zip';Destination='C:/actionlint'}
 }
+function Get-ContainerPesterArtifact {
+ # Official Gallery Pester 6.0.0 metadata SHA512, same pin as the coverage collector.
+ [pscustomobject]@{Name='pester.6.0.0.zip';Version='6.0.0';Uri='https://www.powershellgallery.com/api/v2/package/Pester/6.0.0';Algorithm='SHA512';Hash='AHIAm7QW11As3sjMayo1rPU4JVIEfBL+ZILAyTyDnMPxMwLFQ3VeAA0prFTx+Y4DgZCUnH2N4+Xb0HDQua2EKA==';HashFormat='Base64';Kind='File';Destination='C:/tools/cache/pester.6.0.0.zip'}
+}
 function Install-ContainerToolArtifact {
  param([Parameter(Mandatory=$true)]$Artifact,[Parameter(Mandatory=$true)][string]$Destination,[Parameter(Mandatory=$true)][string]$ArchiveDirectory)
  [void][IO.Directory]::CreateDirectory($ArchiveDirectory)
  $archive=Join-Path $ArchiveDirectory $Artifact.Name
  Invoke-WebRequest -UseBasicParsing -Uri $Artifact.Uri -OutFile $archive -ErrorAction Stop
- if((Get-FileHash -LiteralPath $archive -Algorithm $Artifact.Algorithm).Hash -ine $Artifact.Hash){throw ('Container tool digest mismatch: '+$Artifact.Name)}
+ $expected=$Artifact.Hash
+ if($Artifact.HashFormat -eq 'Base64'){$expected=([BitConverter]::ToString([Convert]::FromBase64String($expected))).Replace('-','')}
+ if((Get-FileHash -LiteralPath $archive -Algorithm $Artifact.Algorithm).Hash -ine $expected){throw ('Container tool digest mismatch: '+$Artifact.Name)}
  if($Artifact.Kind -eq 'Zip'){Expand-Archive -LiteralPath $archive -DestinationPath $Destination}
  elseif($Artifact.Kind -eq 'File'){[void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Destination));Copy-Item -LiteralPath $archive -Destination $Destination}
  else{throw ('Unsupported container artifact kind: '+$Artifact.Kind)}
@@ -26,5 +32,5 @@ function Install-ContainerToolArtifact {
 if($MyInvocation.InvocationName -ne '.'){
  [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
  $archives=Join-Path $env:TEMP ('container_managed_'+[guid]::NewGuid().ToString('N'))
- foreach($artifact in @(@(Get-ContainerManagedToolArtifacts)+@(Get-ContainerWorkflowLintArtifact))){Install-ContainerToolArtifact -Artifact $artifact -Destination $artifact.Destination -ArchiveDirectory $archives}
+ foreach($artifact in @(@(Get-ContainerManagedToolArtifacts)+@(Get-ContainerWorkflowLintArtifact)+@(Get-ContainerPesterArtifact))){Install-ContainerToolArtifact -Artifact $artifact -Destination $artifact.Destination -ArchiveDirectory $archives}
 }

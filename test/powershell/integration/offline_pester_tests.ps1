@@ -29,6 +29,7 @@ $e=Get-Content -LiteralPath (Join-Path $output 'evidence.json') -Raw|ConvertFrom
 Assert ($e.PesterVersion -ceq '6.0.0' -and $e.Covered -eq 1 -and $e.Total -eq 1) 'offline package runs real Pester and original-source coverage'
 Assert (@(Get-ChildItem -LiteralPath (Join-Path $temporary 'windows_setup_pester_6_0_0') -Directory).Count -eq 1) 'module expands only in current user writable temporary cache'
 Assert ([Convert]::ToBase64String([Security.Cryptography.SHA512]::Create().ComputeHash([IO.File]::ReadAllBytes($injected))) -ceq $sha) 'injected immutable package bytes remain unchanged'
+Copy-Item -LiteralPath $injected -Destination (Join-Path $temporary 'windows_setup_pester_6_0_0/pester.zip')
 $bad=Join-Path $fixture 'corrupt.zip';[IO.File]::WriteAllText($bad,'corrupt')
 foreach($case in @(@('bad',$bad),@('missing',(Join-Path $fixture 'absent.zip')))){
  $out=Join-Path $fixture $case[0];$log=Join-Path $fixture ($case[0]+'.log')
@@ -41,5 +42,15 @@ foreach($case in @(@('bad',$bad),@('missing',(Join-Path $fixture 'absent.zip')))
 . (Join-Path $root 'script/docker/install_managed_tools.ps1')
 $artifact=Get-ContainerPesterArtifact
 Assert ($artifact.Version -ceq '6.0.0' -and $artifact.Uri -ceq 'https://www.powershellgallery.com/api/v2/package/Pester/6.0.0' -and $artifact.Algorithm -ceq 'SHA512' -and $artifact.Hash -ceq $sha -and $artifact.HashFormat -ceq 'Base64' -and $artifact.Kind -ceq 'File') 'Docker build pins exact official Pester artifact before offline runtime'
+& {
+ param($Official,$Artifact,$Fixture)
+ function Invoke-WebRequest {param($Uri,$OutFile,[switch]$UseBasicParsing,$ErrorAction) Copy-Item -LiteralPath $Official -Destination $OutFile}
+ $target=Join-Path $Fixture 'image_cache/pester.6.0.0.zip'
+ Install-ContainerToolArtifact -Artifact $Artifact -Destination $target -ArchiveDirectory (Join-Path $Fixture 'download_stage')
+ Assert ((Get-FileHash -LiteralPath $target -Algorithm SHA512).Hash -ceq (Get-FileHash -LiteralPath $Official -Algorithm SHA512).Hash) 'real build helper validates official base64 SHA512 and stages unchanged package'
+ $Artifact.Hash=[Convert]::ToBase64String((New-Object byte[] 64));$badTarget=Join-Path $Fixture 'bad_image_cache/pester.zip';$rejected=$false
+ try{Install-ContainerToolArtifact -Artifact $Artifact -Destination $badTarget -ArchiveDirectory (Join-Path $Fixture 'bad_download_stage')}catch{$rejected=$_.Exception.Message -like '*digest mismatch*'}
+ Assert ($rejected -and -not(Test-Path -LiteralPath $badTarget)) 'build helper refuses corrupted base64 pin before creating image package'
+} $injected $artifact $fixture
 $docker=[IO.File]::ReadAllText((Join-Path $root 'dockerfile/windows_tests.dockerfile'))
 Assert ($docker.Contains('WINDOWS_SETUP_PESTER_PACKAGE_PATH="C:/tools/cache/pester.6.0.0.zip"') -and $docker.Contains('USER ContainerUser')) 'nonadministrator container receives fixed package path without host cache'
