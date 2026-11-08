@@ -12,8 +12,8 @@ $begin=$source.IndexOf('$scope=@(Get-NetFirewallRule')
 if($begin -lt 0){$begin=$source.IndexOf('$sshFirewall=Get-SetupSSHFirewallStatus')}
 $end=$source.IndexOf("foreach(`$setting",$begin)
 $verify=$source.Substring($begin,$end-$begin)
-foreach($kind in @('disabled','outbound','blocked','udp','wrong_port','extra_port','broad_scope','missing','valid','numeric_tcp')){
- $script:rule=[pscustomobject]@{Enabled='True';Direction='Inbound';Action='Allow'};$script:addresses=@('LocalSubnet');$script:protocol='TCP';$script:ports=@('22');$script:missing=$false
+foreach($kind in @('disabled','outbound','blocked','udp','wrong_port','extra_port','broad_scope','limited_profile','missing','valid','numeric_tcp')){
+ $script:rule=[pscustomobject]@{Enabled='True';Direction='Inbound';Action='Allow';Profile='Any'};$script:addresses=@('LocalSubnet');$script:protocol='TCP';$script:ports=@('22');$script:missing=$false
  switch($kind){
   disabled{$script:rule.Enabled='False'}
   outbound{$script:rule.Direction='Outbound'}
@@ -22,6 +22,7 @@ foreach($kind in @('disabled','outbound','blocked','udp','wrong_port','extra_por
   wrong_port{$script:ports=@('2222')}
   extra_port{$script:ports=@('22','80')}
   broad_scope{$script:addresses=@('LocalSubnet','Any')}
+  limited_profile{$script:rule.Profile='Private'}
   missing{$script:missing=$true}
   numeric_tcp{$script:protocol='6'}
  }
@@ -33,8 +34,8 @@ foreach($kind in @('disabled','outbound','blocked','udp','wrong_port','extra_por
 $installer=[IO.File]::ReadAllText((Join-Path $root 'modules/ssh/apply_ssh_settings.ps1'))
 $begin=$installer.IndexOf("`$name='OpenSSH-Server-In-TCP'");$end=$installer.IndexOf('if((Get-Service',$begin)
 $configure=$installer.Substring($begin,$end-$begin)
-function Set-NetFirewallRule {param($Name,$Enabled,$Direction,$Action,$Profile,$RemoteAddress,$Protocol,$LocalPort);$script:updated=$PSBoundParameters;$script:rule=[pscustomobject]@{Enabled=$Enabled;Direction=$Direction;Action=$Action};$script:addresses=@($RemoteAddress);$script:protocol=$Protocol;$script:ports=@($LocalPort)}
-function New-NetFirewallRule {param($Name,$DisplayName,$Enabled,$Direction,$Action,$Profile,$RemoteAddress,$Protocol,$LocalPort);$script:updated=$PSBoundParameters;$script:missing=$false;$script:rule=[pscustomobject]@{Enabled=$Enabled;Direction=$Direction;Action=$Action};$script:addresses=@($RemoteAddress);$script:protocol=$Protocol;$script:ports=@($LocalPort)}
+function Set-NetFirewallRule {param($Name,$Enabled,$Direction,$Action,$Profile,$RemoteAddress,$Protocol,$LocalPort);$script:updated=$PSBoundParameters;$script:rule=[pscustomobject]@{Enabled=$Enabled;Direction=$Direction;Action=$Action;Profile=$Profile};$script:addresses=@($RemoteAddress);$script:protocol=$Protocol;$script:ports=@($LocalPort)}
+function New-NetFirewallRule {param($Name,$DisplayName,$Enabled,$Direction,$Action,$Profile,$RemoteAddress,$Protocol,$LocalPort);$script:updated=$PSBoundParameters;$script:missing=$false;$script:rule=[pscustomobject]@{Enabled=$Enabled;Direction=$Direction;Action=$Action;Profile=$Profile};$script:addresses=@($RemoteAddress);$script:protocol=$Protocol;$script:ports=@($LocalPort)}
 foreach($exists in @($true,$false)){
  $script:missing=-not $exists;$script:rule=[pscustomobject]@{Enabled='False';Direction='Outbound';Action='Block'};$script:protocol='UDP';$script:ports=@('80');$script:addresses=@('Any');$script:updated=$null
  . ([scriptblock]::Create($configure))
