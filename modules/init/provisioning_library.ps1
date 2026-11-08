@@ -231,7 +231,7 @@ function Get-InitProvisioningContext {
  if($identity.Sid -ne 'S-1-5-18'){
   $profile=Get-ItemProperty -LiteralPath ('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\'+$identity.Sid) -ErrorAction Stop
   $registered=[Environment]::ExpandEnvironmentVariables([string]$profile.ProfileImagePath)
-  foreach($process in @($session|Where-Object {$_.Name -eq 'explorer.exe'})){if((Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop).Sid -eq $identity.Sid){$desktop=$true}}
+  foreach($process in @($session|Where-Object {$_.Name -eq 'explorer.exe'})){$owner=Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop;if(($owner.ReturnValue -is [uint32] -or $owner.ReturnValue -is [int]) -and $owner.ReturnValue -eq 0 -and $owner.Sid -eq $identity.Sid){$desktop=$true}}
  }
  $completion=Invoke-InitOobeCompleteNative
  return @{Sid=$identity.Sid;IsAdministrator=$identity.IsAdministrator;Build=[int]$os.BuildNumber;ProductType=[int]$os.ProductType;Is64Bit=([Environment]::Is64BitProcess -and $env:PROCESSOR_ARCHITECTURE -eq 'AMD64');IsWinPE=[bool](Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT');OobeInProgress=[int]$setup.OOBEInProgress;SetupInProgress=[int]$setup.SystemSetupInProgress;OobeProcessInSession=$oobe;OobeApiSucceeded=[bool]$completion.Succeeded;OobeComplete=[bool]$completion.Complete;MachineGuid=[string]$machine.MachineGuid;ComputerName=$env:COMPUTERNAME;ImageState=[string]$image.ImageState;DesktopOwned=$desktop;ProfilePath=$env:USERPROFILE;RegisteredProfile=$registered}

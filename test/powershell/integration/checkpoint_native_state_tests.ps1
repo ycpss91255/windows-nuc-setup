@@ -53,7 +53,7 @@ foreach($phase in @('AwaitingLogon','ApplyPending','SshPending','Complete','Acco
 $script:nativeApiCalls=0;$script:nativeSucceeded=$true;$script:nativeComplete=$true;$script:nativeThrows=$false
 function Get-InitIdentityContext {return @{Sid=$sid;IsAdministrator=$true;SessionId=3}}
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) if($ClassName -eq 'Win32_OperatingSystem'){return [pscustomobject]@{BuildNumber='26200';ProductType=1}};if($ClassName -eq 'Win32_Process'){return [pscustomobject]@{Name='explorer.exe';SessionId=3}};throw 'unexpected native CIM read'}
-function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) [pscustomobject]@{Sid=$sid}}
+function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) [pscustomobject]@{ReturnValue=0;Sid=$sid}}
 function Get-ItemProperty {param($LiteralPath,$ErrorAction) switch($LiteralPath){'HKLM:\SYSTEM\Setup'{return [pscustomobject]@{OOBEInProgress=0;SystemSetupInProgress=0}} 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\State'{return [pscustomobject]@{ImageState='IMAGE_STATE_COMPLETE'}} 'HKLM:\SOFTWARE\Microsoft\Cryptography'{return [pscustomobject]@{MachineGuid='fixture-machine'}} default{if($LiteralPath -like '*\ProfileList\*'){return [pscustomobject]@{ProfileImagePath=$env:USERPROFILE}};throw 'unexpected native registry read'}}}
 function Invoke-InitOobeCompleteNative {$script:nativeApiCalls++;if($script:nativeThrows){throw [IO.IOException]::new('controlled native OOBE read error')};[pscustomobject]@{Succeeded=$script:nativeSucceeded;Complete=$script:nativeComplete}}
 $stage=Join-Path $fixture 'stage';$assets=Join-Path $stage 'runtime/modules/init/assets';[void][IO.Directory]::CreateDirectory($assets)

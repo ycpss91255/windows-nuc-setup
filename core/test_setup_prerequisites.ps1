@@ -39,7 +39,7 @@ if(-not $PackageOnly){
  if(-not $local.Enabled){throw '目前本機帳號未啟用。'}
  $session=[Diagnostics.Process]::GetCurrentProcess().SessionId
  $explorers=@(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'"|Where-Object {$session -eq 0 -or $_.SessionId -eq $session})
- $owners=@($explorers|ForEach-Object {(Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid).Sid})
+ $owners=@($explorers|ForEach-Object {$owner=Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid -ErrorAction Stop;if(($owner.ReturnValue -is [uint32] -or $owner.ReturnValue -is [int]) -and $owner.ReturnValue -eq 0){$owner.Sid}})
  if($identity.User.Value -notin $owners){throw '請以目前登入桌面的本機管理員帳號執行，不可用另一個管理員帳號提權。'}
  foreach($cmd in @('wt.exe','winget.exe')){if(-not(Get-Command $cmd -ErrorAction SilentlyContinue)){throw ('缺少 '+$cmd+'；請先安裝 Windows Terminal / App Installer。')}}
  . (Resolve-NucPath 'desktop_safety.ps1')
