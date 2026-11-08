@@ -1,0 +1,19 @@
+{
+    "SchemaVersion":  1,
+    "PackageId":  "1c2605ea-96ae-42fc-8f11-45fc0cb9d133",
+    "PackageName":  "windows_setup_hide_oobe",
+    "PackageVersion":  "1.0",
+    "PackageSHA256":  "8DCCA6F6D857F204B1DF6EB35891A50519AD64FF5B74559BDCFE6C2B3B4791E0",
+    "SourceSHA256":  "C9048F3D12A842B633C1B88D05D56737607C6579D39FEB843134FA92C16ADDD4",
+    "OnlySetting":  "OOBE/Desktop/HideOobe=True",
+    "ADKVersion":  "10.1.26100.9457",
+    "CompilerVersion":  "10.0.26100.9457",
+    "CompilerSHA256":  "E89F844A375BBEF9D5D98AE3920C68CFB75973FCA0CAC1202354A8AEA36842F0",
+    "CompilerAuthenticode":  "Valid Microsoft Corporation",
+    "OfficialSource":  "https://download.microsoft.com/download/8e0c0f5a-abb5-4358-a51b-168eb40b1590/adk/adksetup.exe",
+    "BootstrapSHA256":  "AC6A930FDB5C2980BA5FEFE606D47EDAAFCF5F647B4337411500D158EA77300F",
+    "BuildCommand":  "ICD.exe /Build-ProvisioningPackage /CustomizationXML:hide_oobe.xml /PackagePath:hide_oobe.ppkg /StoreFile:Microsoft-Desktop-Provisioning.dat",
+    "ByteReproducible":  false,
+    "PayloadInspection":  "Requires independent read-only WIM content validation; source and package metadata alone do not prove payload contents",
+    "RedistributedMicrosoftTools":  false
+}
