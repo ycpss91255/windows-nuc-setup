@@ -17,7 +17,8 @@ function Get-SetupDriverTargetPlan {
   $current=$null;$desired=$null
   $comparable=($device.DriverProvider -eq $Target.Provider -or $device.DriverProvider -in @($Target.ProviderAliases))
   if(-not [version]::TryParse([string]$Target.DriverVersion,[ref]$desired)){throw '目標驅動版本無法解析。'}
-  if($device.DriverProvider -eq 'Microsoft' -and $Target.Provider -ne 'Microsoft'){$status='UpdateRequired';$reason='原廠目標取代通用驅動'}
+  if($device.HardwareIdsReadError){$status='Unverified';$reason='目標硬體屬性讀取失敗'}
+  elseif($device.DriverProvider -eq 'Microsoft' -and $Target.Provider -ne 'Microsoft'){$status='UpdateRequired';$reason='原廠目標取代通用驅動'}
   elseif(-not $comparable -or -not [version]::TryParse([string]$device.DriverVersion,[ref]$current)){$status='Unverified';$reason='目前供應商或版本無法安全比較'}
   elseif($current -ge $desired -and $device.Status -ne 'OK'){$status='Unverified';$reason='版本已達目標但裝置狀態異常'}
   elseif($current -gt $desired){$status='NewerInstalled';$reason='保留目前較新版本'}
@@ -62,7 +63,10 @@ function Get-SetupDriverDeviceInventory {
  foreach($device in @(Get-PnpDevice -PresentOnly -ErrorAction Stop)){
   $driver=@($signed|Where-Object DeviceID -eq $device.InstanceId|Select-Object -First 1)
   $ids=@();$readError=''
-  try{$ids=@((Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_HardwareIds -ErrorAction Stop).Data)}catch{$readError=$_.Exception.Message}
+  foreach($key in @('DEVPKEY_Device_HardwareIds','DEVPKEY_Device_CompatibleIds')){
+   try{$ids+=@((Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName $key -ErrorAction Stop).Data)}catch{$readError=$_.Exception.Message}
+  }
+  $ids=@($ids|Where-Object {$_}|Select-Object -Unique)
   [pscustomobject]@{InstanceId=$device.InstanceId;Name=$device.FriendlyName;HardwareIds=$ids;HardwareIdsReadError=$readError;Status=$device.Status;DriverProvider=[string]$driver.DriverProviderName;DriverVersion=[string]$driver.DriverVersion}
  }
 }
