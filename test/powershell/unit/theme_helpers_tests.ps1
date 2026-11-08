@@ -1,0 +1,40 @@
+﻿#Requires -Version 5.1
+$ErrorActionPreference='Stop'
+$root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
+function Reject([scriptblock]$Action,[string]$Expected,[string]$Name){$errorText='';try{& $Action|Out-Null}catch{$errorText=$_.Exception.Message};Assert ($errorText.Contains($Expected)) ($Name+'; actual='+$errorText)}
+$library=Join-Path $root 'modules/theme/theme_settings_library.ps1'
+Assert (Test-Path -LiteralPath $library) 'Theme has a named original-source leaf without importing the elevated public entry'
+. $library
+Add-Type -TypeDefinition 'using System;using System.Text;public static class NUC8Theme{public static bool ColorOk=true,WallpaperOk=true;public static uint Color;public static string Wallpaper="";public static int SetColorCalls,SetWallpaperCalls,NotifyCalls,Reads,LightReads;public static bool SetSysColors(int count,int[] elements,uint[] colors){SetColorCalls++;if(count!=1||elements[0]!=1||colors[0]!=0)throw new Exception("wrong colors");return ColorOk;}public static bool SystemParametersInfo(uint action,uint param,string value,uint flags){SetWallpaperCalls++;if(action!=20||param!=0||value!=""||flags!=3)throw new Exception("wrong wallpaper");if(WallpaperOk)Wallpaper="";return WallpaperOk;}public static IntPtr SendMessageTimeout(IntPtr hwnd,uint msg,IntPtr wp,string lp,uint flags,uint timeout,out IntPtr result){NotifyCalls++;result=IntPtr.Zero;return IntPtr.Zero;}public static int[] TaskbarColor(){Reads++;if(LightReads>0){LightReads--;return new int[]{240,240,240};}return new int[]{21,21,21};}public static bool ReadWallpaper(uint action,uint param,StringBuilder value,uint flags){value.Append(Wallpaper);return true;}public static uint GetSysColor(int index){return Color;}}'
+$personalize='HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+$wallpapers='HKCU:\Software\Microsoft\Windows\CurrentVersion\explorer\Wallpapers';$cloud='HKCU:\Software\Policies\Microsoft\Windows\CloudContent'
+$script:keys=@{};$script:values=@{AppsUseLightTheme=0;SystemUsesLightTheme=0};$script:writes=@();$script:created=@();$script:stopped=@();$script:started=0
+$session=[Diagnostics.Process]::GetCurrentProcess().SessionId
+$script:processes=@([pscustomobject]@{SessionId=$session;Name='current'},[pscustomobject]@{SessionId=($session+10);Name='other'})
+function Test-Path {param($Path) if($Path -notin @($personalize,$wallpapers,$cloud)){throw 'unexpected theme registry path'};$script:keys.ContainsKey($Path)}
+function New-Item {param($Path,[switch]$Force) $script:keys[$Path]=$true;$script:created+=@($Path)}
+function New-ItemProperty {param($Path,$Name,$Value,$PropertyType,[switch]$Force) if($Path -notin @($personalize,$wallpapers,$cloud) -or $PropertyType -ne 'DWord' -or -not $Force){throw 'unexpected theme preference'};$script:values[$Name]=$Value;$script:writes+=@($Path+'|'+$Name+'|'+$Value)}
+function Set-ItemProperty {param($Path,$Name,$Value) if(($Path -ne 'HKCU:\Control Panel\Colors' -or $Name -ne 'Background' -or $Value -ne '0 0 0') -and ($Path -ne 'HKCU:\Control Panel\Desktop' -or $Name -ne 'Wallpaper' -or $Value -ne '')){throw 'unexpected theme registry write'};$script:writes+=@($Path+'|'+$Name+'|'+$Value)}
+function Get-ItemProperty {param($Path) if($Path -ne $personalize){throw 'unexpected theme verification read'};[pscustomobject]$script:values}
+function Get-Process {param($Name,$ErrorAction) if($Name -ne 'explorer'){throw 'unexpected process lookup'};$script:processes}
+function Stop-Process {param([Parameter(ValueFromPipeline=$true)]$InputObject,[switch]$Force) process{if(-not $Force -or $InputObject.SessionId -ne $session){throw 'unsafe theme Explorer stop'};$script:stopped+=@($InputObject.Name);$script:processes=@($script:processes|Where-Object SessionId -ne $session)}}
+function Start-Process {param($FilePath) if($FilePath -ne 'explorer.exe'){throw 'unexpected theme process'};$script:started++}
+function Start-Sleep {param($Seconds,$Milliseconds)}
+$module=Join-Path $root 'modules/theme'
+$r=Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly
+Assert ($r.Success -and $r.AppsMode -ceq 'Dark' -and $r.WindowsMode -ceq 'Dark' -and $r.Background -ceq '#000000' -and $r.TaskbarIsDark -and $r.ActualWallpaper -ceq '' -and $r.ActualBackgroundColor -eq 0) 'Theme VerifyOnly reads actual black background and dark shell/application modes'
+Assert ($script:writes.Count -eq 0 -and $script:created.Count -eq 0 -and [NUC8Theme]::SetColorCalls -eq 0 -and [NUC8Theme]::SetWallpaperCalls -eq 0 -and $script:stopped.Count -eq 0 -and $script:started -eq 0) 'Theme VerifyOnly performs no preference mutation native apply or Explorer reload'
+$script:values.AppsUseLightTheme=1;Reject {Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly} '即時驗證' 'light application preference cannot pass';$script:values.AppsUseLightTheme=0
+[NUC8Theme]::Color=1;Reject {Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly} '即時驗證' 'nonblack actual native background cannot pass';[NUC8Theme]::Color=0
+[NUC8Theme]::Wallpaper='still present';Reject {Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly} '即時驗證' 'remaining actual wallpaper cannot pass';[NUC8Theme]::Wallpaper=''
+[NUC8Theme]::LightReads=1;Reject {Invoke-SetupThemeSettings -ModuleRoot $module -VerifyOnly} '即時驗證' 'light actual taskbar fails VerifyOnly without reapplying';Assert ($script:stopped.Count -eq 0) 'failed VerifyOnly does not stop Explorer'
+$r=Invoke-SetupThemeSettings -ModuleRoot $module
+Assert ($r.Success -and -not $r.ExplorerReloaded -and $script:writes.Count -eq 6 -and $script:created.Count -eq 3 -and [NUC8Theme]::SetColorCalls -eq 1 -and [NUC8Theme]::SetWallpaperCalls -eq 1 -and [NUC8Theme]::NotifyCalls -eq 1) 'Theme apply retains six approved HKCU preferences and original native application'
+Assert ($script:values.AppsUseLightTheme -eq 0 -and $script:values.SystemUsesLightTheme -eq 0 -and $script:values.BackgroundType -eq 1 -and $script:values.DisableSpotlightCollectionOnDesktop -eq 1) 'Theme applies dark modes solid-color background and desktop Spotlight preference'
+[NUC8Theme]::LightReads=1;$r=Invoke-SetupThemeSettings -ModuleRoot $module
+Assert ($r.Success -and $r.ExplorerReloaded -and ($script:stopped -join ',') -ceq 'current' -and $script:started -eq 1 -and @($script:processes|Where-Object Name -eq 'other').Count -eq 1) 'only current desktop Explorer reloads when taskbar has not accepted dark mode'
+[NUC8Theme]::LightReads=100;$before=[NUC8Theme]::Reads;Reject {Invoke-SetupThemeSettings -ModuleRoot $module} '即時驗證' 'persistent light taskbar cannot be falsely accepted'
+Assert (([NUC8Theme]::Reads-$before) -eq 21) 'taskbar retry is bounded to twenty native reads after the first sample'
+[NUC8Theme]::LightReads=0;[NUC8Theme]::ColorOk=$false;Reject {Invoke-SetupThemeSettings -ModuleRoot $module} '背景顏色' 'native desktop color failure propagates';[NUC8Theme]::ColorOk=$true
+[NUC8Theme]::WallpaperOk=$false;Reject {Invoke-SetupThemeSettings -ModuleRoot $module} '背景圖片' 'native wallpaper removal failure propagates'
