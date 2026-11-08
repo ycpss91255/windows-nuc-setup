@@ -31,6 +31,43 @@ Assert ($landingPage.Contains('80.0%') -and $landingPage.Contains('4/5 可執行
 foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml')){Assert ((Get-FileHash (Join-Path $portal ('main/'+$name))).Hash -eq (Get-FileHash (Join-Path $evidence $name)).Hash) ('Pages保留可重算證據：'+$name)}
 $missing=Join-Path $fixture 'missing';Write-TestReports -Checks $checks -OutputDirectory $missing @identity -RefName main|Out-Null
 Refuse {& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -OutputDirectory (Join-Path $fixture 'missing_portal') -MainSnapshotPath (Join-Path $missing 'summary.json') -CoverageToolPath $tool} '正式Pages缺整體量測必須拒絕'
+$legacyDirectory=Join-Path $fixture 'legacy_publish'
+Write-TestReports -Checks $checks -OutputDirectory $legacyDirectory @identity -SchemaVersion 1 -Version v1.0.0 -RefType Release -RefName v1.0.0 -Environment Fixture|Out-Null
+$global:repoPublicationRemoteCalled=$false
+function gh {$global:repoPublicationRemoteCalled=$true;$global:LASTEXITCODE=1;throw 'unexpected remote operation'}
+Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $legacyDirectory -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $legacyDirectory 'summary.md') -Repository example/repo} '本輪publisher不得降級legacy契約'
+Assert (-not $global:repoPublicationRemoteCalled) 'legacy只能讀歷史，發布前禁止遠端操作'
+Remove-Item Function:\gh
+$report.RefType='Release';$report.RefName='v1.0.0';$report.Version='v1.0.0';$report.Environment='Fixture'
+. (Join-Path $root 'script/report/portal.ps1')
+Write-SnapshotView $report $public
+function gh {
+ $words=@($args);$global:LASTEXITCODE=0
+ if($words[0] -eq 'api' -and $words -contains '--paginate'){return}
+ if($words[0] -eq 'release' -and $words[1] -eq 'create'){
+  $global:repoPublicationAssets=@($words|Where-Object {Test-Path -LiteralPath ([string]$_) -PathType Leaf}|Where-Object {[IO.Path]::GetExtension($_) -ne '.md' -or [IO.Path]::GetFileName($_) -eq 'summary.md'}|Select-Object -Unique|ForEach-Object {@{name=[IO.Path]::GetFileName($_);digest=('sha256:'+(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant())}})
+  return
+ }
+ if($words[0] -eq 'release' -and $words[1] -eq 'view'){
+  if($global:repoPublicationMode -eq 'bad-digest'){$global:repoPublicationAssets[0].digest='sha256:'+('0'*64)}
+  return (@{isDraft=$true;assets=$global:repoPublicationAssets}|ConvertTo-Json -Depth 5)
+ }
+ if($words[0] -eq 'release' -and $words[1] -eq 'edit'){$global:repoPublicationPublished++;return}
+ if($words[0] -eq 'api' -and $words[1] -like '*/releases/tags/*'){
+  $assets=if($global:repoPublicationMode -eq 'missing-asset'){@($global:repoPublicationAssets|Select-Object -Skip 1)}else{$global:repoPublicationAssets}
+  return (@{immutable=($global:repoPublicationMode -ne 'mutable');draft=$false;tag_name='v1.0.0';assets=$assets;html_url='https://github.com/example/repo/releases/tag/v1.0.0'}|ConvertTo-Json -Depth 5)
+ }
+ if($words[0] -eq 'api' -and $words[1] -like '*/commits/*'){return $(if($global:repoPublicationMode -eq 'wrong-sha'){'c'*40}else{'a'*40})}
+ throw ('Unexpected mock call: '+($words -join ' '))
+}
+foreach($mode in @('success','bad-digest','missing-asset','mutable','wrong-sha')){
+ $global:repoPublicationMode=$mode;$global:repoPublicationPublished=0
+ $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool|Out-Null}catch{$accepted=$false}
+ Assert ($accepted -eq ($mode -eq 'success')) ('Schema2只發布真完整不可變證據：'+$mode)
+ Assert ($global:repoPublicationAssets.Count -eq 11) ('新Release精確11附件：'+$mode)
+ Assert ($global:repoPublicationPublished -eq $(if($mode -eq 'bad-digest'){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
+}
+Remove-Item Function:\gh
 $before=(Get-FileHash (Join-Path $public 'summary.json')).Hash
 [IO.File]::AppendAllText((Join-Path $evidence 'coverage.xml'),'tampered')
 Refuse {& (Join-Path $root 'script/test/attach_repo_coverage.ps1') -PublicDirectory $public -CoverageDirectory $evidence -CoverageToolPath $tool} '篡改逐行證據不得附加'
