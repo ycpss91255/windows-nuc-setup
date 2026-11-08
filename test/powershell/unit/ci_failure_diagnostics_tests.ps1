@@ -22,3 +22,7 @@ Assert ($absent.Contains('Unit.uac_helpers.log') -and $absent.Contains('unavaila
 [IO.File]::WriteAllLines((Join-Path $temp 'Unit.uac_helpers.log'),@(1..100|ForEach-Object {'safe-line-'+$_}))
 $tail=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Unit.uac_helpers')) -join "`n"
 Assert ($tail.Contains('safe-line-100') -and -not $tail.Contains('safe-line-20')) 'failure console output retains a bounded final eighty lines'
+$fixed=@('Unit.driver_cache_cleanup','Integration.init_runtime','Integration.driver_full_source_coverage')
+foreach($suite in $fixed){[IO.File]::WriteAllText((Join-Path $temp ($suite+'.log')),('safe fixture details '+$suite))}
+$accepted=$true;try{$details=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames $fixed) -join "`n"}catch{$accepted=$false}
+Assert ($accepted -and $details.Contains('safe fixture details Unit.driver_cache_cleanup') -and $details.Contains('safe fixture details Integration.init_runtime') -and $details.Contains('safe fixture details Integration.driver_full_source_coverage')) '固定安全驅動與Init診斷可讀回實值，不擴張任意log白名單'
