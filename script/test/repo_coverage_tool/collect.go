@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -23,10 +24,11 @@ func collect(args []string, out io.Writer) error {
 	ge := f.String("go-evidence", "", "Go 身分與計數證據")
 	gp := f.String("go-profile", "", "已合併 Go profile")
 	pe := f.String("powershell-evidence", "", "PowerShell 原始 worker 證據")
+	ce := f.String("cmd-evidence", "", "CMD 原始 probe 證據")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
-	if *root == "" || *dest == "" || *sha == "" || f.NArg() != 0 || (*ge == "") != (*gp == "") || (*ge == "" && *pe == "") {
+	if *root == "" || *dest == "" || *sha == "" || f.NArg() != 0 || (*ge == "") != (*gp == "") || (*ge == "" && *pe == "" && *ce == "") {
 		return fmt.Errorf("需要來源、全新輸出、提交與至少一組完整收集證據")
 	}
 	source, err := filepath.Abs(*root)
@@ -112,6 +114,32 @@ func collect(args []string, out io.Writer) error {
 		report, lines, err := rc.NormalizePowerShell(evidence, func(name string) ([]byte, error) {
 			return os.ReadFile(filepath.Join(filepath.Dir(*pe), filepath.FromSlash(name)))
 		}, inv)
+		if err != nil {
+			return err
+		}
+		reports = append(reports, report)
+		catalogs = append(catalogs, lines...)
+	}
+	if *ce != "" {
+		data, err := os.ReadFile(*ce)
+		if err != nil {
+			return err
+		}
+		var evidence rc.CMDEvidence
+		if err := json.Unmarshal(data, &evidence); err != nil {
+			return err
+		}
+		originals := map[string][]byte{}
+		for _, s := range inv.Sources {
+			if s.Language == "cmd" {
+				b, e := os.ReadFile(filepath.Join(source, filepath.FromSlash(s.Path)))
+				if e != nil {
+					return e
+				}
+				originals[s.Path] = b
+			}
+		}
+		report, lines, err := rc.NormalizeCMD(evidence, originals)
 		if err != nil {
 			return err
 		}

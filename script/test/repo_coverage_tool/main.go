@@ -13,6 +13,9 @@ import (
 )
 
 func run(args []string, out io.Writer) error {
+	if len(args) > 0 && args[0] == "cmd-measure" {
+		return cmdMeasure(args[1:], out)
+	}
 	if len(args) > 0 && args[0] == "collect" {
 		return collect(args[1:], out)
 	}
