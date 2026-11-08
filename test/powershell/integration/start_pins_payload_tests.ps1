@@ -28,4 +28,12 @@ function Read-StartPinsWimPayload {param($PackagePath,$Destination) throw 'Unexp
 $fifth=Join-Path $temp 'fifth';$failed=$false;try{Invoke-StartPinsPayloadVerification $package $fifth}catch{$failed=$true}
 $diagnostic=[IO.File]::ReadAllText((Join-Path $fifth 'evidence.json'))|ConvertFrom-Json
 Assert ($failed -and -not $diagnostic.Verified -and $diagnostic.UnexpectedEntry -ceq 'Multivariant/0/Prov/RunTime/actual.provxml') 'unknown native archive entry is diagnostic only and never expands whitelist'
+# Invoke public script entry in an isolated child; dot-source-only tests cannot detect parameter clobbering.
+$cliEvidence=Join-Path $temp 'cli evidence';$cliBaseline=Join-Path $temp 'missing reviewed baseline.json'
+$fixture=Join-Path $root 'test/powershell/fixtures/start_payload_cli.ps1';$cliLog=Join-Path $temp 'cli.log'
+$savedPreference=$ErrorActionPreference
+try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $fixture -TargetScript $verifier -PackagePath $package -EvidenceDirectory $cliEvidence -BaselinePath $cliBaseline *> $cliLog;$cliExit=$LASTEXITCODE}finally{$ErrorActionPreference=$savedPreference}
+Assert ($cliExit -ne 0 -and (Test-Path -LiteralPath (Join-Path $cliEvidence 'evidence.json'))) 'public CLI preserves supplied package evidence and baseline arguments through imports'
+$cliData=[IO.File]::ReadAllText((Join-Path $cliEvidence 'evidence.json'))|ConvertFrom-Json
+Assert (-not $cliData.Verified -and $cliData.PackageSHA256 -ceq (Get-FileHash -LiteralPath $package).Hash -and $cliData.Files.Count -eq 7 -and [IO.File]::ReadAllText($cliLog) -match 'XML') 'public CLI reaches extraction and missing-baseline rejection with exact package digest'
 Write-Host ('ALL PASS: '+$script:count+' synthetic Start payload contract assertions; no native extraction or installation')
