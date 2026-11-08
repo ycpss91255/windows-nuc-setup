@@ -9,13 +9,13 @@ $script:setup=@{SystemSetupInProgress=0;OOBEInProgress=0};$script:throwRead=$fal
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction);if($script:throwRead){throw 'fixture native failure'};if($ClassName -eq 'Win32_OperatingSystem'){return [pscustomobject]@{BuildNumber='26200';ProductType=1}};if($ClassName -ne 'Win32_Process' -or -not $Filter.Contains('msoobe.exe')){throw 'unapproved native query'};@([pscustomobject]@{SessionId=$(if($script:otherSession){99}else{44})})}
 function Get-ItemProperty {param($LiteralPath,$ErrorAction);switch -Exact ($LiteralPath){'HKLM:\SYSTEM\Setup'{[pscustomobject]$script:setup} ('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\'+$identity.Sid){[pscustomobject]@{ProfileImagePath=$(if($script:otherProfile){$nativeProfile+'__other'}else{$nativeProfile})}} default{throw 'unapproved registry path'}}}
 function Invoke-InitOobeCompleteNative {return @{Succeeded=$true;Complete=$false}}
-function Get-LocalUser {param($SID,$ErrorAction);if(-not $script:localUser){throw 'not a local builtin account'};[pscustomobject]@{SID=$identity.Sid;Enabled=$true}}
+function Get-LocalUser {param($SID,$ErrorAction);if(-not $script:localUser){throw 'not a local builtin account'};[pscustomobject]@{SID=$identity.Sid;Enabled=$false}}
 function Test-Path {param($LiteralPath,$ErrorAction);if($LiteralPath -cne 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT'){throw 'unapproved path probe'};return $false}
 function Add-Type {throw 'SAFE_NATIVE_COMPILATION_TRAP'}
 function New-Item {throw 'SAFE_MUTATION_TRAP'}
 function CheckRoute($facts){Get-InitRoute $identity.Sid 'IMAGE_STATE_UNDEPLOYABLE' $true $true $facts}
 $facts=Get-SetupInitPreparationFacts $identity
-Assert ($facts.ReadSucceeded -and $facts.ProfileMatches -and $facts.LocalBuiltin -and -not $facts.OobeProcessInSession -and (CheckRoute $facts) -ceq 'PrepareOobe') 'native collector reads exact setup/profile paths and ignores other-session OOBE without relying on AuditBoot'
+Assert ($facts.ReadSucceeded -and $facts.ProfileMatches -and $facts.LocalBuiltin -and -not $facts.OobeProcessInSession -and (CheckRoute $facts) -ceq 'PrepareOobe') 'native collector reads exact setup/profile paths and ignores other-session OOBE without relying on AuditBoot or requiring SAM Enabled (Microsoft KB3141410)'
 $script:setup.SystemSetupInProgress=$null;$facts=Get-SetupInitPreparationFacts $identity
 Assert ((CheckRoute $facts) -ceq 'RejectUnknownSetupState') 'missing native registry value is not cast to a safe zero'
 $script:setup.SystemSetupInProgress='0';Assert ((CheckRoute (Get-SetupInitPreparationFacts $identity)) -ceq 'RejectUnknownSetupState') 'string registry flag is not coerced to DWORD'
