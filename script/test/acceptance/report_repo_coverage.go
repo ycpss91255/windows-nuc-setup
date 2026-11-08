@@ -3,6 +3,7 @@ package acceptance
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
 	c "windows_setup/script/test/repo_coverage"
 )
@@ -43,8 +44,15 @@ func ValidateRepoCoverageReport(read Reader, summary []byte, sha, run string, re
 	if !reflect.DeepEqual(embedded, sidecar) {
 		return nil, fmt.Errorf("報告與公開整體覆蓋率證據不一致")
 	}
-	if required && !embedded.Result.Complete {
+	if required && (!embedded.Result.Complete || embedded.Result.Executable <= 0) {
 		return nil, fmt.Errorf("整體覆蓋率來源量測不完整")
+	}
+	if required {
+		covered := new(big.Int).Mul(big.NewInt(int64(embedded.Result.Covered)), big.NewInt(100))
+		minimum := new(big.Int).Mul(big.NewInt(int64(embedded.Result.Executable)), big.NewInt(80))
+		if covered.Cmp(minimum) < 0 {
+			return nil, fmt.Errorf("整體覆蓋率未達精確80%%發布門檻")
+		}
 	}
 	return &embedded, nil
 }
