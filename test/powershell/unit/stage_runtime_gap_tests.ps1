@@ -7,6 +7,7 @@ function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Na
 function Reject([scriptblock]$Action,[string]$Expected,[string]$Name){$f=$null;try{& $Action|Out-Null}catch{$f=$_};Assert ($f -and $f.Exception -isnot [Management.Automation.ParameterBindingException] -and $f.Exception.Message.Contains($Expected)) ($Name+'; actual='+$f.Exception.Message)}
 function Clone($v){$v|ConvertTo-Json -Depth 12|ConvertFrom-Json}
 $fixture=Join-Path $env:TEMP ('stage_gaps_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
+$fixture=[IO.Path]::GetFullPath($fixture)
 $nativeScope=Get-SetupGuiIdentity
 Assert ([bool]$nativeScope.UserSID -and [bool]$nativeScope.Computer) '原生身分僅唯讀觀測，不作為互動案例的帳號假設'
 $script:controlledGuiScope=[pscustomobject]@{UserSID='S-1-5-21-1-2-3-1001';Computer='stage-fixture';SessionId=1;CommonDataRoot=$fixture;PowerShell='powershell.exe'}

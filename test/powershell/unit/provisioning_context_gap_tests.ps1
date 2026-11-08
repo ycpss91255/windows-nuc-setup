@@ -14,6 +14,7 @@ function Get-ProvisioningPackage {
  if($AllInstalledPackages -and $script:installed){[pscustomobject]@{IsInstalled=$true;PackageID='1c2605ea-96ae-42fc-8f11-45fc0cb9d133';Version='1.0';PackageName='windows_setup_hide_oobe';Rank=0;OwnerType=5000}}
 }
 $fixture=Join-Path $env:TEMP ('provision_context_gaps_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
+$fixture=[IO.Path]::GetFullPath($fixture)
 $stage=Join-Path $fixture 'stage';[void][IO.Directory]::CreateDirectory($stage)
 $script:gapIdentity=@{Sid='S-1-5-21-1-2-3-1001';IsAdministrator=$true;SessionId=1};$script:complete=$true;$script:aclReads=0
 function Get-InitIdentityContext {$script:gapIdentity}

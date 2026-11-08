@@ -6,6 +6,7 @@ function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Na
 function Reject([scriptblock]$Action,[string]$Expected,[string]$Name){$failure=$null;try{& $Action|Out-Null}catch{$failure=$_};Assert ($failure -and $failure.Exception -isnot [Management.Automation.ParameterBindingException] -and $failure.Exception.Message.Contains($Expected)) ($Name+'; actual='+$failure.Exception.Message)}
 function Clone($v){$v|ConvertTo-Json -Depth 8|ConvertFrom-Json}
 $fixture=Join-Path $env:TEMP ('provision_gaps_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
+$fixture=[IO.Path]::GetFullPath($fixture)
 $identity=Get-InitIdentityContext;Assert ($identity.Sid -and $identity.IsAdministrator -is [bool]) '真實權杖只讀身分查詢，不提權'
 # The SDK does not publish a minimum Server version for this native API.
 # Substitute only the native type compiler boundary; execute the original wrapper twice.
