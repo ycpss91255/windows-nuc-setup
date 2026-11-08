@@ -11,7 +11,7 @@ function Assert-InitProvisioningAsset {param($AssetRoot) if(-not $script:assetVa
 function Save-InitProvisioningState {param($State,$StatePath) $script:saved=$State.Phase}
 function Get-LocalUser {param($SID,$ErrorAction) [pscustomobject]@{Name='fixture';SID=[pscustomobject]@{Value=$state.TargetSid};Enabled=$true}}
 function Get-LocalGroupMember {param($SID,$ErrorAction) [pscustomobject]@{SID=[pscustomobject]@{Value=$state.TargetSid}}}
-function Get-ProvisioningPackage {param($AllInstalledPackages,$LogsDirectoryPath,$ErrorAction) if($script:installed){[pscustomobject]@{IsInstalled=$true;PackageID=$state.PackageId;Version='1.0';PackageName='windows_setup_hide_oobe'}}}
+function Get-ProvisioningPackage {param([switch]$AllInstalledPackages,$LogsDirectoryPath,$ErrorAction) if($script:installed){[pscustomobject]@{IsInstalled=$true;PackageID=$state.PackageId;Version='1.0';PackageName='windows_setup_hide_oobe'}}}
 function Install-ProvisioningPackage {param($PackagePath,[switch]$QuietInstall,$LogsDirectoryPath,$ErrorAction) Assert ($script:saved -eq 'ApplyPending') 'pending state is persisted before package application';$script:calls++;$script:installed=$true;if($script:interrupt){throw 'synthetic interrupted response'}}
 $decline={$script:consents++;return $false}
 Invoke-InitProvisioningApply $state 'unused' 'fixture_assets' $decline
