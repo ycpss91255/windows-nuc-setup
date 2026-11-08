@@ -2,8 +2,8 @@
 # Isolated tests: all Windows language commands are mocked; only temporary report files are written.
 $ErrorActionPreference='Stop'
 $modulePath=Join-Path ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))) 'modules\input\apply_input_method_settings.ps1'
-$body=[IO.File]::ReadAllText($modulePath) -replace '(?im)^#Requires -RunAsAdministrator\s*',''
-$module=[scriptblock]::Create($body)
+. (Join-Path (Split-Path $modulePath -Parent) 'input_method_library.ps1')
+$module={param([switch]$VerifyOnly) Invoke-SetupInputMethodSettings -VerifyOnly:$VerifyOnly}
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('NUC-InputMethod-Test-'+[guid]::NewGuid().ToString('N'))
 $originalProgramData=$env:ProgramData
 $script:assertions=0
@@ -30,7 +30,7 @@ function Set-WinUserLanguageList($LanguageList,[switch]$Force){
 }
 function Get-WinDefaultInputMethodOverride {[pscustomobject]@{InputMethodTip=$script:defaultTip}}
 function Set-WinDefaultInputMethodOverride([string]$InputTip){$script:setDefaultCalls++;$script:defaultTip=$InputTip}
-function Report {Get-Content -LiteralPath (Join-Path $env:ProgramData 'NUC8-Setup\InputMethod-Result.json') -Raw|ConvertFrom-Json}
+function Report {Get-SetupInputMethodState}
 function Run-FailingVerify {
  $caught=$false
  try{& $module -VerifyOnly}catch{$caught=$true}
@@ -56,7 +56,7 @@ try{
  Assert ($script:setListCalls -eq 0 -and (Report).Success) 'already correct languages are not rewritten'
  $script:setDefaultCalls=0
  & $module -VerifyOnly
- Assert ($script:setListCalls -eq 0 -and $script:setDefaultCalls -eq 0 -and (Report).Success) 'valid VerifyOnly is read-only except report'
+ Assert ($script:setListCalls -eq 0 -and $script:setDefaultCalls -eq 0 -and (Report).Success) 'valid VerifyOnly is read-only including report'
  Reset-Case @((Language 'zh-TW' @('zh-tip')))
  Run-FailingVerify
  Assert (-not (Report).EnglishLanguagePresent -and (Report).DefaultInputMethodIsUS) 'correct override alone cannot hide missing en-US'
