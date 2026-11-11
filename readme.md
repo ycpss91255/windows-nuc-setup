@@ -631,6 +631,28 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File script/test/verify_clien
 
 工作流程位於 .github/workflows/windows_tests.yml：使用 windows-2022、Windows PowerShell 5.1、唯讀 contents 權限，設定執行時間上限與併發控制。Action 固定到已核對的 commit。main 推送、版本標籤、Pull Request 與 workflow_dispatch 都可觸發；ci-rollup 統一呈現測試門檻。
 
+### 平行測試與完整證據聚合
+
+原生完整測試與 Go 量測和四片 PowerShell 同時執行。只有聚合工作等齊兩邊，核對本次提交、執行 ID、attempt 與原始檔雜湊後，才在當地量測 C#／CMD，產生完整的整體覆蓋率及正式報告。
+
+```mermaid
+flowchart LR
+  native["原生 All ＋全部 Go 八成"] --> aggregate["同次證據聚合＋C#／CMD＋整體八成"]
+  powershell["PowerShell 完整四片"] --> aggregate
+  aggregate --> gate["需求驗收與 ci-rollup"]
+  docker["Windows Docker 完整測試與負例"] --> gate
+  payload["設定包來源與內容核對"] --> gate
+  gate --> publish["main：Pages／標籤：Release"]
+```
+
+`native-stage-執行ID-attempt` 是不可發布的中介附件，只含明確白名單的原生報告及原始 Go 證據，並標示整體尚未完成；沒有 managed 編譯檔、私有路徑或原始日誌。聚合重新驗證完整 native 測試清單、全部 Go 範圍及每份原始位元組；錯誤來源、不同 attempt、少片或變造都會失敗。只有完整八成門檻通過後，聚合才上傳 `windows-test-reports`，Release 與 Pages 不讀取中介附件。
+
+此分工參考 [PowerShell 的平行測試與最終門檻](https://github.com/PowerShell/PowerShell/blob/638faa6d1d2e0f859a31587c471d85284c26f36f/.github/workflows/windows-ci.yml)及 [Moby 的 Windows producer／artifact consumer](https://github.com/moby/moby/blob/23ea0fa6461ec7455486441ae3a52b1235cdbec0/.github/workflows/.windows.yml)。現有 suite、Docker 完整測試及兩個八成門檻均保留。
+
+CI 工具下載參考 [PowerShell 官方安裝器](https://github.com/PowerShell/PowerShell/blob/638faa6d1d2e0f859a31587c471d85284c26f36f/tools/install-powershell.ps1)，在當次下載內停用 Windows PowerShell 原生進度並恢復偏好；工具解壓使用不輸出進度的 .NET ZIP API，仍先核對官方雜湊並保留開始、完成與耗時訊息。這不影響 `windows.cmd`、Windows Update 或其他產品模組的使用者進度。
+
+[單次同 runner 冷建置量測](https://github.com/ycpss91255/windows_setup/actions/runs/42998017653)的工具建置約 4.0 分鐘，對照 [原始執行](https://github.com/ycpss91255/windows_setup/actions/runs/42985099571)約 29.6 分鐘。這只比較工具建置階段；完整測試與量測仍執行，整輪耗時依正式 Actions 當次結果核對。
+
 ### 自動報表與徽章
 
 CI 使用與 base 相同的 GitHub Actions 原生徽章；整體覆蓋率使用儲存庫自行產生的 flat SVG。Pages 保留簡潔報表，提供測試結論、版本、提交、時間、整體覆蓋率、語言明細，以及 Release、README、Actions 與可下載證據。不依賴 Codecov、Coveralls 或外部報表平台。
@@ -707,7 +729,7 @@ CI 的 `docker-tests` 使用真正的 `windows-2022` runner 執行 Docker build/
 
 每次 CI 將去識別的 HTML／JSON／Markdown／JUnit 與徽章上傳為 windows-test-reports artifact，保留 7 天；原始套件 log 不上傳。 完成的 PowerShell collector 另匯出 powershell-raw-evidence 附件保留 7 天，即使後續整體彙整失敗也可重播原始命令計數；附件只含核對過的相對路徑 JSON／XML，不包含 stdout、Pester 原始 XML 或帶絕對路徑的收集清單。這是分項原始證據，不表示整體覆蓋率門檻通過。另有 requirements-fixture artifact，只含程式明確建立的合成首頁樣本，固定假 SHA、示例執行網址及 Synthetic 環境標記，不含帳密或實機資料，同樣保留 7 天供需求門檻驗證。這份樣本不是正式測試證據，不混入 windows-test-reports、Release 或 Pages。其他測試副本、帳號 answer XML、每機 Reports 與秘密均不上傳。Actions 本身執行 log 的保留天數另由儲存庫設定控制，不是 YAML artifact 保留期。
 
-完整 PowerShell 量測先由四個 Windows 工作平行執行；每片保留全部來源分母，主機重新核對同一提交、執行 ID、attempt、原生測試及 wrapper 雜湊後才聚合。重新量測時，在 Actions 選擇「重新執行所有工作」（Re-run all jobs），讓四片與後續主機驗收都使用新的同一次 attempt；只重跑失敗工作而混用舊片會被拒絕，不會沿用先前的計數補成通過。
+完整 PowerShell 量測由四個 Windows 工作平行執行，原生完整測試與 Go producer 另行同時執行；每片保留全部來源分母，聚合重新核對同一提交、執行 ID、attempt、原生測試及 wrapper 雜湊後才完成。重新量測時，在 Actions 選擇「重新執行所有工作」（Re-run all jobs），讓四片、原生 producer 與聚合使用新的同一次 attempt；只重跑失敗工作而混用舊片會被拒絕，不會沿用先前的計數補成通過。
 
 實機 Setup-Result.json、Setup-Progress.json、Acceptance-Result.json 與驗證結果是續跑或排錯資料，原有 Git 忽略規則保留；CI 不清理這些檔案。設定未完成時不要刪除 Setup-Result.json。
 
