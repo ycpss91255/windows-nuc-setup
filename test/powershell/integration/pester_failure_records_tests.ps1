@@ -7,11 +7,12 @@ $fixture=Join-Path $env:TEMP ('pester_failure_'+[guid]::NewGuid().ToString('N'))
 function Put([string]$Name,[string]$Text){[IO.File]::WriteAllText((Join-Path $fixture $Name),$Text,[Text.UTF8Encoding]::new($true))}
 Put 'source.ps1' 'function Example {return 1}'
 $cases=@(
- @{Name='discovery';Phase='ContainerDiscovery';Text="throw 'PRIVATE-PESTER-FAILURE-SENTINEL'"},
+ @{Name='root_beforeall';Phase='ContainerFailure';Text="BeforeAll {[IO.File]::WriteAllText((Join-Path `$PSScriptRoot 'runtime.marker'),'runtime reached');throw 'PRIVATE-PESTER-FAILURE-SENTINEL'};Describe 'root lifecycle' {It 'not reached' {1|Should-Be 1}}"},
+ @{Name='discovery';Phase='ContainerFailure';Text="throw 'PRIVATE-PESTER-FAILURE-SENTINEL'"},
  @{Name='block';Phase='BlockLifecycle';Text="Describe 'block' {BeforeAll {throw 'PRIVATE-PESTER-FAILURE-SENTINEL'};It 'not reached' {1|Should-Be 1}}"},
  @{Name='teardown';Phase='BlockLifecycle';Text="Describe 'block teardown' {It 'actually passes' {Write-Host '@@ASSERT@@{`"Name`":`"owned teardown fixture executed`",`"Passed`":true}';1|Should-Be 1};AfterAll {throw 'PRIVATE-PESTER-FAILURE-SENTINEL'}}"},
  @{Name='test';Phase='TestRun';Text="Describe 'test' {It 'fails' {throw 'PRIVATE-PESTER-FAILURE-SENTINEL'}}"},
- @{Name='parse';Phase='ContainerDiscovery';Text="Describe 'PRIVATE-PESTER-FAILURE-SENTINEL' {It 'broken' {"}
+ @{Name='parse';Phase='ContainerFailure';Text="Describe 'PRIVATE-PESTER-FAILURE-SENTINEL' {It 'broken' {"}
 )
 foreach($case in $cases){
  $suite=$case.Name+'.Tests.ps1';Put $suite ($case.Text.Replace('PRIVATE-PESTER-FAILURE-SENTINEL','PRIVATE-PESTER-FAILURE-SENTINEL C:\private\secret.txt'))
@@ -23,6 +24,7 @@ foreach($case in $cases){
  $sidecar=Join-Path $output 'worker_0.private.failure.json'
  Assert (Test-Path -LiteralPath $sidecar) ($case.Name+' 原始Pester ErrorRecord必須保存限型別階段，不只collector通用錯誤')
  $record=Get-Content -LiteralPath $sidecar -Raw -Encoding UTF8|ConvertFrom-Json
+ if($case.Name -eq 'root_beforeall'){Assert (Test-Path -LiteralPath (Join-Path $fixture 'runtime.marker')) 'root BeforeAll 已真實執行，容器錯誤不能假稱探索失敗'}
  Assert (@($record.Failures|Where-Object Phase -ceq $case.Phase).Count -gt 0) ($case.Name+' 階段來自真正Pester結果')
  Assert (@($record.Failures|Where-Object {$_.File -ceq $suite -and $_.Line -gt 0}).Count -gt 0) ($case.Name+' 原生例外定位到允許相對來源行')
  if($case.Name -eq 'parse'){Assert (@($record.Failures|Where-Object Type -eq 'ParseException').Count -gt 0) '真實parse例外型別保留，不從message猜階段'}
