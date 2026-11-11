@@ -89,6 +89,8 @@ if($WorkerIndex -ge 0){
  Import-Module -Name $PesterModule -Force
  if((Get-Module Pester).Version.ToString() -cne $version){throw 'Pester 版本不符。'}
  $config=New-PesterConfiguration
+ # 自有安全 suite 不使用此 drive，避免並行初始化共用 HKCU scratch。
+ $config.TestRegistry.Enabled=$false
  $config.Run.Path=@($tests[$WorkerIndex]);$config.Run.RepoRoot=$source;$config.Run.PassThru=$true
  if($wrapper){$config.Run.Path=@();$config.Run.Container=@(New-PesterContainer -Path $wrapper -Data @{SuitePath=$tests[$WorkerIndex];SourceRoot=$source})}
  $config.CodeCoverage.Enabled=$true;$config.CodeCoverage.Path=$sources;$config.CodeCoverage.ExcludeTests=$false
