@@ -11,6 +11,21 @@ import (
 
 func TestGoCoveragePublishedEvidence(t *testing.T) {
 	original := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+	testGoCoveragePublishedEvidence(t, original)
+}
+
+// Both provenance contexts run in ordinary PR CI without recursively spawning Go.
+func TestGoCoveragePublishedEvidenceRefContexts(t *testing.T) {
+	original := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+	for _, ref := range []string{"Branch", "Release"} {
+		t.Run(ref, func(t *testing.T) {
+			testGoCoveragePublishedEvidence(t, synthetic(t, original, true, ref))
+		})
+	}
+}
+
+func testGoCoveragePublishedEvidence(t *testing.T, original map[string][]byte) {
+	t.Helper()
 	// These cases deliberately construct optional historical and required-current states.
 	var historical map[string]any
 	json.Unmarshal(original["summary.json"], &historical)
@@ -32,8 +47,14 @@ func TestGoCoveragePublishedEvidence(t *testing.T) {
 	data["summary.json"], _ = json.Marshal(s)
 	label := "go coverage"
 	value := "80.0%"
+	scope := "go coverage " + strings.ToLower(r.RefType) + ": " + value
+	oppositeRef := "Release"
+	if r.RefType == "Release" {
+		oppositeRef = "Branch"
+	}
+	oppositeScope := "go coverage " + strings.ToLower(oppositeRef) + ": " + value
 	left, right := len(label)*7+12, len(value)*7+12
-	data["go_coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d" aria-label="go coverage branch: 80.0%%"><title>go coverage branch: 80.0%%</title><defs><linearGradient id="s" x2="0" y2="100%%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="r"><rect width="%d" height="20" rx="3" fill="#fff"/></clipPath></defs><g clip-path="url(#r)"><rect width="%d" height="20" fill="#555"/><rect x="%d" width="%d" height="20" fill="#97ca00"/><rect width="%d" height="20" fill="url(#s)"/></g><g fill="#fff" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11" text-anchor="middle"><text x="%d" y="15" fill="#010101" fill-opacity=".3">%s</text><text x="%d" y="14">%s</text><text x="%d" y="15" fill="#010101" fill-opacity=".3">%s</text><text x="%d" y="14">%s</text></g></svg>`, left+right, left+right, left, left, right, left+right, left/2, label, left/2, label, left+right/2, value, left+right/2, value))
+	data["go_coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d" aria-label="%s"><title>%s</title><defs><linearGradient id="s" x2="0" y2="100%%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient><clipPath id="r"><rect width="%d" height="20" rx="3" fill="#fff"/></clipPath></defs><g clip-path="url(#r)"><rect width="%d" height="20" fill="#555"/><rect x="%d" width="%d" height="20" fill="#97ca00"/><rect width="%d" height="20" fill="url(#s)"/></g><g fill="#fff" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11" text-anchor="middle"><text x="%d" y="15" fill="#010101" fill-opacity=".3">%s</text><text x="%d" y="14">%s</text><text x="%d" y="15" fill="#010101" fill-opacity=".3">%s</text><text x="%d" y="14">%s</text></g></svg>`, left+right, scope, scope, left+right, left, left, right, left+right, left/2, label, left/2, label, left+right/2, value, left+right/2, value))
 	goBlock := `<h2>Go 程式敘述覆蓋率</h2><p>80.0% · 8/10 statements；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式。</p><p>PowerShell 覆蓋率：尚未量測</p><a href="go_coverage.json">Go JSON</a><a href="go_coverage.out">Go profile</a>`
 	if r.SchemaVersion == 2 {
 		goBlock = `<details><summary>分項量測明細</summary><p>Go 程式敘述覆蓋率：80.0% · 8/10 statements；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式，不等於整體覆蓋率。</p><a href="go_coverage.json">Go JSON</a><a href="go_coverage.out">Go profile</a></details>`
@@ -52,7 +73,10 @@ func TestGoCoveragePublishedEvidence(t *testing.T) {
 	if e := a.ValidateGoCoverageReport(reader(legacy), owned, r.Commit, r.RunUrl, true); e != nil {
 		t.Fatalf("recorded historical badge must remain valid: %v", e)
 	}
-	for _, change := range [][2]string{{`rx="3"`, `rx="0"`}, {`y="15"`, `y="14"`}, {`#97ca00`, `#4c1`}, {`stop-color="#bbb"`, `stop-color="#fff"`}, {`font-size="11"`, `font-size="12"`}, {`fill-opacity=".3"`, `fill-opacity=".8"`}, {`clip-path="url(#r)"`, `clip-path="url(#bad)"`}, {`aria-label="go coverage branch: 80.0%"`, `aria-label="go coverage release: 80.0%"`}, {`x="44"`, `x="45"`}} {
+	for _, change := range [][2]string{{`rx="3"`, `rx="0"`}, {`y="15"`, `y="14"`}, {`#97ca00`, `#4c1`}, {`stop-color="#bbb"`, `stop-color="#fff"`}, {`font-size="11"`, `font-size="12"`}, {`fill-opacity=".3"`, `fill-opacity=".8"`}, {`clip-path="url(#r)"`, `clip-path="url(#bad)"`}, {`aria-label="` + scope + `"`, `aria-label="` + oppositeScope + `"`}, {`<title>` + scope + `</title>`, `<title>` + oppositeScope + `</title>`}, {`x="44"`, `x="45"`}} {
+		if change[0] == change[1] || !strings.Contains(string(data["go_coverage.svg"]), change[0]) {
+			t.Fatalf("badge mutation must change its target: %v", change)
+		}
 		bad := copyFiles(data)
 		bad["go_coverage.svg"] = []byte(strings.ReplaceAll(string(bad["go_coverage.svg"]), change[0], change[1]))
 		if e := a.ValidateGoCoverageReport(reader(bad), owned, r.Commit, r.RunUrl, true); e == nil {
@@ -62,7 +86,7 @@ func TestGoCoveragePublishedEvidence(t *testing.T) {
 	if _, e = a.ValidateReport(reader(data), r.Commit, r.RunUrl, false); e != nil {
 		t.Fatalf("full report must consume attached coverage: %v", e)
 	}
-	for _, kind := range []string{"missing", "badge_percent", "summary_disagrees", "stale_run", "profile_hash", "missing_json", "missing_profile", "missing_svg", "bad_svg_namespace", "bad_sidecar_json", "bad_summary_json", "release_attachment", "missing_visible_go", "hidden_go", "html_fraction", "md_percent", "profile_link"} {
+	for _, kind := range []string{"missing", "badge_percent", "summary_disagrees", "stale_run", "profile_hash", "missing_json", "missing_profile", "missing_svg", "bad_svg_namespace", "bad_sidecar_json", "bad_summary_json", "ref_type_mismatch", "missing_visible_go", "hidden_go", "html_fraction", "md_percent", "profile_link"} {
 		t.Run(kind, func(t *testing.T) {
 			m := copyFiles(data)
 			run := r.RunUrl
@@ -89,10 +113,10 @@ func TestGoCoveragePublishedEvidence(t *testing.T) {
 				m["go_coverage.json"] = []byte(`{`)
 			case "bad_summary_json":
 				m["summary.json"] = []byte(`{`)
-			case "release_attachment":
+			case "ref_type_mismatch":
 				var q map[string]any
 				json.Unmarshal(m["summary.json"], &q)
-				q["RefType"] = "Release"
+				q["RefType"] = oppositeRef
 				m["summary.json"], _ = json.Marshal(q)
 			case "missing":
 				m = original
