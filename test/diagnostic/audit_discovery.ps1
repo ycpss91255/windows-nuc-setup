@@ -50,6 +50,7 @@ $identity=[ordered]@{Commit=$env:GITHUB_SHA;BaseMain='0d1e35266f29eec83067bda9c1
 # Only this fresh owned output is archived. No environment dump, checkout,
 # parent TEMP directories, credentials, or secrets are read into the archive.
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+Add-Type -AssemblyName System.IO.Compression
 $zip=Join-Path $env:RUNNER_TEMP ('audit-discovery-'+[guid]::NewGuid().ToString('N')+'.zip')
 $zipStream=[IO.File]::Open($zip,[IO.FileMode]::CreateNew)
 $archive=[IO.Compression.ZipArchive]::new($zipStream,[IO.Compression.ZipArchiveMode]::Create)
