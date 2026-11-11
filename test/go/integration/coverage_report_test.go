@@ -11,6 +11,21 @@ import (
 
 func TestGoCoveragePublishedEvidence(t *testing.T) {
 	original := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+	testGoCoveragePublishedEvidence(t, original)
+}
+
+// Both provenance contexts run in ordinary PR CI without recursively spawning Go.
+func TestGoCoveragePublishedEvidenceRefContexts(t *testing.T) {
+	original := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+	for _, ref := range []string{"Branch", "Release"} {
+		t.Run(ref, func(t *testing.T) {
+			testGoCoveragePublishedEvidence(t, synthetic(t, original, true, ref))
+		})
+	}
+}
+
+func testGoCoveragePublishedEvidence(t *testing.T, original map[string][]byte) {
+	t.Helper()
 	// These cases deliberately construct optional historical and required-current states.
 	var historical map[string]any
 	json.Unmarshal(original["summary.json"], &historical)
