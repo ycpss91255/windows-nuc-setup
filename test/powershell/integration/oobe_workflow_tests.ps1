@@ -6,7 +6,9 @@ $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 $rollup=[regex]::Match($workflow,'(?ms)^  ci-rollup:\r?\n(?<body>.*?)^  release:').Groups['body'].Value
 $scriptText=([regex]::Match($rollup,'(?ms)        run: \|\r?\n(?<body>.*)$').Groups['body'].Value -replace '(?m)^          ','').Trim()
-$env:TEST_RESULT='success';$env:REQUIREMENTS_RESULT='success';$env:DOCKER_RESULT='success';$env:POWERSHELL_COVERAGE_RESULT='success';$env:OOBE_PAYLOAD_RESULT='failure'
+$priorCoverageResult=$env:COVERAGE_RESULT
+try {
+$env:TEST_RESULT='success';$env:REQUIREMENTS_RESULT='success';$env:DOCKER_RESULT='success';$env:POWERSHELL_COVERAGE_RESULT='success';$env:OOBE_PAYLOAD_RESULT='failure';$env:COVERAGE_RESULT='success'
 $rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
 Assert $rejected 'actual ci-rollup rejects failed OOBE package content inspection'
 $env:OOBE_PAYLOAD_RESULT='success'
@@ -16,6 +18,12 @@ $env:POWERSHELL_COVERAGE_RESULT='failure'
 $rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
 Assert $rejected 'actual ci-rollup rejects failed or incomplete PowerShell shard matrix'
 $env:POWERSHELL_COVERAGE_RESULT='success'
+foreach($state in @('failure','cancelled','skipped','')){
+ $env:COVERAGE_RESULT=$state;$rejected=$false
+ try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
+ Assert $rejected ('actual ci-rollup rejects incomplete final coverage aggregation: '+$state)
+}
+}finally{$env:COVERAGE_RESULT=$priorCoverageResult}
 $job=[regex]::Match($workflow,'(?ms)^  oobe_payload_inspection:\r?\n(?<body>.*?)(?=^  [a-z][a-z_-]+:)').Groups['body'].Value
 Assert ($job -match 'runs-on: windows-2022' -and $job -notmatch '(?m)^    needs:') 'payload inspection runs independently on Windows'
 Assert ($job.Contains('verify_oobe_payload.ps1') -and $job.Contains('payload_baseline.json') -and $job.Contains('if: always()') -and $job.Contains('retention-days: 7')) 'CI invokes real reader with reviewed baseline and preserves failure evidence seven days'
