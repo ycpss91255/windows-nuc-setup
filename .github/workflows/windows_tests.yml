@@ -120,7 +120,6 @@ jobs:
           if-no-files-found: error
 
   isolated-tests:
-    needs: [powershell-coverage]
     runs-on: windows-2022
     timeout-minutes: 90
     defaults:
@@ -171,10 +170,71 @@ jobs:
           WINDOWS_SETUP_PORTAL_FIXTURE_DIR: ${{ runner.temp }}/requirements-fixture/portal
         run: |
           & .\script\test\measure_go_coverage.ps1 -SourceRoot $PWD.Path -ReportDirectory $env:WINDOWS_SETUP_ARTIFACT_DIR -OutputDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage')
+      - name: 封裝尚未完成整體覆蓋率的原生與 Go 證據
+        run: |
+          . .\script\test\ci_tasks.ps1
+          Invoke-CINative -File go.exe -Arguments @('run','./script/test/repo_coverage_tool','native-stage-pack','--source-root',$PWD.Path,'--report-dir',(Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public'),'--go-dir',(Join-Path $env:RUNNER_TEMP 'go-coverage'),'--output-dir',(Join-Path $env:RUNNER_TEMP 'native-stage'),'--expected-sha',$env:GITHUB_SHA,'--expected-run-url',("https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"),'--run-attempt',$env:GITHUB_RUN_ATTEMPT)
+      - name: 僅保留不可發布的同次原生中介證據七天
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-stage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-stage/
+          retention-days: 7
+          if-no-files-found: error
+      - name: 保留獨立 Go 覆蓋率證據七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/go-coverage/
+          retention-days: 7
+          if-no-files-found: error
+      - name: 保留合成驗收樣本七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: requirements-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/requirements-fixture/portal/
+          retention-days: 7
+          if-no-files-found: error
+  coverage-aggregation:
+    name: 同次完整覆蓋率聚合
+    needs: [isolated-tests, powershell-coverage]
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: 取得相同量測來源
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 準備固定 Go 證據工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 準備本次 managed 量測編譯器
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: '10.0.300'
+          cache: false
+      - name: 下載同次與同 attempt 的原生中介證據
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: native-stage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-stage-input
+      - name: 先核對原位元組身分與未完成狀態才還原
+        run: |
+          . .\script\test\ci_tasks.ps1
+          Invoke-CINative -File go.exe -Arguments @('run','./script/test/repo_coverage_tool','native-stage-restore','--source-root',$PWD.Path,'--input-dir',(Join-Path $env:RUNNER_TEMP 'native-stage-input'),'--output-dir',(Join-Path $env:RUNNER_TEMP 'native-stage-import'),'--expected-sha',$env:GITHUB_SHA,'--expected-run-url',("https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"),'--run-attempt',$env:GITHUB_RUN_ATTEMPT)
       - name: 附加分項 Go 證據
         run: |
-          & .\script\test\attach_go_coverage.ps1 -PublicDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public') -CoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage') -PreparingRelease:($env:GITHUB_REF_TYPE -eq 'tag')
-      - name: 量測 managed 原生程式的完整計數點
+          & .\script\test\attach_go_coverage.ps1 -PublicDirectory (Join-Path $env:RUNNER_TEMP 'native-stage-import/report') -CoverageDirectory (Join-Path $env:RUNNER_TEMP 'native-stage-import/go') -PreparingRelease:($env:GITHUB_REF_TYPE -eq 'tag')
+      - name: 當地量測 managed 原生程式完整計數點
         run: |
           & .\script\test\managed_coverage.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'managed-coverage')
       - name: 下載同次與同 attempt 的完整 PowerShell 四片
@@ -185,7 +245,7 @@ jobs:
           merge-multiple: false
       - name: 收集四語言整體覆蓋率並強制完整八成
         run: |
-          & .\script\test\run_repo_coverage.ps1 -SourceRoot $PWD.Path -PublicDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results/public') -GoCoverageDirectory (Join-Path $env:RUNNER_TEMP 'go-coverage') -ManagedEvidencePath (Join-Path $env:RUNNER_TEMP 'managed-coverage/evidence.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'repo-coverage') -PowerShellShardDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shards') -RunAttempt ([int]$env:GITHUB_RUN_ATTEMPT)
+          & .\script\test\run_repo_coverage.ps1 -SourceRoot $PWD.Path -PublicDirectory (Join-Path $env:RUNNER_TEMP 'native-stage-import/report') -GoCoverageDirectory (Join-Path $env:RUNNER_TEMP 'native-stage-import/go') -ManagedEvidencePath (Join-Path $env:RUNNER_TEMP 'managed-coverage/evidence.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'repo-coverage') -PowerShellShardDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shards') -RunAttempt ([int]$env:GITHUB_RUN_ATTEMPT)
       - name: 短期保留去識別整體證據七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -210,35 +270,18 @@ jobs:
           path: ${{ runner.temp }}/powershell-raw-public/
           retention-days: 7
           if-no-files-found: ignore
-      - name: 保留獨立 Go 覆蓋率證據七天
-        if: always()
+      - name: 僅發布完整八成通過的正式測試報告
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: go-coverage-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/go-coverage/
-          retention-days: 7
-          if-no-files-found: error
-      - name: 保留合成驗收樣本七天
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: requirements-fixture-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/requirements-fixture/portal/
-          retention-days: 7
-          if-no-files-found: error
-      - name: 測試報告短期保留七天
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/NUC-CI-Results/public/
+          path: ${{ runner.temp }}/native-stage-import/report/
           retention-days: 7
-          if-no-files-found: warn
+          if-no-files-found: error
 
   requirements-gate:
     name: requirements-gate
-    if: always() && needs.isolated-tests.result != 'cancelled'
-    needs: [isolated-tests]
+    if: always() && needs.coverage-aggregation.result != 'cancelled'
+    needs: [coverage-aggregation]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -336,7 +379,7 @@ jobs:
   ci-rollup:
     name: ci-rollup
     if: always()
-    needs: [isolated-tests, requirements-gate, docker-tests, oobe_payload_inspection, powershell-coverage]
+    needs: [isolated-tests, requirements-gate, docker-tests, oobe_payload_inspection, powershell-coverage, coverage-aggregation]
     runs-on: windows-2022
     timeout-minutes: 5
     steps:
@@ -352,9 +395,10 @@ jobs:
           DOCKER_RESULT: ${{ needs.docker-tests.result }}
           OOBE_PAYLOAD_RESULT: ${{ needs.oobe_payload_inspection.result }}
           POWERSHELL_COVERAGE_RESULT: ${{ needs.powershell-coverage.result }}
+          COVERAGE_RESULT: ${{ needs.coverage-aggregation.result }}
         run: |
           . .\script\test\ci_tasks.ps1
-          Assert-CIResults @{Tests=$env:TEST_RESULT;Requirements=$env:REQUIREMENTS_RESULT;Docker=$env:DOCKER_RESULT;Payload=$env:OOBE_PAYLOAD_RESULT;PowerShellCoverage=$env:POWERSHELL_COVERAGE_RESULT}
+          Assert-CIResults @{Tests=$env:TEST_RESULT;Requirements=$env:REQUIREMENTS_RESULT;Docker=$env:DOCKER_RESULT;Payload=$env:OOBE_PAYLOAD_RESULT;PowerShellCoverage=$env:POWERSHELL_COVERAGE_RESULT;Coverage=$env:COVERAGE_RESULT}
 
   release:
     name: 發布 GitHub 來源版本
@@ -413,7 +457,7 @@ jobs:
   build-portal:
     name: 建立 main 與不可變版本品質索引
     if: always() && needs.ci-rollup.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
-    needs: [isolated-tests, requirements-gate, docker-tests, release, ci-rollup]
+    needs: [coverage-aggregation, requirements-gate, docker-tests, release, ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 15
     permissions:

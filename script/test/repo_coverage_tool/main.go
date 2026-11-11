@@ -15,6 +15,8 @@ import (
 func run(args []string, out io.Writer) error {
 	if len(args) > 0 {
 		switch args[0] {
+		case "native-stage-pack", "native-stage-restore":
+			return nativeStage(args[0], args[1:], out)
 		case "powershell-shard-plan":
 			return powershellShardPlan(args[1:], out)
 		case "powershell-shard-pack":
