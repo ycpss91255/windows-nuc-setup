@@ -6,18 +6,12 @@ function Assert([bool]$Passed,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$N
 $fixture=Join-Path $env:TEMP ('container_progress_'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($fixture)
 $previousProgress=$ProgressPreference
-$script:downloadPreferences=@();$script:extractionPreferences=@();$script:failDownload=$false;$script:failExtraction=$false
+$script:downloadPreferences=@();$script:failDownload=$false
 function Invoke-WebRequest {
  param($Uri,$OutFile,[switch]$UseBasicParsing,$ErrorAction,$TimeoutSec)
  $script:downloadPreferences+=@([string]$ProgressPreference)
  [IO.File]::WriteAllText($OutFile,'owned verified fixture')
  if($script:failDownload){throw 'owned download failure'}
-}
-function Expand-Archive {
- param($LiteralPath,$DestinationPath)
- $script:extractionPreferences+=@([string]$ProgressPreference)
- if($script:failExtraction){throw 'owned extraction failure'}
- [IO.File]::WriteAllText((Join-Path $fixture 'extracted.marker'),$DestinationPath)
 }
 try {
  foreach($initial in @('Continue','Stop')){
@@ -32,24 +26,8 @@ try {
   Assert (@(Get-ChildItem -LiteralPath $fixture -Filter '*.partial' -File).Count -eq 0) '下載失敗不留下半檔'
   $script:failDownload=$false
  }
- Assert ([bool](Get-Command Expand-ContainerToolArchive -ErrorAction SilentlyContinue)) '工具解壓具有局部進度範圍'
- foreach($initial in @('Continue','Stop')){
-  $ProgressPreference=$initial
-  Expand-ContainerToolArchive -LiteralPath (Join-Path $fixture 'Continue.zip') -DestinationPath $fixture
-  Assert ($script:extractionPreferences[-1] -ceq 'SilentlyContinue' -and [string]$ProgressPreference -ceq $initial) '工具解壓成功只抑制當次原生進度'
-  $script:failExtraction=$true;$message=''
-  try{Expand-ContainerToolArchive -LiteralPath (Join-Path $fixture 'Continue.zip') -DestinationPath $fixture}catch{$message=$_.Exception.Message}
-  Assert ($message -ceq 'owned extraction failure' -and $script:extractionPreferences[-1] -ceq 'SilentlyContinue' -and [string]$ProgressPreference -ceq $initial) '解壓失敗不吞錯且恢復呼叫端進度偏好'
-  $script:failExtraction=$false
- }
- . (Join-Path $root 'script/docker/install_managed_tools.ps1')
- $artifact=[pscustomobject]@{Name='managed.zip';Uri='https://example.invalid/owned.zip';Algorithm='SHA256';Hash=(Get-FileHash -LiteralPath (Join-Path $fixture 'Continue.zip')).Hash;Kind='Zip'}
- $count=$script:extractionPreferences.Count
- Install-ContainerToolArtifact -Artifact $artifact -Destination $fixture -ArchiveDirectory (Join-Path $fixture 'archives')
- Assert ($script:extractionPreferences.Count -eq $count+1 -and $script:extractionPreferences[-1] -ceq 'SilentlyContinue') '正式 managed 安裝器經真實雜湊驗證後使用局部解壓範圍'
- $artifact.Hash='0'*64;$message='';$count=$script:extractionPreferences.Count
- try{Install-ContainerToolArtifact -Artifact $artifact -Destination $fixture -ArchiveDirectory (Join-Path $fixture 'archives')}catch{$message=$_.Exception.Message}
- Assert ($message -like '*digest mismatch*' -and $script:extractionPreferences.Count -eq $count) '錯誤雜湊仍在解壓前拒絕'
+ # Real archive/module behavior, including failed extraction and hash gating,
+ # is covered in container_archive_tests.ps1 rather than a scope-sharing mock.
 } finally {
  $ProgressPreference=$previousProgress
 }
