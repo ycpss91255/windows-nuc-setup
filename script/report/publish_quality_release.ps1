@@ -37,7 +37,7 @@ $existing=& gh api --paginate ('repos/'+$Repository+'/releases?per_page=100') --
 if($LASTEXITCODE -ne 0){throw '無法確認既有版本。'}
 $attachments=@($quality,$manifestPath)+@($files|Where-Object {$_ -ne 'summary.json'}|ForEach-Object {Join-Path $PublicDirectory $_})
 $driverAssets=@(Get-ReleaseDriverAssets -Path $DriverAssetManifestPath -Version $Version)
-$qualityAssets=@($attachments|ForEach-Object {[pscustomobject]@{Name=[IO.Path]::GetFileName($_);SHA256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant();Size=$null}})
+$qualityAssets=@($attachments|ForEach-Object {[pscustomobject]@{Name=[IO.Path]::GetFileName($_);SHA256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant();Size=(Get-Item -LiteralPath $_).Length}})
 $expectedAssets=@($driverAssets)+$qualityAssets
 $notes=[IO.File]::ReadAllText($NotesPath,[Text.UTF8Encoding]::new($false,$true))
 if($driverAssets.Count){
