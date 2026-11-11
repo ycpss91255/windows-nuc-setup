@@ -48,9 +48,8 @@ function Invoke-ContainerOfficialDownload {
 }
 function Expand-ContainerToolArchive {
  param([Parameter(Mandatory=$true)][string]$LiteralPath,[Parameter(Mandatory=$true)][string]$DestinationPath)
- $previousProgress=$ProgressPreference
- try{
-  $ProgressPreference='SilentlyContinue'
-  Expand-Archive -LiteralPath $LiteralPath -DestinationPath $DestinationPath
- }finally{$ProgressPreference=$previousProgress}
+ # Archive's module scope does not inherit a caller's local progress preference.
+ # The native API emits no progress and refuses traversal and existing files.
+ Add-Type -AssemblyName System.IO.Compression.FileSystem
+ [IO.Compression.ZipFile]::ExtractToDirectory($LiteralPath,$DestinationPath)
 }

@@ -26,6 +26,32 @@ try {
   Assert (@(Get-ChildItem -LiteralPath $fixture -Filter '*.partial' -File).Count -eq 0) '下載失敗不留下半檔'
   $script:failDownload=$false
  }
+ # A real binary Cmdlet's WriteProgress uses PowerShell's command runtime,
+ # unlike the dynamic scope of the HTTP function fixture above.
+ Remove-Item Function:/Invoke-WebRequest
+ $modulePath=Join-Path $fixture 'owned_progress.dll'
+ Add-Type -OutputAssembly $modulePath -OutputType Library -ReferencedAssemblies ([PSObject].Assembly.Location) -TypeDefinition @'
+using System.IO;
+using System.Management.Automation;
+[Cmdlet("Invoke", "WebRequest")]
+public class OwnedProgressDownload : Cmdlet {
+ [Parameter] public string Uri { get; set; }
+ [Parameter] public string OutFile { get; set; }
+ [Parameter] public SwitchParameter UseBasicParsing { get; set; }
+ [Parameter] public int TimeoutSec { get; set; }
+ protected override void ProcessRecord() {
+  WriteProgress(new ProgressRecord(1, "owned binary fixture", "one progress record"));
+  File.WriteAllText(OutFile, "owned binary bytes");
+ }
+}
+'@
+ Import-Module -Name $modulePath -Force
+ $ProgressPreference='Stop';$failed=$false
+ try{Invoke-WebRequest -Uri 'https://example.invalid/owned.zip' -OutFile (Join-Path $fixture 'direct.bin')}catch{$failed=$true}
+ Assert $failed '真實 binary Cmdlet 在未抑制的 Stop 偏好下會拒絕原生進度'
+ $binaryTarget=Join-Path $fixture 'binary.zip'
+ Invoke-ContainerOfficialDownload -Uri 'https://example.invalid/owned.zip' -OutFile $binaryTarget
+ Assert ([IO.File]::ReadAllText($binaryTarget) -ceq 'owned binary bytes' -and [string]$ProgressPreference -ceq 'Stop') '下載範圍確實抑制 binary Cmdlet 原生進度且還原呼叫端偏好'
  # Real archive/module behavior, including failed extraction and hash gating,
  # is covered in container_archive_tests.ps1 rather than a scope-sharing mock.
 } finally {

@@ -15,7 +15,7 @@ $payload=Join-Path $temp 'fixture.zip';[IO.File]::WriteAllText($payload,'safe fa
 $pin=[pscustomobject]@{Name='fixture.zip';Uri='https://example.invalid/fixture.zip';Algorithm='SHA256';Hash=(Get-FileHash $payload).Hash;Kind='Zip'}
 function Invoke-WebRequest {param($Uri,$OutFile,[switch]$UseBasicParsing,$ErrorAction) Copy-Item -LiteralPath $payload -Destination $OutFile}
 $script:expanded=0
-function Expand-Archive {param($LiteralPath,$DestinationPath) $script:expanded++;[void][IO.Directory]::CreateDirectory($DestinationPath);[IO.File]::WriteAllText((Join-Path $DestinationPath 'ready.txt'),'expanded')}
+function Expand-ContainerToolArchive {param($LiteralPath,$DestinationPath) $script:expanded++;[void][IO.Directory]::CreateDirectory($DestinationPath);[IO.File]::WriteAllText((Join-Path $DestinationPath 'ready.txt'),'expanded')}
 $destination=Join-Path $temp 'tool';$archives=Join-Path $temp 'downloads'
 Install-ContainerToolArtifact -Artifact $pin -Destination $destination -ArchiveDirectory $archives
 Assert ($script:expanded -eq 1 -and (Test-Path (Join-Path $destination 'ready.txt'))) 'verified archive reaches extraction only after a matching real digest'
@@ -25,7 +25,7 @@ Assert ($failed -and $script:expanded -eq 1 -and -not(Test-Path (Join-Path $temp
 $pin.Hash=(Get-FileHash $payload).Hash;$pin.Kind='File';$target=Join-Path $temp 'cache/native.nupkg'
 Install-ContainerToolArtifact -Artifact $pin -Destination $target -ArchiveDirectory $archives
 Assert ((Get-FileHash $target).Hash -eq $pin.Hash -and $script:expanded -eq 1) 'offline package bytes are preserved without archive mutation'
-Remove-Item Function:/Invoke-WebRequest,Function:/Expand-Archive
+Remove-Item Function:/Invoke-WebRequest,Function:/Expand-ContainerToolArchive
 . (Join-Path $root 'script/test/ci_tasks.ps1')
 $script:lookups=@();$script:invocations=@()
 function Get-Command {param($Name,$CommandType,$ErrorAction) $script:lookups+=@($Name);[pscustomobject]@{Name=$Name}}

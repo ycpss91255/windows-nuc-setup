@@ -28,6 +28,10 @@ try {
  $literalDestination=Join-Path $fixture 'literal_output'
  Expand-ContainerToolArchive -LiteralPath $literalArchive -DestinationPath $literalDestination
  Assert ([IO.File]::ReadAllText((Join-Path $literalDestination 'owned.txt')) -ceq 'owned native archive bytes') '中括號 ZIP 名稱以完整字面路徑解壓'
+ $existingDestination=Join-Path $fixture 'existing_root';[void][IO.Directory]::CreateDirectory($existingDestination)
+ [IO.File]::WriteAllText((Join-Path $existingDestination 'keep.txt'),'existing unrelated bytes')
+ Expand-ContainerToolArchive -LiteralPath $archive -DestinationPath $existingDestination
+ Assert ([IO.File]::ReadAllText((Join-Path $existingDestination 'owned.txt')) -ceq 'owned native archive bytes' -and [IO.File]::ReadAllText((Join-Path $existingDestination 'keep.txt')) -ceq 'existing unrelated bytes') '既有安裝根目錄可加入新檔且保留無關內容'
  $corrupt=Join-Path $fixture 'corrupt.zip';[IO.File]::WriteAllText($corrupt,'not a zip')
  $failed=$false
  try{Expand-ContainerToolArchive -LiteralPath $corrupt -DestinationPath (Join-Path $fixture 'corrupt_output')}catch{$failed=$true}
@@ -38,8 +42,14 @@ try {
  $failed=$false
  try{Expand-ContainerToolArchive -LiteralPath $escape -DestinationPath (Join-Path $fixture 'bounded_output')}catch{$failed=$true}
  Assert ($failed -and -not [IO.File]::Exists((Join-Path $fixture 'escaped.txt'))) 'ZIP 上層穿越被拒絕且不寫出目的地'
+ $duplicate=Join-Path $fixture 'duplicate.zip';$zip=[IO.Compression.ZipFile]::Open($duplicate,[IO.Compression.ZipArchiveMode]::Create)
+ try{foreach($bytes in @('first entry','second entry')){$entry=$zip.CreateEntry('same.txt');$writer=[IO.StreamWriter]::new($entry.Open());try{$writer.Write($bytes)}finally{$writer.Dispose()}}}finally{$zip.Dispose()}
+ $duplicateDestination=Join-Path $fixture 'duplicate_output';$failed=$false
+ try{Expand-ContainerToolArchive -LiteralPath $duplicate -DestinationPath $duplicateDestination}catch{$failed=$true}
+ Assert ($failed -and [IO.File]::ReadAllText((Join-Path $duplicateDestination 'same.txt')) -ceq 'first entry') 'ZIP 重複檔名失敗且不能覆寫首筆內容'
  . (Join-Path $root 'script/docker/install_managed_tools.ps1')
- function Invoke-WebRequest {param($Uri,$OutFile,[switch]$UseBasicParsing,$ErrorAction,$TimeoutSec);[IO.File]::Copy($archive,$OutFile)}
+ $script:ownedArchive=$archive
+ function Invoke-WebRequest {param($Uri,$OutFile,[switch]$UseBasicParsing,$ErrorAction,$TimeoutSec);[IO.File]::Copy($script:ownedArchive,$OutFile)}
  $artifact=[pscustomobject]@{Name='managed.zip';Uri='https://example.invalid/owned.zip';Algorithm='SHA256';Hash=(Get-FileHash -LiteralPath $archive).Hash;Kind='Zip'}
  $destination=Join-Path $fixture 'managed';$downloads=Join-Path $fixture 'downloads'
  Install-ContainerToolArtifact -Artifact $artifact -Destination $destination -ArchiveDirectory $downloads
