@@ -19,42 +19,57 @@ $quality=Join-Path $PublicDirectory 'quality.json';Copy-Item -LiteralPath (Join-
 $manifest=[ordered]@{SchemaVersion=$snapshot.SchemaVersion;Version=$Version;Commit=$Commit;MeasuredAt=$snapshot.MeasuredAt;RunUrl=$snapshot.RunUrl;SnapshotSHA256=(Get-FileHash $quality).Hash.ToLowerInvariant();Files=$hashes}
 $manifestPath=Join-Path $PublicDirectory 'quality-manifest.json'
 [IO.File]::WriteAllText($manifestPath,($manifest|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
+function Set-SelectedRelease([long]$Id,$Payload) {
+ $path=Join-Path ([IO.Path]::GetTempPath()) ('release_patch_'+[guid]::NewGuid().ToString('N')+'.json')
+ try {
+  [IO.File]::WriteAllText($path,($Payload|ConvertTo-Json -Compress -Depth 8),[Text.UTF8Encoding]::new($false))
+  & gh api ('repos/'+$Repository+'/releases/'+$Id) --method PATCH --input $path | Out-Null
+  if($LASTEXITCODE -ne 0){throw '更新選定草稿失敗。'}
+ } finally {Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue}
+}
+function Assert-SelectedContent($Draft,[string]$Body,[object[]]$Assets) {
+ if($Draft.prerelease -isnot [bool] -or $Draft.prerelease -cne [bool]$Prerelease -or $Draft.target_commitish -cne $Commit -or $Draft.name -cne $Version -or $Draft.body -isnot [string] -or $Draft.body -cne $Body){throw '草稿內容或來源不符。'}
+ Assert-ReleaseAssetSet $Draft.assets $Assets
+}
+$tagCommit=& gh api ('repos/'+$Repository+'/commits/'+$Version) --jq '.sha'
+if($LASTEXITCODE -ne 0 -or $tagCommit -cne $Commit){throw '標籤來源 SHA 不符。'}
 $existing=& gh api --paginate ('repos/'+$Repository+'/releases?per_page=100') --jq '.[].tag_name'
 if($LASTEXITCODE -ne 0){throw '無法確認既有版本。'}
 $attachments=@($quality,$manifestPath)+@($files|Where-Object {$_ -ne 'summary.json'}|ForEach-Object {Join-Path $PublicDirectory $_})
 $driverAssets=@(Get-ReleaseDriverAssets -Path $DriverAssetManifestPath -Version $Version)
 $qualityAssets=@($attachments|ForEach-Object {[pscustomobject]@{Name=[IO.Path]::GetFileName($_);SHA256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant();Size=$null}})
 $expectedAssets=@($driverAssets)+$qualityAssets
+$notes=[IO.File]::ReadAllText($NotesPath,[Text.UTF8Encoding]::new($false,$true))
 if($driverAssets.Count){
- if($existing -cnotcontains $Version){throw '此版本必須先完成獨立驅動草稿，未建立空白發布。'}
- $tagCommit=& gh api ('repos/'+$Repository+'/commits/'+$Version) --jq '.sha'
- if($LASTEXITCODE -ne 0 -or $tagCommit -cne $Commit){throw '驅動草稿標籤來源 SHA 不符。'}
- $draft=(& gh api ('repos/'+$Repository+'/releases/tags/'+$Version))|ConvertFrom-Json
- if($LASTEXITCODE -ne 0){throw '無法取得驅動草稿。'}
+ if($existing -cnotcontains $Version){throw '此版本必須先完成獨立驅動草稿。'}
+ $draft=Get-ReleaseDraftByTag -Repository $Repository -Version $Version
+ $selectedId=[long]$draft.id
  Assert-ReleaseDriverDraft $draft $Version $Commit $DriverAssetManifestPath $driverAssets
- & gh release upload $Version --repo $Repository @attachments
- if($LASTEXITCODE -ne 0){throw '品質附件上傳失敗，保留未發布草稿，不覆寫。'}
- $draft=(& gh api ('repos/'+$Repository+'/releases/tags/'+$Version))|ConvertFrom-Json
- if($LASTEXITCODE -ne 0){throw '上傳後驅動草稿無法讀回。'}
+ foreach($attachment in $attachments){
+  $name=[uri]::EscapeDataString([IO.Path]::GetFileName($attachment))
+  & gh api ('https://uploads.github.com/repos/'+$Repository+'/releases/'+$selectedId+'/assets?name='+$name) --method POST -H 'Content-Type: application/octet-stream' --input $attachment | Out-Null
+  if($LASTEXITCODE -ne 0){throw '品質附件上傳失敗，保留未發布草稿。'}
+ }
+ $draft=Get-ReleaseDraftByTag -Repository $Repository -Version $Version -ExpectedId $selectedId
  Assert-ReleaseDriverDraft $draft $Version $Commit $DriverAssetManifestPath $expectedAssets
- & gh release edit $Version --repo $Repository --notes-file $NotesPath --title $Version
- if($LASTEXITCODE -ne 0){throw '正式版本說明設定失敗，未發布。'}
 }else{
  if($existing -ccontains $Version){throw '版本已存在；不覆寫或重用草稿。'}
- $ghArguments=@('release','create',$Version,'--repo',$Repository,'--verify-tag','--draft','--title',$Version,'--notes-file',$NotesPath)
+ $ghArguments=@('release','create',$Version,'--repo',$Repository,'--verify-tag','--target',$Commit,'--draft','--title',$Version,'--notes-file',$NotesPath)
  if($Prerelease){$ghArguments+=@('--prerelease','--latest=false')}
  $ghArguments+=$attachments
  & gh @ghArguments
  if($LASTEXITCODE -ne 0){throw '草稿或附件建立失敗，未發布。'}
- $draft=(& gh release view $Version --repo $Repository --json assets,isDraft)|ConvertFrom-Json
- if($LASTEXITCODE -ne 0 -or -not $draft.isDraft){throw '草稿狀態不符，未發布。'}
- Assert-ReleaseAssetSet $draft.assets $expectedAssets
+ $draft=Get-ReleaseDraftByTag -Repository $Repository -Version $Version
+ $selectedId=[long]$draft.id
+ Assert-SelectedContent $draft $notes $expectedAssets
 }
+Set-SelectedRelease $selectedId ([ordered]@{name=$Version;body=$notes})
+$draft=Get-ReleaseDraftByTag -Repository $Repository -Version $Version -ExpectedId $selectedId
+Assert-SelectedContent $draft $notes $expectedAssets
 # Publishing last locks the completed attachment set when immutability is enabled.
-& gh release edit $Version --repo $Repository --draft=false
-if($LASTEXITCODE -ne 0){throw '草稿發布失敗；保留草稿供查核，不自動覆寫。'}
+Set-SelectedRelease $selectedId ([ordered]@{draft=$false})
 $published=(& gh api ('repos/'+$Repository+'/releases/tags/'+$Version))|ConvertFrom-Json
-if($LASTEXITCODE -ne 0 -or $published.immutable -isnot [bool] -or $published.immutable -cne $true -or $published.draft -isnot [bool] -or $published.draft -cne $false -or $published.tag_name -cne $Version){throw '已發布版本未鎖定或版本／草稿狀態不符，不能宣稱永久證據鎖定。'}
+if($LASTEXITCODE -ne 0 -or ($published.id -isnot [int] -and $published.id -isnot [long]) -or $published.id -ne $selectedId -or $published.immutable -isnot [bool] -or $published.immutable -cne $true -or $published.draft -isnot [bool] -or $published.draft -cne $false -or $published.tag_name -cne $Version){throw '已發布版本 ID、鎖定或狀態不符。'}
 $tagCommit=& gh api ('repos/'+$Repository+'/commits/'+$Version) --jq '.sha'
 if($LASTEXITCODE -ne 0 -or $tagCommit -cne $Commit){throw '發布後標籤來源 SHA 不符。'}
 Assert-ReleaseAssetSet $published.assets $expectedAssets
