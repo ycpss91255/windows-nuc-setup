@@ -12,6 +12,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: 先確認原生退出碼零與二十三都如實保留
+        shell: powershell
+        run: .\test\diagnostic\audit_discovery.ps1 -NativeSelfTest
       - name: 原始雙 worker 僅輸出加密診斷
         shell: powershell
         run: .\test\diagnostic\audit_discovery.ps1
