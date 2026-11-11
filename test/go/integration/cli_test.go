@@ -54,7 +54,7 @@ func TestCLICommands(t *testing.T) {
 		}
 	})
 	t.Run("local_report_empty_run_url", func(t *testing.T) {
-		m := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+		m := synthetic(t, files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR")), true, "Branch")
 		q := decode(t, m)
 		m = identityFixture(t, m, q.Commit, "")
 		q = decode(t, m)
