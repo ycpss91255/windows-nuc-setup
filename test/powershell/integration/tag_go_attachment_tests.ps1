@@ -5,8 +5,10 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Passed,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Passed}|ConvertTo-Json -Compress));if(-not $Passed){throw $Name}}
 $fixture=Join-Path $env:TEMP ('tag_go_staging_'+[guid]::NewGuid().ToString('N'))
 $attach=Join-Path $root 'script/test/attach_go_coverage.ps1'
-function New-Case([string]$Name,[string]$RefType='Release',[int]$SchemaVersion=2){
- $directory=Join-Path $fixture $Name;$public=Join-Path $directory 'NUC-CI-Results/public';$producer=Join-Path $directory 'go-coverage'
+function New-Case([string]$Name,[string]$RefType='Release',[int]$SchemaVersion=2,[switch]$RestoredStage){
+ $directory=Join-Path $fixture $Name
+ $public=Join-Path $directory $(if($RestoredStage){'native-stage-import/report'}else{'NUC-CI-Results/public'})
+ $producer=Join-Path $directory $(if($RestoredStage){'native-stage-import/go'}else{'go-coverage'})
  [void][IO.Directory]::CreateDirectory($producer)
  $checks=@(foreach($layer in @('Unit','Integration')){[pscustomobject]@{Name=('synthetic_'+$layer);Layer=$layer;Executed=$true;Passed=$true;Status='Passed';ExitCode=0;Assertions=@([pscustomobject]@{Name='explicit synthetic staging fixture';Passed=$true})}})
  $refName=if($RefType -eq 'Release'){'v1.2.3'}else{'main'}
@@ -74,7 +76,7 @@ $oldTemp=$env:RUNNER_TEMP;$oldType=$env:GITHUB_REF_TYPE
 Push-Location $root
 try{
  foreach($event in @('branch','tag')){
-  $kind=if($event -eq 'tag'){'Release'}else{'Branch'};$case=New-Case ('workflow_'+$event) $kind
+  $kind=if($event -eq 'tag'){'Release'}else{'Branch'};$case=New-Case ('workflow_'+$event) $kind -RestoredStage
   $env:RUNNER_TEMP=$case.Directory;$env:GITHUB_REF_TYPE=$event
   & ([scriptblock]::Create($run))
   $report=Get-Content -LiteralPath $case.Summary -Raw|ConvertFrom-Json
