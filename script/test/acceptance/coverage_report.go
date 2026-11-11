@@ -43,7 +43,20 @@ func ValidateGoCoverageReport(read Reader, files []string, sha, run string, requ
 		return nil
 	}
 	if summary.RefType != "Branch" {
-		return fmt.Errorf("Go sidecar is branch evidence, not historical release evidence")
+		if summary.RefType != "Release" || summary.SchemaVersion != 2 {
+			return fmt.Errorf("Go sidecar requires branch evidence or a fresh schema2 release")
+		}
+		if e = validateSchema(b); e != nil {
+			return e
+		}
+		var release Report
+		if e = decode(b, &release); e != nil {
+			return e
+		}
+		version := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$`)
+		if !version.MatchString(release.Version) || release.RefName != release.Version || release.Commit != sha || release.RunUrl != run || !regexp.MustCompile(`^https://github\.com/[^/]+/[^/]+/actions/runs/[0-9]+$`).MatchString(run) || release.SourceState != "Clean" || release.RequestedLayer != "All" || !release.Success || release.Totals.UnexecutedSuites != 0 {
+			return fmt.Errorf("fresh schema2 release Go evidence requires the current clean successful All run and matching tag")
+		}
 	}
 	data, e := read("go_coverage.json")
 	if e != nil {

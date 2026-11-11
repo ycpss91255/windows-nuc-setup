@@ -8,12 +8,13 @@ Invoke-CINative -File cmd.exe -Arguments @('/d','/c','exit 0')
 Assert $true '原生成功返回保留'
 Reject {Invoke-CINative -File cmd.exe -Arguments @('/d','/c','exit 7')} '原生非零返回拒絕'
 Reject {Invoke-CINative -File '__missing_ci_executable__.exe'} '不存在的工具不能冒稱成功'
-$passing=@{Tests='success';Requirements='success';Docker='success';Payload='success';PowerShellCoverage='success'}
+$passing=@{Tests='success';Requirements='success';Docker='success';Payload='success';PowerShellCoverage='success';Coverage='success'}
 Assert-CIResults $passing
-Assert $true '五個必要工作成功才通過'
-foreach($name in @('Tests','Requirements','Docker','Payload','PowerShellCoverage')){foreach($state in @('failure','cancelled','skipped','')){$copy=$passing.Clone();$copy[$name]=$state;Reject {Assert-CIResults $copy} ('必要工作拒絕 '+$name+' '+$state)}}
+Assert $true '六個必要工作成功才通過'
+foreach($name in @('Tests','Requirements','Docker','Payload','PowerShellCoverage','Coverage')){foreach($state in @('failure','cancelled','skipped','')){$copy=$passing.Clone();$copy[$name]=$state;Reject {Assert-CIResults $copy} ('必要工作拒絕 '+$name+' '+$state)}}
 $copy=$passing.Clone();$copy.Remove('PowerShellCoverage');Reject {Assert-CIResults $copy} '完整PowerShell矩陣結果不可遺漏'
 $copy=$passing.Clone();$copy.Remove('Payload');Reject {Assert-CIResults $copy} '設定包工作不可遺漏'
+$copy=$passing.Clone();$copy.Remove('Coverage');Reject {Assert-CIResults $copy} '完整覆蓋率彙整結果不可遺漏'
 $main=Get-CIPortalParameters -Repository 'example/repo' -OutputDirectory 'out' -EventRef 'refs/heads/main' -RunId '42'
 Assert ($main.MainRunId -eq '42' -and $main.Repository -eq 'example/repo') 'main明確指定同次執行'
 $tag=Get-CIPortalParameters -Repository 'example/repo' -OutputDirectory 'out' -EventRef 'refs/tags/v1.0.0' -RunId '42'

@@ -19,8 +19,8 @@ func TestPowerShellCoverageUsesCompleteFourShardMatrix(t *testing.T) {
 			t.Fatalf("complete parallel collection missing %s", required)
 		}
 	}
-	host := coverageJob(text, "isolated-tests")
-	for _, required := range []string{"needs: [powershell-coverage]", "actions/download-artifact@", "powershell-shard-", "-PowerShellShardDirectory", "run_repo_coverage.ps1", "managed_coverage.ps1", "measure_go_coverage.ps1"} {
+	host := coverageJob(text, "coverage-aggregation")
+	for _, required := range []string{"needs: [isolated-tests, powershell-coverage]", "actions/download-artifact@", "powershell-shard-", "-PowerShellShardDirectory", "run_repo_coverage.ps1", "managed_coverage.ps1", "native-stage-restore"} {
 		if !strings.Contains(host, required) {
 			t.Fatalf("host cannot verify all shards without losing original producers: %s", required)
 		}

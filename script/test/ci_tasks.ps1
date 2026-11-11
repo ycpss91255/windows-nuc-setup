@@ -15,7 +15,7 @@ function Export-CIPowerShellRawEvidence {
 }
 function Assert-CIResults {
  param([hashtable]$Results)
- foreach($name in @('Tests','Requirements','Docker','Payload','PowerShellCoverage')){if(-not $Results.ContainsKey($name) -or $Results[$name] -cne 'success'){throw ('必要工作失敗、取消或跳過：'+$name)}}
+ foreach($name in @('Tests','Requirements','Docker','Payload','PowerShellCoverage','Coverage')){if(-not $Results.ContainsKey($name) -or $Results[$name] -cne 'success'){throw ('必要工作失敗、取消或跳過：'+$name)}}
 }
 function Assert-CIRequiredTools {
  param([switch]$Managed)

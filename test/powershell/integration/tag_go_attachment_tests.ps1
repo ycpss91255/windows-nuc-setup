@@ -5,8 +5,10 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Passed,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Passed}|ConvertTo-Json -Compress));if(-not $Passed){throw $Name}}
 $fixture=Join-Path $env:TEMP ('tag_go_staging_'+[guid]::NewGuid().ToString('N'))
 $attach=Join-Path $root 'script/test/attach_go_coverage.ps1'
-function New-Case([string]$Name,[string]$RefType='Release',[int]$SchemaVersion=2){
- $directory=Join-Path $fixture $Name;$public=Join-Path $directory 'NUC-CI-Results/public';$producer=Join-Path $directory 'go-coverage'
+function New-Case([string]$Name,[string]$RefType='Release',[int]$SchemaVersion=2,[switch]$RestoredStage){
+ $directory=Join-Path $fixture $Name
+ $public=Join-Path $directory $(if($RestoredStage){'native-stage-import/report'}else{'NUC-CI-Results/public'})
+ $producer=Join-Path $directory $(if($RestoredStage){'native-stage-import/go'}else{'go-coverage'})
  [void][IO.Directory]::CreateDirectory($producer)
  $checks=@(foreach($layer in @('Unit','Integration')){[pscustomobject]@{Name=('synthetic_'+$layer);Layer=$layer;Executed=$true;Passed=$true;Status='Passed';ExitCode=0;Assertions=@([pscustomobject]@{Name='explicit synthetic staging fixture';Passed=$true})}})
  $refName=if($RefType -eq 'Release'){'v1.2.3'}else{'main'}
@@ -74,7 +76,7 @@ $oldTemp=$env:RUNNER_TEMP;$oldType=$env:GITHUB_REF_TYPE
 Push-Location $root
 try{
  foreach($event in @('branch','tag')){
-  $kind=if($event -eq 'tag'){'Release'}else{'Branch'};$case=New-Case ('workflow_'+$event) $kind
+  $kind=if($event -eq 'tag'){'Release'}else{'Branch'};$case=New-Case ('workflow_'+$event) $kind -RestoredStage
   $env:RUNNER_TEMP=$case.Directory;$env:GITHUB_REF_TYPE=$event
   & ([scriptblock]::Create($run))
   $report=Get-Content -LiteralPath $case.Summary -Raw|ConvertFrom-Json
@@ -107,4 +109,42 @@ Assert ($boundary -and $global:tagGoPublisherReached) 'actual publisher passes l
 $manifest=Get-Content -LiteralPath (Join-Path $flow.Public 'quality-manifest.json') -Raw|ConvertFrom-Json
 $profileRecord=@($manifest.Files|Where-Object Name -ceq 'go_coverage.out')
 Assert ($profileRecord.Count -eq 1 -and $profileRecord[0].SHA256 -ceq $joined.GoCoverage.ProfileSHA256) 'publisher local manifest includes the exact original Go profile digest'
+# Exercise the previously missing official requirements gate, not just the PS
+# attachment and publisher. This synthetic profile inventories every owned Go
+# file so the real CLI's denominator guard remains active; it is not CI data.
+$gatePublic=Join-Path $fixture 'tag_requirements_public'
+Copy-Item -LiteralPath $flow.Public -Destination $gatePublic -Recurse
+$owned=@(& git -C $root -c core.quotePath=false ls-files | Where-Object {$_ -like 'script/test/*.go' -and $_ -notlike '*_test.go'})
+Assert ($LASTEXITCODE -eq 0 -and $owned.Count -gt 0) 'Tag gate fixture inventories actual tracked owned Go paths'
+[Array]::Sort($owned,[StringComparer]::Ordinal)
+$profileLines=@('mode: set')
+$packages=@()
+foreach($file in $owned){
+ $path='windows_setup/'+$file
+ $profileLines+=($path+':1.1,1.2 8 1'),($path+':2.1,2.2 2 0')
+ $packages+=$path.Substring(0,$path.LastIndexOf('/'))
+}
+$profilePath=Join-Path $gatePublic 'go_coverage.out'
+[IO.File]::WriteAllText($profilePath,(($profileLines -join "`n")+"`n"),[Text.UTF8Encoding]::new($false))
+$gateSnapshot=Get-Content -LiteralPath (Join-Path $gatePublic 'summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
+$gateSnapshot.GoCoverage.Covered=8*$owned.Count
+$gateSnapshot.GoCoverage.TotalStatements=10*$owned.Count
+$gateSnapshot.GoCoverage.Percent=80.0
+$gateSnapshot.GoCoverage.Environment='Synthetic all-owned Tag gate fixture, not measured CI data'
+$gateSnapshot.GoCoverage.ProfileSHA256=(Get-FileHash -LiteralPath $profilePath).Hash.ToLowerInvariant()
+$gateSnapshot.GoCoverage.Packages=@($packages|Sort-Object -Unique)
+. (Join-Path $root 'script/report/portal.ps1')
+Write-SnapshotView -Snapshot $gateSnapshot -OutputDirectory $gatePublic
+Assert-TestReportSnapshot -Report $gateSnapshot -Release
+$gateTool=Join-Path $fixture 'requirements_gate.exe'
+Push-Location $root
+try{& go.exe build -mod=vendor -o $gateTool ./script/test/requirements_gate;if($LASTEXITCODE){throw 'fixture requirements CLI build failed'}}finally{Pop-Location}
+$priorPreference=$ErrorActionPreference
+try{$ErrorActionPreference='Continue';& $gateTool --artifact-dir $gatePublic --source-root $root --expected-sha ('a'*40) --expected-run-url 'https://github.com/example/repo/actions/runs/123' *> (Join-Path $fixture 'tag_requirements.private.log');$gateExit=$LASTEXITCODE}finally{$ErrorActionPreference=$priorPreference}
+Assert ($gateExit -eq 0) 'official requirements CLI accepts fresh schema2 Tag evidence after native Go and repo attachment'
+$global:tagGoPublisherReached=$false
+function gh {$global:tagGoPublisherReached=$true;throw 'LOCAL_TAG_GATE_GH_BOUNDARY_ONLY'}
+$boundary=$false
+try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $gatePublic -Version v1.2.3 -Commit ('a'*40) -NotesPath (Join-Path $gatePublic 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $emptyDrivers}catch{$boundary=$_.Exception.Message -ceq 'LOCAL_TAG_GATE_GH_BOUNDARY_ONLY'}finally{Remove-Item Function:\gh}
+Assert ($boundary -and $global:tagGoPublisherReached) 'fresh Tag report passes official Go gate and strict publisher up to the mocked external boundary'
 $global:LASTEXITCODE=0

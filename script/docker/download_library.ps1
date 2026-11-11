@@ -29,7 +29,11 @@ function Invoke-ContainerOfficialDownload {
   Write-Host ('Official download attempt '+$attempt+'/3.')
   $watch=[Diagnostics.Stopwatch]::StartNew()
   try{
-   Invoke-WebRequest -UseBasicParsing -Uri $Uri.AbsoluteUri -OutFile $partial -TimeoutSec 120 -ErrorAction Stop
+   $previousProgress=$ProgressPreference
+   try{
+    $ProgressPreference='SilentlyContinue'
+    Invoke-WebRequest -UseBasicParsing -Uri $Uri.AbsoluteUri -OutFile $partial -TimeoutSec 120 -ErrorAction Stop
+   }finally{$ProgressPreference=$previousProgress}
    if(-not(Test-Path -LiteralPath $partial -PathType Leaf) -or (Get-Item -LiteralPath $partial).Length -le 0){throw 'Official download produced no complete file.'}
    [IO.File]::Move($partial,$output)
    Write-Host ('Official download complete; bytes='+([IO.FileInfo]$output).Length+'; elapsed_ms='+$watch.ElapsedMilliseconds+'.')
@@ -41,4 +45,11 @@ function Invoke-ContainerOfficialDownload {
   }finally{if(Test-Path -LiteralPath $partial){Remove-Item -LiteralPath $partial -Force}}
   Start-Sleep -Seconds $attempt
  }
+}
+function Expand-ContainerToolArchive {
+ param([Parameter(Mandatory=$true)][string]$LiteralPath,[Parameter(Mandatory=$true)][string]$DestinationPath)
+ # Archive's module scope does not inherit a caller's local progress preference.
+ # The native API emits no progress and refuses traversal and existing files.
+ Add-Type -AssemblyName System.IO.Compression.FileSystem
+ [IO.Compression.ZipFile]::ExtractToDirectory($LiteralPath,$DestinationPath)
 }
