@@ -35,7 +35,8 @@ function gh {
  if($words[0] -eq 'api' -and $words[1] -eq 'repos/example/repo/releases/42' -and $words -contains '--method'){
   $bytes=[IO.File]::ReadAllBytes($words[[Array]::IndexOf($words,'--input')+1]);$payload=[Text.UTF8Encoding]::new($false,$true).GetString($bytes)|ConvertFrom-Json
   Assert ($words[[Array]::IndexOf($words,'--method')+1] -ceq 'PATCH') '只 PATCH 既有已選定 ID'
-  if($payload.PSObject.Properties['draft']){
+  Assert ($payload.tag_name -is [string] -and $payload.tag_name -ceq 'v1.0.0' -and $payload.target_commitish -is [string] -and $payload.target_commitish -ceq $identity.Commit -and $payload.name -is [string] -and $payload.name -ceq 'v1.0.0' -and $payload.prerelease -is [bool] -and $payload.prerelease -ceq $false -and $payload.draft -is [bool]) '每次固定 ID PATCH 明確保留標籤、來源、名稱與布林狀態'
+  if(-not $payload.draft){
    Assert ($payload.draft -is [bool] -and $payload.draft -ceq $false -and $global:driverReleaseNotesApplied -and $global:driverReleaseRemoteAssets.Count -eq 13) '十三個資產及 notes 核對完成後才發布 JSON false'
    $global:driverReleasePublished++
   }else{

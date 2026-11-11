@@ -63,11 +63,11 @@ if($driverAssets.Count){
  $selectedId=[long]$draft.id
  Assert-SelectedContent $draft $notes $expectedAssets
 }
-Set-SelectedRelease $selectedId ([ordered]@{name=$Version;body=$notes})
+Set-SelectedRelease $selectedId ([ordered]@{tag_name=$Version;target_commitish=$Commit;name=$Version;prerelease=[bool]$Prerelease;draft=$true;body=$notes})
 $draft=Get-ReleaseDraftByTag -Repository $Repository -Version $Version -ExpectedId $selectedId
 Assert-SelectedContent $draft $notes $expectedAssets
 # Publishing last locks the completed attachment set when immutability is enabled.
-Set-SelectedRelease $selectedId ([ordered]@{draft=$false})
+Set-SelectedRelease $selectedId ([ordered]@{tag_name=$Version;target_commitish=$Commit;name=$Version;prerelease=[bool]$Prerelease;draft=$false})
 $published=(& gh api ('repos/'+$Repository+'/releases/tags/'+$Version))|ConvertFrom-Json
 if($LASTEXITCODE -ne 0 -or ($published.id -isnot [int] -and $published.id -isnot [long]) -or $published.id -ne $selectedId -or $published.immutable -isnot [bool] -or $published.immutable -cne $true -or $published.draft -isnot [bool] -or $published.draft -cne $false -or $published.tag_name -cne $Version){throw '已發布版本 ID、鎖定或狀態不符。'}
 $tagCommit=& gh api ('repos/'+$Repository+'/commits/'+$Version) --jq '.sha'
