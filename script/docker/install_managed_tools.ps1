@@ -28,7 +28,7 @@ function Install-ContainerToolArtifact {
  if((Get-FileHash -LiteralPath $archive -Algorithm $Artifact.Algorithm).Hash -ine $expected){throw ('Container tool digest mismatch: '+$Artifact.Name)}
  if($Artifact.Kind -eq 'Zip'){
   $watch=[Diagnostics.Stopwatch]::StartNew();Write-Host 'Verified tool extraction started.'
-  try{Expand-Archive -LiteralPath $archive -DestinationPath $Destination}
+  try{Expand-ContainerToolArchive -LiteralPath $archive -DestinationPath $Destination}
   finally{Write-Host ('Verified tool extraction elapsed_ms='+$watch.ElapsedMilliseconds+'.')}
  }
  elseif($Artifact.Kind -eq 'File'){[void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Destination));Copy-Item -LiteralPath $archive -Destination $Destination}

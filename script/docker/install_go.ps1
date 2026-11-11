@@ -11,7 +11,7 @@ try{
 if((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ine $expected){throw 'Go SHA256 mismatch.'}
 # The official archive contains a top-level go directory.
 $watch=[Diagnostics.Stopwatch]::StartNew();Write-Host 'Verified Go extraction started.'
-try{Expand-Archive -LiteralPath $archive -DestinationPath C:/}
+try{Expand-ContainerToolArchive -LiteralPath $archive -DestinationPath C:/}
 finally{Write-Host ('Verified Go extraction elapsed_ms='+$watch.ElapsedMilliseconds+'.')}
 }finally{if(Test-Path -LiteralPath $archive){Remove-Item -LiteralPath $archive -Force}}
 $env:GOTOOLCHAIN='local'

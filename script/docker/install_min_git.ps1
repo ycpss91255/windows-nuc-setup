@@ -8,5 +8,5 @@ $archive=Join-Path $env:TEMP 'min_git.zip'
 Invoke-ContainerOfficialDownload -Uri $uri -OutFile $archive
 try{
 if((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ine $expected){throw 'MinGit SHA256 mismatch.'}
-Expand-Archive -LiteralPath $archive -DestinationPath C:/git
+Expand-ContainerToolArchive -LiteralPath $archive -DestinationPath C:/git
 }finally{if(Test-Path -LiteralPath $archive){Remove-Item -LiteralPath $archive -Force}}
