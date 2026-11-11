@@ -9,7 +9,7 @@ $global:RegistryFixtureRealInvoke=(Get-Command -Name Invoke-Pester -Module Peste
 $global:RegistryFixtureObserved=$null
 & $module {
  $script:FixtureOriginalTest=$script:SafeCommands['Test-Path'];$script:FixtureOriginalNew=$script:SafeCommands['New-Item'];$script:FixtureOriginalRemove=$script:SafeCommands['Remove-Item']
- $script:FixtureParentAttempts=0
+ $script:FixtureParentAttempts=0;$script:FixtureUnexpectedRegistryMutationCalls=0
  function script:Test-RegistryParentFixture {
   [CmdletBinding()]param($Path,$LiteralPath,$PathType)
   if([string]$Path -ceq 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\Software\Pester'){return $false}
@@ -21,12 +21,12 @@ $global:RegistryFixtureObserved=$null
    $script:FixtureParentAttempts++
    throw [IO.IOException]::new('fixture registry parent was created by a parallel peer')
   }
-  if([string]$Path -match '(?i)Registry::|^(HKCU|HKLM|TestRegistry):'){throw 'Fixture forbids real registry creation.'}
+  if([string]$Path -match '(?i)Registry::|^(HKCU|HKLM|TestRegistry):'){$script:FixtureUnexpectedRegistryMutationCalls++;throw 'Fixture forbids real registry creation.'}
   & $script:FixtureOriginalNew @PSBoundParameters
  }
  function script:Remove-RegistryFixture {
   [CmdletBinding()]param($Path,$LiteralPath,[switch]$Force,[switch]$Recurse,[switch]$Confirm)
-  if(([string]$Path+' '+[string]$LiteralPath) -match '(?i)Registry::|\b(HKCU|HKLM|TestRegistry):'){throw 'Fixture forbids real registry removal.'}
+  if(([string]$Path+' '+[string]$LiteralPath) -match '(?i)Registry::|\b(HKCU|HKLM|TestRegistry):'){$script:FixtureUnexpectedRegistryMutationCalls++;throw 'Fixture forbids real registry removal.'}
   & $script:FixtureOriginalRemove @PSBoundParameters
  }
  $script:SafeCommands['Test-Path']=$ExecutionContext.InvokeCommand.GetCommand('Test-RegistryParentFixture','Function')
@@ -52,6 +52,7 @@ function global:Invoke-Pester {
 try{& $Collector -ManifestPath $Manifest -OutputDirectory $Output -WorkerIndex 0 -PesterModule $PesterModule}
 finally{
  $attempts=& $module {$script:FixtureParentAttempts}
- $value=[ordered]@{Observed=$global:RegistryFixtureObserved;ParentCreateAttempts=$attempts;ActualRegistryWrites=0;EngineVersion=$PSVersionTable.PSVersion.ToString()}
+ $unexpected=& $module {$script:FixtureUnexpectedRegistryMutationCalls}
+ $value=[ordered]@{Observed=$global:RegistryFixtureObserved;ParentCreateAttempts=$attempts;UnexpectedRegistryMutationCalls=$unexpected;EngineVersion=$PSVersionTable.PSVersion.ToString()}
  [IO.File]::WriteAllText($ObservationPath,($value|ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
 }

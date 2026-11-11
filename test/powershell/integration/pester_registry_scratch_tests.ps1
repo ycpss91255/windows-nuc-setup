@@ -38,7 +38,7 @@ foreach($engine in $engines){
 }
 Assert (@($outcomes|Where-Object Code -ne 0).Count -eq 0) '兩個實際collector引擎均須避開未使用的共享Registry plugin並正常完成'
 foreach($result in $outcomes){
- Assert (-not $result.Observed.Observed.TestRegistryEnabled -and $result.Observed.ParentCreateAttempts -eq 0 -and $result.Observed.ActualRegistryWrites -eq 0) ($result.Engine+' 真config停用TestRegistry且不存取真機碼')
+ Assert (-not $result.Observed.Observed.TestRegistryEnabled -and $result.Observed.ParentCreateAttempts -eq 0 -and $result.Observed.UnexpectedRegistryMutationCalls -eq 0) ($result.Engine+' 真config停用TestRegistry且不存取真機碼')
  Assert ($result.Observed.Observed.TestDriveEnabled -and $result.Observed.Observed.CodeCoverageEnabled -and $result.Observed.Observed.CoveragePathCount -eq 1 -and $result.Observed.Observed.PassThru) ($result.Engine+' 原TestDrive與完整覆蓋率設定保留')
  Assert ($result.Text.Contains('@@ASSERT@@{"Name":"owned safe suite executed","Passed":true}') -and (Test-Path -LiteralPath $result.Proof)) ($result.Engine+' 原safe_suite確實執行自有斷言並留下原生證據')
  $worker=Get-Content -LiteralPath $result.Proof -Raw -Encoding UTF8|ConvertFrom-Json
