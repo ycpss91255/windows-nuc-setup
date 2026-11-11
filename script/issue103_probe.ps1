@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 $ErrorActionPreference='Stop'
 $repo='ycpss91255/windows_setup'
 $target='a77bf7bdcb724998a87aedede644f3201b80a5bd'
@@ -30,12 +30,12 @@ foreach($case in @('a','b')) {
  $tag='ci_api_probe_'+$nonce+'_'+$case
  $marker='owner_probe_'+$nonce+'_'+$case
  $refPayload=New-Payload ('ref_request_'+$case) ([ordered]@{ref=('refs/tags/'+$tag);sha=$target})
- $ref=Invoke-ProbeApi ('ref_create_'+$case) @('repos/'+$repo+'/git/refs','--method','POST','--input',$refPayload)
+ $ref=Invoke-ProbeApi ('ref_create_'+$case) @(('repos/'+$repo+'/git/refs'),'--method','POST','--input',$refPayload)
  Assert-Ref $ref $tag
  $ref=Invoke-ProbeApi ('ref_before_create_'+$case) @('repos/'+$repo+'/git/ref/tags/'+$tag)
  Assert-Ref $ref $tag
  $createPayload=New-Payload ('create_request_'+$case) ([ordered]@{tag_name=$tag;target_commitish=$target;name=$tag;body=$marker;draft=$true;prerelease=$false})
- $created=Invoke-ProbeApi ('create_response_'+$case) @('repos/'+$repo+'/releases','--method','POST','--input',$createPayload)
+ $created=Invoke-ProbeApi ('create_response_'+$case) @(('repos/'+$repo+'/releases'),'--method','POST','--input',$createPayload)
  if(($created.id -isnot [int] -and $created.id -isnot [long]) -or $created.id -le 0){throw 'Invalid created ID; preserve resources.'}
  $id=[long]$created.id
  Assert-Probe $created $id $tag $marker
@@ -47,7 +47,7 @@ foreach($case in @('a','b')) {
  if($case -ceq 'b'){$payload['tag_name']=$tag}
  if($payload.draft -isnot [bool] -or -not $payload.draft){throw 'Probe must remain draft.'}
  $path=New-Payload ('patch_request_'+$case) $payload
- $response=Invoke-ProbeApi ('patch_response_'+$case) @('repos/'+$repo+'/releases/'+$id,'--method','PATCH','--input',$path)
+ $response=Invoke-ProbeApi ('patch_response_'+$case) @(('repos/'+$repo+'/releases/'+$id),'--method','PATCH','--input',$path)
  Assert-Probe $response $id $tag $marker ($case -ceq 'a')
  $after=Invoke-ProbeApi ('after_'+$case) @('repos/'+$repo+'/releases/'+$id)
  Assert-Probe $after $id $tag $marker ($case -ceq 'a')
