@@ -29,6 +29,8 @@
 
 ### Fixed（修正）
 
+- Docker 就緒入口依 PATH 優先順序只執行第一份同名程式；有多份 docker.exe 時不再把路徑串接成不存在的檔名，第一份失敗也不回退執行後方程式。
+
 - GitHub hosted Windows 的 Docker 工作先以有界程序探測 Windows daemon；尚未就緒時最多啟動或重啟 Docker 服務一次，再以真實引擎資訊確認。超時、錯誤引擎或服務失敗仍阻擋後續容器測試，沒有降低發布門檻；一般電腦與 self-hosted runner 不會因此操作服務。
 
 - Tag 發布前會附加同次 Go 量測與原始 profile，明確區分本機未發布 staging 與既有版本；來源、雜湊及八成門檻保持，分支與標籤兩種工作流事件皆驗證。
