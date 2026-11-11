@@ -21,7 +21,34 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  issue103_draft_probe:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/diagnostic/issue103_draft_contract'
+    runs-on: windows-2022
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: 取得已審查探測腳本
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 執行只草稿身分對照
+        id: probe
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .\script\issue103_probe.ps1
+      - name: 保存只草稿對照證據
+        if: always() && steps.probe.outputs.evidence != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: issue103-draft-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.probe.outputs.evidence }}
+          retention-days: 7
+          if-no-files-found: error
+
   oobe_payload_inspection:
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract')
     name: 設定包唯讀內容驗證
     runs-on: windows-2022
     timeout-minutes: 5
@@ -72,6 +99,7 @@ jobs:
           if-no-files-found: warn
 
   powershell-coverage:
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract')
     name: PowerShell 全源量測分片 ${{ matrix.shard }}
     runs-on: windows-2022
     timeout-minutes: 60
@@ -120,6 +148,7 @@ jobs:
           if-no-files-found: error
 
   isolated-tests:
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract')
     runs-on: windows-2022
     timeout-minutes: 90
     defaults:
@@ -198,6 +227,7 @@ jobs:
           retention-days: 7
           if-no-files-found: error
   coverage-aggregation:
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract')
     name: 同次完整覆蓋率聚合
     needs: [isolated-tests, powershell-coverage]
     runs-on: windows-2022
@@ -280,7 +310,7 @@ jobs:
 
   requirements-gate:
     name: requirements-gate
-    if: always() && needs.coverage-aggregation.result != 'cancelled'
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract') && (always() && needs.coverage-aggregation.result != 'cancelled')
     needs: [coverage-aggregation]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -326,6 +356,7 @@ jobs:
           go run ./script/test/repo_coverage_tool verify --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --require-complete --minimum-percent 80
 
   docker-tests:
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract')
     name: docker-tests
     runs-on: windows-2022
     timeout-minutes: 120
@@ -388,7 +419,7 @@ jobs:
 
   ci-rollup:
     name: ci-rollup
-    if: always()
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract') && (always())
     needs: [isolated-tests, requirements-gate, docker-tests, oobe_payload_inspection, powershell-coverage, coverage-aggregation]
     runs-on: windows-2022
     timeout-minutes: 5
@@ -412,7 +443,7 @@ jobs:
 
   release:
     name: 發布 GitHub 來源版本
-    if: startsWith(github.ref, 'refs/tags/')
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract') && (startsWith(github.ref, 'refs/tags/'))
     needs: [ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 10
@@ -466,7 +497,7 @@ jobs:
 
   build-portal:
     name: 建立 main 與不可變版本品質索引
-    if: always() && needs.ci-rollup.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract') && (always() && needs.ci-rollup.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success')))
     needs: [coverage-aggregation, requirements-gate, docker-tests, release, ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 15
@@ -518,7 +549,7 @@ jobs:
   publish-reports:
     name: 發布 Pages 品質入口
     needs: [build-portal]
-    if: always() && needs.build-portal.result == 'success'
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract') && (always() && needs.build-portal.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -548,7 +579,7 @@ jobs:
   verify-deployment:
     name: 公開部署需求驗收
     needs: [publish-reports]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.publish-reports.result == 'success'
+    if: (github.event_name != 'workflow_dispatch' || github.ref != 'refs/heads/diagnostic/issue103_draft_contract') && (always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.publish-reports.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 7
     permissions:
