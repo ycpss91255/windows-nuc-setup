@@ -1,0 +1,101 @@
+name: Windows 工具冷建置耗時量測（非品質門檻）
+
+on:
+  push:
+    branches: [benchmark/ci_tool_progress]
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  GOPROXY: "off"
+  GOFLAGS: "-mod=vendor"
+  CGO_ENABLED: "0"
+
+jobs:
+  cold-build:
+    name: 原始工具輸入的全新 runner 冷建置
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: 取得固定功能一及臨時量測工作流
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 準備同正式工作流的固定 Go 工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 確認相同 Windows Docker 能力
+        timeout-minutes: 3
+        run: |
+          . .\script\test\ci_tasks.ps1
+          $private = Join-Path $env:RUNNER_TEMP 'benchmark-readiness.private.log'
+          try {
+            Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\script\docker\runner_daemon.ps1') *> $private
+            Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\script\docker\docker.ps1','-Action','doctor','-Isolation','process') *>> $private
+          } catch { throw 'Benchmark prerequisite failed; no quality result was produced.' }
+      - name: 冷建置全部 Windows 工具並記錄實際耗時
+        timeout-minutes: 60
+        run: |
+          . .\script\test\ci_tasks.ps1
+          $public = Join-Path $env:RUNNER_TEMP 'benchmark-public'
+          [void][IO.Directory]::CreateDirectory($public)
+          $private = Join-Path $env:RUNNER_TEMP 'benchmark-build.private.log'
+          $receipt = Join-Path $env:RUNNER_TEMP 'benchmark-image.json'
+          $watch = [Diagnostics.Stopwatch]::StartNew()
+          $buildExit = 0
+          try {
+            Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\script\docker\docker.ps1','-Action','build','-Isolation','process','-BuildReceiptPath',$receipt) *> $private
+          } catch {
+            $buildExit = 1
+            if ($_.Exception.Data.Contains('ExitCode')) { $buildExit = [int]$_.Exception.Data['ExitCode'] }
+          } finally { $watch.Stop() }
+          $safeLines = @(foreach ($line in [IO.File]::ReadAllLines($private)) {
+            if ($line -cmatch '^(Official download attempt [1-3]/3[.]|Official download complete; bytes=[0-9]+; elapsed_ms=[0-9]+[.]|Official download failure: (Timeout|Other|HTTP [0-9]{3}); retry=(true|false); elapsed_ms=[0-9]+[.]|Verified (Go|tool) extraction (started[.]|elapsed_ms=[0-9]+[.]))$') { $line }
+          })
+          [IO.File]::WriteAllLines((Join-Path $public 'timing.txt'),$safeLines,[Text.UTF8Encoding]::new($false))
+          $summary = [ordered]@{
+            Purpose='Cold tool build benchmark; not tests or coverage'; QualityGate=$false
+            FeatureCommit='ed98a64b92500bd455742d3e11226053a0e3f610'
+            Commit=$env:GITHUB_SHA; RunUrl=('https://github.com/'+$env:GITHUB_REPOSITORY+'/actions/runs/'+$env:GITHUB_RUN_ID)
+            RunAttempt=[int]$env:GITHUB_RUN_ATTEMPT; BuildExitCode=$buildExit; BuildMilliseconds=$watch.ElapsedMilliseconds
+            RunnerImageVersion=$env:ImageVersion; Isolation='process'; ExternalCacheImported=$false
+            BaselineRunUrl='https://github.com/ycpss91255/windows_setup/actions/runs/42985099571'
+            BaselineBuildMinutes=29.6
+          }
+          [IO.File]::WriteAllText((Join-Path $public 'summary.json'),($summary|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+          if ($buildExit -ne 0) { throw ('Cold build failed with exit '+$buildExit+'; no quality result was produced.') }
+          Write-Host ('Cold tool build finished; elapsed_ms='+$watch.ElapsedMilliseconds+'. This is not a quality gate.')
+      - name: 核對同來源收據與映像內全部工具版本
+        timeout-minutes: 5
+        run: |
+          . .\script\docker\library.ps1
+          . .\script\test\ci_tasks.ps1
+          $public = Join-Path $env:RUNNER_TEMP 'benchmark-public'
+          $context = Get-ContainerContext -Root $env:GITHUB_WORKSPACE -ReportDirectory (Join-Path $env:RUNNER_TEMP 'benchmark-unused-reports') -Isolation process
+          $receipt = Join-Path $env:RUNNER_TEMP 'benchmark-image.json'
+          $image = Assert-ContainerBuildReceipt -Context $context -Path $receipt
+          $probe = '. C:/tools/ci_tasks.ps1; Assert-CIRequiredTools -Managed | Out-Null; $v=[ordered]@{Git=(& git.exe --version);Go=(& go.exe version);PowerShell=(& pwsh.exe -NoProfile -Command ''$PSVersionTable.PSVersion.ToString()'');Dotnet=(& dotnet.exe --version);Actionlint=(& actionlint.exe --version | Select-Object -First 1)}; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; $v|ConvertTo-Json -Compress'
+          $versions = (@(Invoke-CINative -File docker.exe -Arguments @('run','--rm','--isolation','process','--network','none','--entrypoint','powershell.exe',$image,'-NoProfile','-Command',$probe)) -join "`n") | ConvertFrom-Json
+          if ($versions.Go -cne 'go version go1.27.3 windows/amd64' -or $versions.PowerShell -cne '7.6.9' -or $versions.Dotnet -cne '10.0.300' -or $versions.Actionlint -cne '1.7.12') { throw 'Benchmark tool versions differ from the frozen pins.' }
+          $metadata = ((Invoke-ContainerDocker -Arguments @('image','inspect',$image,'--format','{{json .}}')) -join "`n") | ConvertFrom-Json
+          if ($metadata.Os -cne 'windows' -or $metadata.Architecture -cne 'amd64' -or $metadata.Id -cne $image) { throw 'Benchmark image identity or OS does not match.' }
+          $summary = Get-Content -LiteralPath (Join-Path $public 'summary.json') -Raw | ConvertFrom-Json
+          $summary | Add-Member -NotePropertyName Verification -NotePropertyValue ([ordered]@{InputsSHA256=$context.InputsSHA256;ImageId=$image;OS=$metadata.Os;Architecture=$metadata.Architecture;ReceiptVerified=$true;Tools=$versions})
+          [IO.File]::WriteAllText((Join-Path $public 'summary.json'),($summary|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
+          Copy-Item -LiteralPath $receipt -Destination (Join-Path $public 'receipt.json')
+          Write-Host 'Cold-build receipt and pinned tools verified. Full tests and coverage were not run.'
+      - name: 僅保留去識別量測七天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cold-tool-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/benchmark-public/
+          retention-days: 7
+          if-no-files-found: error
