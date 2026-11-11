@@ -96,7 +96,12 @@ if($WorkerIndex -ge 0){
  $config.CodeCoverage.CoveragePercentTarget=0
  $failurePath=Join-Path $output ('worker_'+$WorkerIndex+'.private.failure.json')
  $priorPesterErrors=@($global:Error);$pesterInvocationErrors=@()
- try{$result=Invoke-Pester -Configuration $config -ErrorVariable pesterInvocationErrors}catch{try{Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -InvocationErrors @($_)}catch{};throw}
+ try{$result=Invoke-Pester -Configuration $config -ErrorVariable pesterInvocationErrors}catch{
+  $privateOriginalError=$_
+  try{Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -InvocationErrors @($_)}catch{}
+  if($env:WINDOWS_SETUP_PRIVATE_FAILURE_DIAGNOSTIC -ceq '1'){try{& (Join-Path $source 'test/diagnostic/private_pester_snapshot.ps1') -Path (Join-Path $output ('worker_'+$WorkerIndex+'.private.error.json')) -InvocationErrors @($privateOriginalError)}catch{}}
+  throw
+ }
  if($result.FailedCount -gt 0 -or $result.PassedCount -lt 1 -or $result.Result -ne 'Passed'){
   try{
    if($null -eq $result){
@@ -104,6 +109,12 @@ if($WorkerIndex -ge 0){
     Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -InvocationErrors $currentPesterErrors -NoResult
    }else{Write-PesterWorkerFailureRecord -Path $failurePath -SourceRoot $source -AllowedFiles $diagnosticFiles -Result $result}
   }catch{}
+  if($env:WINDOWS_SETUP_PRIVATE_FAILURE_DIAGNOSTIC -ceq '1'){
+   try{
+    $privateInvocationErrors=if($null -eq $result){@($currentPesterErrors)}else{@($pesterInvocationErrors)}
+    & (Join-Path $source 'test/diagnostic/private_pester_snapshot.ps1') -Path (Join-Path $output ('worker_'+$WorkerIndex+'.private.error.json')) -Result $result -InvocationErrors $privateInvocationErrors
+   }catch{}
+  }
   throw 'Pester 測試未全部成功。'
  }
  if($null -ne $testContext -and ((Get-FileHash -LiteralPath $suiteFile).Hash.ToLowerInvariant() -cne $testContext.TestSHA256 -or ($wrapper -and (Get-FileHash -LiteralPath $wrapper).Hash.ToLowerInvariant() -cne $testContext.WrapperSHA256))){throw '測試或wrapper在原生量測期間變更。'}
