@@ -30,6 +30,12 @@ func identityFixture(t *testing.T, original map[string][]byte, commit, run strin
 			delete(m, name)
 		}
 	} else {
+		if run == "" {
+			delete(raw, "GoCoverage")
+			for _, name := range []string{"go_coverage.json", "go_coverage.out", "go_coverage.svg"} {
+				delete(m, name)
+			}
+		}
 		if before.RepoCoverage != nil {
 			before.RepoCoverage.RunUrl = run
 			b, err := json.Marshal(before.RepoCoverage)
@@ -79,7 +85,7 @@ func TestCLIIdentityFixturePreservesOriginalCounters(t *testing.T) {
 			t.Fatal("local fixture changed actual counters or retained the old run identity")
 		}
 	}
-	for _, name := range []string{"coverage_inventory.json", "coverage.xml", "go_coverage.out"} {
+	for _, name := range []string{"coverage_inventory.json", "coverage.xml"} {
 		if !reflect.DeepEqual(local[name], original[name]) {
 			t.Fatalf("local identity changed raw source counters: %s", name)
 		}
@@ -99,5 +105,47 @@ func TestCLIIdentityFixturePreservesOriginalCounters(t *testing.T) {
 	}
 	if !reflect.DeepEqual(original, snapshot) {
 		t.Fatal("foreign fixture changed the actual artifact")
+	}
+}
+
+// An empty run is local and cannot retain Go evidence that requires a CI run.
+// Exercise both source contexts even when ordinary PR input is only native-stage.
+func TestLocalIdentityDropsCIGoEvidence(t *testing.T) {
+	original := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+	for _, ref := range []string{"Branch", "Release"} {
+		for _, stage := range []string{"native-stage", "attached"} {
+			t.Run(ref+"/"+stage, func(t *testing.T) {
+				m := synthetic(t, original, true, ref)
+				var raw map[string]json.RawMessage
+				if err := json.Unmarshal(m["summary.json"], &raw); err != nil {
+					t.Fatal(err)
+				}
+				if stage == "attached" {
+					raw["GoCoverage"] = json.RawMessage(`{"RunUrl":"https://github.com/example/repo/actions/runs/1"}`)
+					m["go_coverage.json"] = []byte(`{}`)
+					m["go_coverage.out"] = []byte("profile")
+					m["go_coverage.svg"] = []byte("badge")
+				} else {
+					delete(raw, "GoCoverage")
+					for _, name := range []string{"go_coverage.json", "go_coverage.out", "go_coverage.svg"} {
+						delete(m, name)
+					}
+				}
+				m["summary.json"], _ = json.Marshal(raw)
+				local := identityFixture(t, m, decode(t, m).Commit, "")
+				var result map[string]json.RawMessage
+				if err := json.Unmarshal(local["summary.json"], &result); err != nil {
+					t.Fatal(err)
+				}
+				if _, ok := result["GoCoverage"]; ok {
+					t.Fatal("local fixture retained CI Go evidence")
+				}
+				for _, name := range []string{"go_coverage.json", "go_coverage.out", "go_coverage.svg"} {
+					if _, ok := local[name]; ok {
+						t.Fatalf("local fixture retained CI sidecar: %s", name)
+					}
+				}
+			})
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,6 +48,85 @@ func TestCLICommands(t *testing.T) {
 		b, e := c.CombinedOutput()
 		return string(b), e
 	}
+	// Exercise the actual CLI for both ref types at whichever report stage CI supplies.
+	for _, ref := range []string{"Branch", "Release"} {
+		t.Run("ref_context_"+ref, func(t *testing.T) {
+			original := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+			prior := decode(t, original)
+			m := synthetic(t, original, true, ref)
+			var sourceRaw, scenarioRaw map[string]json.RawMessage
+			if e := json.Unmarshal(original["summary.json"], &sourceRaw); e != nil {
+				t.Fatal(e)
+			}
+			if e := json.Unmarshal(m["summary.json"], &scenarioRaw); e != nil {
+				t.Fatal(e)
+			}
+			if goEvidence, ok := sourceRaw["GoCoverage"]; ok {
+				m["index.html"] = original["index.html"]
+				scenarioRaw["GoCoverage"] = goEvidence
+				m["summary.json"], _ = json.Marshal(scenarioRaw)
+			}
+			if prior.RefType != ref {
+				m["go_coverage.svg"] = []byte(strings.ReplaceAll(string(m["go_coverage.svg"]), "go coverage "+strings.ToLower(prior.RefType), "go coverage "+strings.ToLower(ref)))
+			}
+			q := decode(t, m)
+			dir := t.TempDir()
+			for n, b := range m {
+				if e := os.WriteFile(filepath.Join(dir, n), b, 0600); e != nil {
+					t.Fatal(e)
+				}
+			}
+			if ref == "Release" && len(m["go_coverage.json"]) > 0 {
+				var raw map[string]json.RawMessage
+				if e := json.Unmarshal(m["summary.json"], &raw); e != nil {
+					t.Fatal(e)
+				}
+				raw["RunUrl"] = json.RawMessage(`""`)
+				if v, ok := raw["RepoCoverage"]; ok && string(v) != "null" {
+					var repo map[string]json.RawMessage
+					if e := json.Unmarshal(v, &repo); e != nil {
+						t.Fatal(e)
+					}
+					repo["RunUrl"] = json.RawMessage(`""`)
+					raw["RepoCoverage"], _ = json.Marshal(repo)
+				}
+				var goEvidence map[string]json.RawMessage
+				if e := json.Unmarshal(raw["GoCoverage"], &goEvidence); e != nil {
+					t.Fatal(e)
+				}
+				goEvidence["RunUrl"] = json.RawMessage(`""`)
+				raw["GoCoverage"], _ = json.Marshal(goEvidence)
+				bad := copyFiles(m)
+				bad["summary.json"], _ = json.Marshal(raw)
+				if repo, ok := raw["RepoCoverage"]; ok && string(repo) != "null" {
+					bad["repo_coverage.json"] = repo
+				}
+				bad["go_coverage.json"], _ = json.Marshal(goEvidence)
+				badDir := t.TempDir()
+				for n, b := range bad {
+					if e := os.WriteFile(filepath.Join(badDir, n), b, 0600); e != nil {
+						t.Fatal(e)
+					}
+				}
+				if b, e := run("run", "./script/test/requirements_gate", "--artifact-dir", badDir, "--source-root", root, "--expected-sha", q.Commit, "--expected-run-url", ""); e == nil || !strings.Contains(b, "fresh schema2 release Go evidence") {
+					t.Fatalf("empty release run was not refused for expected reason: %s %v", b, e)
+				}
+			}
+			for _, tc := range []struct {
+				name, sha, url string
+				success        bool
+			}{
+				{"valid", q.Commit, q.RunUrl, true}, {"wrong_sha", strings.Repeat("0", 40), q.RunUrl, false}, {"wrong_url", q.Commit, q.RunUrl + "0", false},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					b, e := run("run", "./script/test/requirements_gate", "--artifact-dir", dir, "--source-root", root, "--expected-sha", tc.sha, "--expected-run-url", tc.url)
+					if (e == nil) != tc.success {
+						t.Fatalf("unexpected CLI outcome: %s %v", b, e)
+					}
+				})
+			}
+		})
+	}
 	t.Run("valid_report", func(t *testing.T) {
 		b, e := run("run", "./script/test/requirements_gate", "--artifact-dir", os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"), "--source-root", root, "--expected-sha", r.Commit, "--expected-run-url", r.RunUrl)
 		if e != nil || !strings.Contains(b, "需求驗收通過") {
@@ -54,7 +134,7 @@ func TestCLICommands(t *testing.T) {
 		}
 	})
 	t.Run("local_report_empty_run_url", func(t *testing.T) {
-		m := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+		m := synthetic(t, files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR")), true, "Branch")
 		q := decode(t, m)
 		m = identityFixture(t, m, q.Commit, "")
 		q = decode(t, m)
