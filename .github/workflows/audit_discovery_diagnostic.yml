@@ -1,4 +1,4 @@
-name: Audit 前置失敗窄診斷（非正式品質門檻）
+name: Pester 原生前置失敗全分片診斷（非正式品質門檻）
 on:
   push:
     branches: [diagnostic/audit_discovery]
@@ -12,14 +12,14 @@ env:
 jobs:
   diagnostic:
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        case: [0, 1, 2]
+        case: [0, 1, 2, 3]
     env:
       DIAGNOSTIC_CASE: ${{ matrix.case }}
-      SHARD_INDEX: '2'
+      SHARD_INDEX: ${{ matrix.case }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -47,7 +47,7 @@ jobs:
       - name: 先確認原生退出碼零與二十三都如實保留
         shell: powershell
         run: .\test\diagnostic\audit_discovery.ps1 -NativeSelfTest
-      - name: 原始雙 worker 僅輸出加密診斷
+      - name: 原始完整官方分片僅輸出加密診斷
         shell: powershell
         run: .\test\diagnostic\audit_discovery.ps1
       - name: 僅保存加密工件一天
