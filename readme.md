@@ -2,44 +2,57 @@
 
 [![Windows CI](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml/badge.svg)](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
 
-[![Unit](https://ycpss91255.github.io/windows_setup/main/unit.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
-[![Integration](https://ycpss91255.github.io/windows_setup/main/integration.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
-[![System 狀態](https://ycpss91255.github.io/windows_setup/main/system.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
-[![PowerShell Coverage 狀態](https://ycpss91255.github.io/windows_setup/main/coverage.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/)
-
-[![Go statement coverage](https://ycpss91255.github.io/windows_setup/main/go_coverage.svg?style=flat-square-v1)](https://ycpss91255.github.io/windows_setup/main/index.html)
+![Language](https://img.shields.io/badge/Language-Go%20%2F%20PowerShell-blue?style=flat-square)
+![Testing](https://img.shields.io/badge/Testing-Go%20test%20%2F%20PS5.1-orange?style=flat-square)
+[![Coverage](https://ycpss91255.github.io/windows_setup/main/coverage.svg)](https://ycpss91255.github.io/windows_setup/main/index.html)
+[![License](https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square)](license)
 
 [最新已發布 main 報表](https://ycpss91255.github.io/windows_setup/) · [Actions 與七天報告附件](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
 
-上方分層徽章取自最近一次成功部署的 main 報表；報表標示提交與時間。若部署失敗，請以 Windows CI 徽章及 Actions 的最新執行結果為準。PR 不更新公開報表。
+上方覆蓋率徽章顯示最近一次成功部署 main 的整體自有程式碼覆蓋率，量測範圍、分項及來源可在報表查閱。徽章與報表標示提交及時間；若部署失敗，以 Windows CI 與 Actions 最新執行結果為準。PR 不更新公開報表。
 Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、模組設定與後續驗收。本文以繁體中文提供完整操作說明；版本摘要見 [變更紀錄](doc/changelog/changelog.md)，實作與驗證細節以中文 Git 提交及 GitHub Release 為準。
 
 ## 快速開始
 
-先把**完整工具包**放到 USB；GitHub 來源 ZIP 需要先[補齊必要資產](#從原始碼準備完整工具包)。以下選符合目前畫面的一種，不必先開命令列或查磁碟代號。
+第一次使用，先在一臺可上網的 Windows 電腦完成 [Release 下載、解壓與官方 Autologon 準備](#從原始碼準備完整工具包)，再把完整資料夾放到 USB。GitHub 的 Source code ZIP 不包含 Autologon EXE，也不是完整離線包；不需要 Git、Go、Docker 或 agent。準備完成後，以下選符合目前畫面的一種，不必先查磁碟代號。
 
 ### A．還在地區／Wi-Fi 初始設定畫面
 
-1. 直接按 `Ctrl+Shift+F3`，電腦會重新開機進入稽核桌面。
-2. 按「取消」關閉 Sysprep 視窗，再按 `Windows+E` 開啟檔案總管。
-3. 從「本機／此電腦」打開 USB → `windows_setup` → 雙擊 `init.cmd`，依提示輸入新帳號與密碼。
-4. 等 Init 顯示準備成功，再手動重開並完成剩餘設定，登入剛建立的帳號。
-5. 接上網路，再從 USB 雙擊 `init.cmd`，這次會沿用帳號並安裝 SSH。成功後依下面「接著套用設定」繼續。
+Init 執行必需的三個資產位於 `modules/init/assets`：`hide_oobe.ppkg`、`hide_oobe.xml` 與 `provenance.json`。這三檔缺少或驗證失敗時，Init 會在詢問帳密、建立帳號前停止；不能只複製腳本或自行用空檔代替。發行包另附經逐檔審查的 `payload_baseline.json`，供 CI 獨立核對內容；它不是一般電腦初始化或續跑的必要檔案。
+
+1. 將完整工具包命名為 `windows_setup`，放在 USB 根目錄。插入 USB，按 `Shift+F10`（部分鍵盤需加 Fn）。在 CMD 輸入以下一行找入口，不需要 diskpart：
+
+```cmd
+for %d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do @if exist "%d:\windows_setup\init.cmd" echo %d:\windows_setup\init.cmd
+```
+
+2. 使用找到的完整路徑，例如顯示 `E:\windows_setup\init.cmd` 時輸入 `call "E:\windows_setup\init.cmd"`。E: 只是例子；若列出多份，請選你剛準備的完整工具包。
+3. 依中文提示輸入新本機帳號、密碼與確認密碼。設定包套用前會明確詢問是否繼續，因 Windows 可能立即重新啟動；輸入 `YES` 才繼續。取消會保留帳號與無密碼續跑紀錄。
+4. 登入剛建立的正式帳號，接上網路，直接從完整工具包執行 `windows.cmd`，依下面的 Windows 設定流程繼續；不需要第二次執行 Init。Windows 入口先確認帳號與 OOBE 紀錄，第 4 階段才安裝 SSH。
+#### 可選路線：已用 Ctrl+Shift+F3 進入 Administrator 桌面
+
+`Shift+F10` 直接執行 Init 的路線仍可使用。如果你已按 `Ctrl+Shift+F3`，Windows 會重新啟動進入稽核模式的 Administrator 桌面，接著依序操作：
+
+1. 取消自動出現的「系統準備工具／Sysprep」視窗，不在該視窗選擇關機或重新啟動。
+2. 從 USB 的完整 `windows_setup` 資料夾執行 `init.cmd`。Init 自動檢查目前帳號與 OOBE 準備條件，不需輸入 `AUDIT`。確認畫面說明的帳號／OOBE 變更並輸入 `YES` 後，再輸入新正式本機帳號、密碼及確認密碼；狀態未知、矛盾或仍有安裝程序時會停止，不要反覆重試。
+3. **只有看到「帳號設定已準備完成」才手動重新啟動。** 可使用開始選單的「重新啟動」，或在 CMD 輸入 `shutdown /r /t 0`。如果顯示錯誤或沒有成功文字，先處理錯誤，不把視窗結束當成成功，也不要直接執行 `windows.cmd`。
+4. 重開後完成剩餘 Windows 初始設定，登入剛準備的新正式本機帳號。稽核模式的 Administrator 只是準備帳號的暫時身分，不是後續套用設定的目標帳號。
+5. 在新正式帳號桌面接上網路，直接執行同一份 USB 工具包的 `windows.cmd`，依下方「接著套用設定」繼續。SSH 由 Windows 第 4 階段安裝，不需要第二次執行 Init。
 
 ### B．已經進入正式帳號的 Windows 桌面
 
 1. 接上網路，按 `Windows+E` →「本機／此電腦」→ USB → `windows_setup`。
-2. 雙擊 `init.cmd` 安裝 SSH，沿用目前帳號，不重建帳號或密碼。
+2. 直接雙擊 `windows.cmd`，沿用目前帳號；不需要先執行 Init。SSH 包含在 Windows 第 4 階段。
 
 ### 接著套用設定
 
-1. Init 完成後，雙擊同資料夾的 `windows.cmd`。依提示允許權限、輸入目前帳號密碼；不裝驅動時直接 Enter 略過選包。
+1. 登入正式帳號後，雙擊完整工具包的 `windows.cmd`。依提示允許權限、輸入目前帳號密碼；不裝驅動時直接 Enter 略過選包。
 2. 等整輪結束、查看結果後再手動重開機。從 USB 開啟 `windows_setup\core`，雙擊 `verify_after_restart.cmd` 續跑與驗收。
 3. 處理畫面列出的失敗，再雙擊 `verify_only.cmd` 檢查，最後依[目視確認](#6-最後目視確認)核對桌面、工具列及顯示。
 
-**完整安裝尚未實測。** 上述是目前設計的操作流程；完整「新裝 Windows 到重開驗收」仍未完成實機測試。桌面清理會刪除一般桌面檔案，開始前先移走要保留的資料。套用 Windows 設定與驗收時使用正式目標本機管理員帳號；稽核模式只用於前面的帳號初始化。執行中保持 USB 連接。
+桌面清理會刪除一般桌面檔案，開始前先移走要保留的資料。套用 Windows 設定與驗收時使用正式目標本機管理員帳號。執行中保持 USB 連接。
 
-找不到 USB 或需要命令列時，再展開下方的排錯說明；正常流程不需要 `Shift+F10` 或 `diskpart`。
+找不到 USB 或需要命令列時，再展開下方的排錯說明；初始設定使用 `Shift+F10`；不必用 `diskpart`。
 
 ## 目錄
 
@@ -71,11 +84,11 @@ Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、
 
 Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不納入 Git，從原始碼取得後須依 [來源包準備說明](#從原始碼準備完整工具包) 補齊再檢查。第三方來源及授權見 [第三方來源與授權](doc/third_party.md)。公開來源的網路 Sites 預設為空集合；請在本機維護個人規則。
 
-本工具依上方前提自動選用 Generic 或 NUC8 設定檔，Windows 模組亦提供獨立入口。依目前階段先執行 Init，再執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
+本工具依上方前提自動選用 Generic 或 NUC8 設定檔，Windows 模組亦提供獨立入口。初始設定先執行 Init，登入正式帳號後直接執行 Windows；已有正式帳號可直接執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
 
 本機維護的 `windows_setup` 可整份複製到 USB；腳本依自己所在位置解析主程式，不綁定 Downloads、USB 磁碟代號或使用者名稱。驅動獨立放在 `windows_driver_packages/nuc8`，主程式不含驅動封存檔。每次換機使用前要確認 USB 是最新完整副本；舊 USB 不會自動同步本機修改。
 
-完整流程需要你允許管理員權限、輸入現有帳號密碼，以及依提示手動重新開機，並非完全無人值守。腳本不會自行重新開機或關機。
+完整流程需要你允許管理員權限、輸入現有帳號密碼，以及依提示手動重新開機，並非完全無人值守。一般 Windows 設定不自行重新開機或關機；OOBE 套用設定包前會先明確詢問，Windows 可能在同意後重新啟動。
 
 ## 準備 USB
 
@@ -90,7 +103,7 @@ USB 根目錄\
 │  ├─ core\
 │  └─ modules\              保留整份工具包，其餘檔案也一併複製
 └─ windows_driver_packages\  可選；不需要 NUC 驅動可不帶
-   └─ nuc8\                 保留 install.cmd、manifest、輔助腳本及四個 ZIP
+   └─ nuc8\                 保留 install.cmd、manifest、輔助腳本及十二個 ZIP
 ```
 
 不是只複製兩個 `.cmd`。USB 必須可寫入，執行時保持連接，不可放到會被清理的桌面；`.git` 不是執行必要檔案。可以直接在 USB 使用，也可以自行完整複製到其他可寫入位置，無需固定任何使用者的 Downloads。
@@ -122,7 +135,7 @@ call init.cmd
 
 `cd /d` 會一起切換磁碟與資料夾；`dir` 應列出兩個入口。請確認前兩行成功才執行第三行，這不是直接把所有指令一次貼上的步驟。
 
-5. OOBE 的這次 `init.cmd` **只顯示稽核模式指引，不會建立帳號**。入口會開啟 PowerShell 並保留視窗。確認指引已顯示完畢後，若提示字元以 `PS` 開頭，先輸入 `exit` 返回原 CMD；再輸入一次 `exit` 關閉 CMD。回到初始設定畫面按 `Ctrl+Shift+F3`；電腦會重開進入稽核桌面。取消自動出現的 Sysprep 視窗，再按下節方式從 USB 執行 `init.cmd`，繼續情境 A。
+5. 依 Init 畫面提示繼續。缺少設定包時會在帳號建立前停止；完整工具包會先核對環境、資產與權限，再詢問必要帳密。套用前明確同意 Windows 可能重新啟動。
 
 #### 找不到資料夾或 USB 沒有磁碟代號
 
@@ -142,7 +155,7 @@ dir E:\
 
 1. 按 `Windows+E` 開啟檔案總管，左側選「本機／此電腦」，依名稱與容量找到 USB 並雙擊。
 2. 打開 USB 裡的 `windows_setup`（若放在其他資料夾，就逐層打開），確認看得到 `init.cmd`、`windows.cmd`、`core`、`modules`。
-3. 雙擊 `init.cmd` 即可。若檔案總管隱藏副檔名，可能只顯示 `init`；可在「檢視 → 顯示 → 副檔名」勾選後再辨認，不必先更改此設定才能執行。
+3. 稽核桌面雙擊 `init.cmd`；正式帳號桌面直接雙擊 `windows.cmd`。若檔案總管隱藏副檔名，可能只顯示 `init` 或 `windows`；可在「檢視 → 顯示 → 副檔名」勾選後再辨認，不必先更改此設定才能執行。
 4. 需要參數或想用命令呼叫時，在**這個資料夾的位址欄**點一下（或按 `Alt+D`），輸入 `cmd` 後按 Enter。開啟的 CMD 已位於工具包資料夾，先輸入 `dir init.cmd windows.cmd` 確認。
 
 依目前階段只執行對應的一行，**不要將下面整段一次貼上**。入口會啟動 PowerShell 並在結束後保留視窗；只有本輪確實結束、畫面已有結果時，若看到 `PS` 提示字元，輸入 `exit` 返回原 CMD。尚在執行時不要輸入 exit 或關閉視窗。
@@ -151,7 +164,7 @@ dir E:\
 call init.cmd
 ```
 
-稽核桌面會處理建帳號；正式帳號桌面會處理 SSH。正式帳號的 Init 成功後，先依上面說明輸入 `exit` 離開保留的 PowerShell、回到原 CMD，再執行下一行；也可重新從工具包位址欄開一個 CMD：
+上面的 Init 只在初始設定／稽核桌面準備帳號。登入正式帳號後，直接執行下面的 Windows 入口；不需再執行 Init：
 
 ```cmd
 call windows.cmd
@@ -175,37 +188,32 @@ call windows.cmd -VerifyOnly
 
 ## 先看目前在哪個階段
 
-兩個入口各有用途：`init.cmd` 處理初始帳號與 SSH；`windows.cmd` 處理正式帳號登入後的驅動、更新、清理與偏好。不要在 OOBE 或稽核用 Administrator 桌面執行 windows.cmd。
+兩個入口各有用途：`init.cmd` 處理初始帳號與 OOBE；`windows.cmd` 處理正式帳號登入後的 SSH、驅動、更新、清理與偏好。不要在 OOBE 或稽核用 Administrator 桌面執行 windows.cmd。
 
 ### 情境 A：全新安裝，仍在初始設定／連接 Wi-Fi 畫面
 
-1. 保持離線，按 `Ctrl+Shift+F3`（部分鍵盤需加 Fn），Windows 會重新啟動進入「稽核模式」。這一步不會重新安裝 Windows。若已按 Shift+F10 開啟命令窗，可先關閉它再按快捷鍵。
-2. 進入內建 Administrator 桌面後，按「取消」關閉自動出現的「系統準備工具」視窗，避免兩個 Sysprep 同時執行。
-3. 打開 USB 上完整的 `windows_setup` 資料夾，雙擊 `init.cmd`。依畫面輸入 `AUDIT` 確認這是剛安裝系統的稽核模式，再輸入自己要建立的本機帳號、密碼與確認密碼。每臺可使用不同帳號，不必使用範例帳密。
-4. Init 使用 Windows answer file 建立本機管理員並準備返回 OOBE。成功後依提示手動重新開機。不要在此稽核帳號執行 windows.cmd。
-5. 完成仍顯示的地區、隱私等設定，以新帳號登入。此流程不替你同意授權或隱私選項。
-6. 接上網路，從同一完整工具包再執行 `init.cmd`，這次會處理正式帳號的 SSH，不再建立帳號。
-7. Init 成功後執行 `windows.cmd`，依提示選擇驅動包或略過，輸入目前帳號密碼並等整輪完成。
-8. 手動重新開機，以同一帳號登入並重新找到工具包，執行 `windows.cmd -AfterRestart`；若提示仍需重開，等本輪結束再重開續跑。
-9. 最後執行 `windows.cmd -VerifyOnly`，確認無未解決失敗，再做下方「最後目視確認」。
+依[快速開始 A](#快速開始)從 USB 的 `init.cmd` 執行。腳本要求 Windows 11 22H2 以上 x64 桌面版，使用官方唯讀 `OOBEComplete` 判斷初始設定，並拒絕 WinPE 與一般 SYSTEM 工作。帳號與密碼由你輸入；不重設或提升既有同名帳號。
 
-同一 init.cmd 若從 OOBE 的 Shift+F10 命令窗呼叫，只會辨識環境並引導進入稽核模式；不會在 SYSTEM 身分直接執行 Sysprep。Microsoft 不支援以 SYSTEM 執行 Sysprep，因此這個方式需要上述稽核模式切換，不能保證在 Wi-Fi 畫面一次呼叫就直接進桌面。
+設定包只包含 `HideOobe=True`，不含帳密或 Microsoft 工具。先建立並讀回確認正式管理員帳號，才會詢問是否套用；Windows 可能因套用設定包重新啟動，因此必須先輸入 `YES` 同意。腳本不會在 SYSTEM 下執行 Sysprep。
 
-帳號建立時的必要 answer file 只暫存在本機受管理員／SYSTEM 權限保護的目錄，不存於 USB；其中密碼可還原，不應視為加密。首次正式帳號登入會清理本工具的密碼 answer file，保留不含密碼的狀態與清理紀錄。詳細限制與清理紀錄見 `modules\init\readme.md`。此 OOBE 新流程尚未在實機完整跑過，失敗時查看提示並停止，不要手動修改 Setup 狀態強行略過。
+續跑檔案放在 `%ProgramData%\windows_setup_init`，只允許 SYSTEM 與管理員讀寫；同層的 `windows_setup_init.cmd` 是取消／中斷時的恢復入口，供一般使用者唯讀啟動提權。正常登入後直接執行完整工具包的 `windows.cmd`：它在設定前核對同一臺機器、目標 SID、家目錄、正式桌面及已安裝設定包，再記錄帳號確認。此紀錄不代表 SSH 已完成，SSH 由第 4 階段處理。帳密不保存在設定包或續跑 JSON；若帳號已建立但寫入所有權紀錄失敗，會保留帳號並停止，不會猜測接管同名帳號。
+
+舊版 `SshPending`／`Complete` 紀錄通過相同核對後，會先保留受保護的 `state_before_account_confirmation.json`，再轉為 `AccountConfirmed`；不刪除舊執行檔案，也不把舊狀態當成目前 SSH 驗證結果。
+
+Windows 更新等流程結束後依提示手動重新開機，使用 `windows.cmd -AfterRestart` 續跑，再用 `windows.cmd -VerifyOnly` 檢查。
 
 ### 情境 B：已有正式本機帳號，從 Windows 桌面開始
 
-此情境保留現有帳號，不進稽核模式，也不重新建立帳號。USB 與本機的完整工具包都可使用，不必先移到 Downloads。
+此情境保留現有帳號，不重新建立帳號。USB 與本機的完整工具包都可使用，不必先移到 Downloads。
 
 1. 登入要套用設定的本機管理員帳號，確認記得現有密碼；先取走桌面要保留的檔案，接上網路並保持電源穩定。
 2. 準備完整工具包：可以直接開啟 USB 的 `windows_setup`，或開啟自行完整複製到本機可寫入、非桌面位置的副本。依上方「已進入稽核或正式桌面」的步驟找到資料夾，再從位址欄開啟 CMD。
-3. 執行 `init.cmd`，允許目前帳號提權。這個階段不會重新建立帳號或改密碼；會安裝／啟用 OpenSSH Server、設定區域網路防火牆，並建立目前使用者的 SSH／hosts 框架。離線且缺少 SSH 元件時會明確失敗，接網後再執行 Init。
-4. Init 成功後執行 `windows.cmd`，依提示輸入目前帳號的現有密碼供自動登入使用。需要 NUC 驅動才選擇獨立包，否則按 Enter 略過。等待整輪 19 個模組完成，不要中途關機。
-5. 整輪結束後手動重新開機，以同一帳號登入，再開啟原本使用的同一份完整工具包；USB 請重新確認本次磁碟代號。
-6. 在工具包目錄執行 `.\windows.cmd -AfterRestart`。若仍要求重開，等本輪結束後手動重開，再從同一份工具包續跑。
-7. 處理所有失敗後執行 `.\windows.cmd -VerifyOnly`，再逐項完成下方「最後目視確認」。有錯誤時查看 `reports` 及畫面，不將舊結果當成本輪成功。
+3. 直接執行 `windows.cmd`，允許目前帳號提權，依提示輸入現有密碼供自動登入使用。需要 NUC 驅動才選擇獨立包，否則按 Enter 略過。等待整輪 19 個模組完成，不要中途關機。第 4 階段會安裝／啟用 OpenSSH Server、設定區域網路防火牆及目前使用者的 SSH／hosts 框架；缺網路或元件時會記錄失敗，連網後再重跑 Windows 或獨立 SSH 模組。
+4. 整輪結束後手動重新開機，以同一帳號登入，再開啟同一份完整工具包；USB 請重新確認本次磁碟代號。
+5. 在工具包目錄執行 `.\windows.cmd -AfterRestart`。若仍要求重開，等本輪結束後手動重開，再從同一份工具包續跑。
+6. 處理所有失敗後執行 `.\windows.cmd -VerifyOnly`，再逐項完成下方「最後目視確認」。有錯誤時查看 `reports` 及畫面，不將舊結果當成本輪成功。
 
-兩種情境都由目前正式使用者與腳本位置解析路徑，不要求固定帳號、磁碟代號或家目錄；請勿使用另一位管理員的帳密代替目前使用者提權。SSH 可重複執行，Windows 第 04 模組也會再次確認。
+兩種情境都由目前正式使用者與腳本位置解析路徑，不要求固定帳號、磁碟代號或家目錄；請勿使用另一位管理員的帳密代替目前使用者提權。SSH 由 Windows 第 04 模組執行，也可單獨使用 `modules\ssh\apply_ssh_settings.cmd`。
 
 以下是正式帳號桌面的後續流程。已完成上方 Init 的使用者，不必再建立帳號；直接確認前提並從步驟 2 繼續。
 
@@ -223,31 +231,33 @@ call windows.cmd -VerifyOnly
 
 ```text
 windows_setup\
-├─ init.cmd                    初始帳號／SSH
+├─ init.cmd                    初始帳號／OOBE
 ├─ windows.cmd                 正式帳號桌面設定
 ├─ readme.md                   本文件
 ├─ core\                      主流程、驗證與路徑表
+├─ drivers\                   機型 profile／manifest 與官方版本說明（不含 ZIP）
 ├─ modules\                   每個功能自己的腳本、資產與獨立入口
-│  ├─ init\                   OOBE／稽核模式帳號建立
+│  ├─ init\                   OOBE 帳號初始化與正式登入續跑
 │  ├─ ssh\                    SSH 及 hosts 同步
-│  ├─ drivers\
-│  │  └─ manifests\           驅動清單範本（不含封存檔）
+│  ├─ drivers\                共用驅動安裝引擎與驗證
 │  ├─ updates\                Windows Update
 │  ├─ debloat\                清理與 Win11Debloat
 │  └─ …                        帳號、記憶體、電源、桌面、輸入法等
 ├─ reports\                   本機整體進度、結果與紀錄（不納入 Git）
-├─ test\powershell\          unit／integration／system 分層測試
+├─ test\powershell\          unit／integration 分層測試
 └─ doc\changelog\            版本摘要與紀錄規範
 ```
 
-驅動包獨立於主程式。執行 `windows.cmd` 時可輸入獨立包目錄，直接 Enter 預設略過驅動；也可明確傳入：
+驅動包獨立於主程式。執行 `windows.cmd` 先顯示偵測主機板：一般電腦自動略過 NUC 驅動；支援 NUC 才提示選包。找到相鄰 `windows_driver_packages/nuc8` 時，輸入 Y 才選用，P 可指定其他位置，Enter 略過。找不到包或包校驗失敗時，可輸入正確目錄或 Enter 略過；也可明確傳入：
 
 ```powershell
 $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不用加引號）'
 .\windows.cmd -DriverPackagePath $driverPath
 ```
 
-也可直接執行 `.\windows.cmd`，依畫面輸入這次的驅動包路徑，或按 Enter 略過。獨立包可自行執行 `install.cmd`；只核對完整性用 `install.cmd -PackageOnly`。安裝器自行檢查 NUC8i7HVB／NUC8i7HNB，其他機型略過，不能拿 NUC 驅動套用其他硬體。續跑只沿用同一電腦與使用者先前明確選擇的驅動包，並核對 package.json／manifest.json 的雜湊；同 USB 相對位置可隨盤符變動解析，包身分變更則拒絕。整包複製至其他電腦不沿用舊選擇。
+偵測失敗或板號空白／明確未知時，選 R 重新偵測、G 或 Enter 使用通用設定，或依下表選擇實際 NUC 整機，再輸入完整板號確認。回報已知其他板號、同時回報多塊板，或重新偵測與確認不符時，不允許強制套用 NUC 驅動。手動確認只影響驅動；AMD 位置設定仍只依自動偵測。原始板號、偵測錯誤與確認值分開保存在該機 reports。獨立包可自行執行 `install.cmd`；只核對完整性用 `install.cmd -PackageOnly`。獨立安裝器使用相同偵測與未知型號確認流程；已知其他機型略過，不能拿 NUC 驅動套用其他硬體。`-PackageOnly` 是離線驗包，不可與手動確認參數混用。續跑只沿用同一電腦與使用者先前明確選擇的驅動包，並核對 package.json／manifest.json 的雜湊；同 USB 相對位置可隨盤符變動解析，包身分變更則拒絕。整包複製至其他電腦不沿用舊選擇。
+
+`-NonInteractive` 關閉驅動選擇及舊版開始選單政策的詢問，並不代表 Windows 全流程無人值守；自動登入等模組仍可能詢問密碼。無互動主控台時也不等待驅動輸入，未選包即略過。需自動化處理「未知」且已人工確認的實機時，可明確傳入 `-ConfirmedBoard NUC8i7HVB -ConfirmationComputer $env:COMPUTERNAME -DriverPackagePath $driverPath -NonInteractive`（HNK 使用 HNB）；已知其他機型仍拒絕。`windows.cmd -VerifyOnly`／`-AfterRestart` 不接受新的型號或包選擇，只恢復同機同帳號紀錄；重新選擇請走一般入口。明確傳入空路徑表示略過，未提供路徑才允許互動選包。
 
 不要只複製單一 `.cmd`／`.ps1`；主程式與獨立驅動包各自保留完整結構。`.git` 僅在維護版本時需要，執行設定與獨立驅動包不依賴它。
 工具包不要放在桌面或其子資料夾內，以免桌面清理刪到工具包。直接使用 USB 時，USB 必須可寫入且本輪全程保持連接；下一輪仍從同一完整副本續跑。若自行改用本機完整副本，才改從本機該份執行。
@@ -263,9 +273,9 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 | Intel NUC8i7HVK（同板整機：NUC8i7HVKVA、NUC8i7HVKVAW） | NUC8i7HVB | `NUC8i7HVB` |
 | Intel NUC8i7HNK（同板整機：NUC8i7HNKQC） | NUC8i7HNB | `NUC8i7HNB` |
 
-型號對照依 [ASUS 官方 NUC 規格索引](https://zentalk.asus.com/t5/faq/nuc-technical-product-specifications-for-nuc-products/ta-p/451363)；HVK／HVB 亦見 [Intel 技術規格](https://www.intel.com/content/dam/support/us/en/documents/mini-pcs/nuc-kits/NUC8i7HVK_TechProdSpec.pdf)。官方表列的是 BIOS 識別，腳本實際讀取 SMBIOS 主機板 Product，去除首尾空白後比對白名單；不依外殼貼紙猜型號，也不表示所有 NUC8 都支援。可先執行 `(Get-CimInstance Win32_BaseBoard).Product` 查看。若 OEM 回報不同值，會安全略過，請勿為了安裝自行繞過檢查。
+型號對照依 [ASUS 官方 NUC 規格索引](https://zentalk.asus.com/t5/faq/nuc-technical-product-specifications-for-nuc-products/ta-p/451363)；HVK／HVB 亦見 [Intel 技術規格](https://www.intel.com/content/dam/support/us/en/documents/mini-pcs/nuc-kits/NUC8i7HVK_TechProdSpec.pdf)。官方表列的是 BIOS 識別，腳本實際讀取 SMBIOS 主機板 Product，去除首尾空白後比對白名單；不依外殼貼紙猜型號，也不表示所有 NUC8 都支援。可先執行 `(Get-CimInstance Win32_BaseBoard).Product` 查看。已知非白名單值會安全略過；只有空白／明確未知或讀取失敗才提供受控手動確認，確認不會覆寫報告中的原始偵測值。
 
-這是型號對照與安裝條件，不代表每個整機變體已實測。四個封存檔不是完整的所有裝置驅動集；仍須依裝置管理員與 Windows Update 檢查其他驅動。AMD 封存檔 GFX-Radeon-Win10-23.10.01.46.zip 在官方列為 Windows 10 64-bit，不能宣稱 Windows 11 官方認證；本工具在 Windows 11 的結果須逐機驗證。 驅動來源見 [ASUS NUC8i7HVK 下載頁](https://www.asus.com/uk/supportonly/nuc8i7hvk/helpdesk_download/)。
+這是型號對照與安裝條件，不代表每個整機變體已實測。目前清單為十二包、33 個 INF 目標及一個 Extension，精確版本與依賴見 [機型設定檔](drivers/nuc8i7hvk_hnk/readme.md)；仍依裝置枚舉結果與 Windows Update 處理其他驅動。AMD 封存檔 GFX-Radeon-Win10-23.10.01.46.zip 在官方列為 Windows 10 64-bit，不能宣稱 Windows 11 官方認證；本工具在 Windows 11 的結果須逐機驗證。 驅動來源見 [ASUS NUC8i7HVK 下載頁](https://www.asus.com/uk/supportonly/nuc8i7hvk/helpdesk_download/)。
 
 ## 3. 執行第一次設定
 
@@ -278,7 +288,7 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 
 若有錯誤，記下模組名稱與訊息，並查看工具包內的 `reports\Setup-Result.json`。腳本可能繼續後面的模組，因此「本輪執行結束」不一定代表所有模組成功。進度可查看 `reports\Setup-Progress.json`；更新進度可另開 `modules\updates\show_update_status.cmd`。
 
-如果在最前面的帳號密碼／自動登入階段就中止，這個失敗不會加入後續模組重試清單；先修正密碼或畫面指出的問題，再執行 `windows.cmd`。不要把上次留下的結果檔當成本輪已完成。
+如果在最前面的 UAC 政策／帳號密碼／自動登入階段就中止，這個失敗不會加入後續模組重試清單；先修正密碼或畫面指出的問題，再執行 `windows.cmd`。不要把上次留下的結果檔當成本輪已完成。
 
 ## 4. 等整輪結束後手動重新開機
 
@@ -306,7 +316,8 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 - 解析度為 `1920×1080`，縮放為 Windows 標準 `100%`，不是自訂縮放。
 - Windows 與應用程式使用深色模式，桌面背景是純黑色。
 - 桌面只顯示控制台、本機、網路、資源回收筒，位置符合範本。
-- 工作列只釘選 Edge，搜尋欄、天氣／小工具與工作檢視按鈕隱藏。執行中的其他程式仍可能顯示在工作列。
+- 工作列啟用自動隱藏，只釘選 Edge，搜尋欄、天氣／小工具與工作檢視按鈕隱藏。執行中的其他程式仍可能顯示在工作列。
+  自動隱藏使用 [Windows AppBar API](https://learn.microsoft.com/en-us/windows/win32/shell/abm-setstate)，在目前互動使用者的工作階段立即套用及讀回；獨立執行 `modules\taskbar\apply_taskbar_settings.cmd` 也會套用，`-VerifyOnly`／重開後檢查會重新讀取目前狀態。找不到該工作階段的工作列或讀回不符時明確失敗，不覆寫整段登錄資料。
 - 開始選單釘選清空；按 Windows 鍵仍可搜尋程式。
 - 檔案總管顯示一般隱藏項目與副檔名；受保護的系統檔仍保持隱藏。
 - 預設輸入為英文美式鍵盤，需要中文時按 `Win+Space` 切換。
@@ -315,20 +326,103 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 
 四個桌面圖示的排列範本以繁體中文 Windows、1920×1080、100% 縮放為準。自動檢查不能取代上述登入與畫面觀察。
 
+## Windows Update 進度與紀錄
+
+更新階段使用 Windows Update API 回報的下載／安裝百分比，包含目前第幾項、總項數、標題與單項進度。背景工作每約 5 秒更新進度檔，主視窗每約 15 秒顯示狀態及最後回報時間。掃描階段只有狀態與經過時間，不以時間估算百分比；掃描尚未返回時，最後回報時間可能暫時不變。Windows「設定」頁面不一定會呈現這個 API 工作的相同進度，請以工具視窗及本輪紀錄為準。
+
+可另外以系統管理員身分開啟 PowerShell 查看目前狀態：
+
+```powershell
+$state = Join-Path $env:ProgramData 'windows_setup_update'
+Get-Content (Join-Path $state 'Update-Progress.json') -Raw -Encoding UTF8 | ConvertFrom-Json | Format-List
+```
+
+持續查看最新一份更新日誌（按 `Ctrl+C` 只停止觀看，不會中止更新）：
+
+```powershell
+$state = Join-Path $env:ProgramData 'windows_setup_update'
+$log = Get-ChildItem -LiteralPath $state -Filter 'WindowsUpdate-*.log' |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($log) { Get-Content -LiteralPath $log.FullName -Encoding UTF8 -Tail 30 -Wait }
+```
+
+新版 SYSTEM 更新工作使用 `%ProgramData%\windows_setup_update` 專用受保護目錄，只允許 SYSTEM 與管理員存取。複製前會檢查路徑、擁有者及 ACL，複製後核對所有執行來源的 SHA-256；已有不可信或 junction 目錄會停止，不接管或刪除它。舊 `%ProgramData%\NUC8-Setup\WindowsUpdate` 紀錄保留原位。新版驗證只接受與受保護 context 的電腦、原啟動帳號及本輪 ID 相符的結果；舊格式若缺這些資訊，會要求重新執行更新，不能當作本輪已通過。
+
+`WindowsUpdate-Result.json` 保存搜尋結果碼／警告、下載結果碼／HResult、每項安裝結果及是否需要重新開機。只有搜尋與下載結果碼 `2`（完整成功）才繼續；失敗或部分成功不會當作「沒有更新」。結果檔、進度檔與 `WindowsUpdate-*.log` 都位於上述 `$state`；主流程另有工具包內 `reports\Setup-*.log`。
+
+下載與安裝各自預設等待上限為 50 分鐘，逾時先記錄失敗並請求中止。Windows API 的清理可能仍需等待，不代表收到中止請求就已停止；請查看最後回報與日誌，不要因此連續重跑或關機。若同一排程仍在執行，工具會拒絕重啟及覆寫 worker。本工具不自動重新開機。
+
+介面依據：[Microsoft BeginDownload](https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nf-wuapi-iupdatedownloader-begindownload)、[BeginInstall](https://learn.microsoft.com/en-us/windows/win32/api/wuapi/nf-wuapi-iupdateinstaller-begininstall)、[非同步操作與清理](https://learn.microsoft.com/en-us/windows/win32/wua_sdk/guidelines-for-asynchronous-wua-operations)。
+## 管理員提權提示與還原
+
+`windows.cmd` 第 1 階段會把這臺電腦的 `ConsentPromptBehaviorAdmin` 設為 `0`：此電腦的管理員之後提權會自動核准，不再顯示「是否允許此應用程式變更您的裝置」。第一次啟動腳本仍須核准一次。這會降低管理員操作的提示防護；不影響標準使用者的提權規則，也不關閉 UAC、Defender 或 SmartScreen。
+
+在工具包根目錄可單獨執行：
+
+```cmd
+modules\uac\apply_uac_settings.cmd
+modules\uac\apply_uac_settings.cmd -VerifyOnly
+modules\uac\apply_uac_settings.cmd -Restore
+```
+
+模組要求原有 `EnableLUA` 為 DWORD `1`，否則停止並要求先人工確認，不順便修改它或安全桌面政策。首次執行會在 `%ProgramData%\NUC8-Setup\UAC-Original.json` 保存這臺電腦的原值與是否存在；重跑不覆寫。`-Restore` 只還原這份原值（原先不存在則移除該值），不保證還原後一定顯示提示；不要刪除原值檔或拿其他電腦的檔案覆蓋它。
+
+每次都讀回政策確認，組織政策覆寫或錯誤會回報失敗。結果在 `%ProgramData%\NUC8-Setup\UAC-Result.json`；`windows.cmd -VerifyOnly` 也核對本輪結果。還原後，針對一鍵流程的「管理員免提示」驗證可能不通過，這代表目前採用還原的設定。
+
+政策值依據：[Microsoft UAC 設定及組態](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/user-account-control/settings-and-configuration/)。
+## 非必要資料分享與隱私設定
+
+`windows.cmd` 會在原本的 Win11Debloat 清理階段末端套用下列隱私政策，主流程仍是 19 個階段。也可在工具包根目錄單獨執行；CMD 會沿用目前帳號並要求必要的管理員權限：
+
+```powershell
+.\modules\privacy\apply_privacy_settings.cmd
+.\modules\privacy\apply_privacy_settings.cmd -VerifyOnly
+```
+
+| 項目 | 套用結果 |
+| --- | --- |
+| Windows 診斷資料 | Pro／Pro for Workstations 使用最低支援的「必要」級別 1；Enterprise／Education 使用支援的關閉級別 0 |
+| 廣告識別碼 | 停用跨應用程式廣告 ID |
+| 診斷資料個人化推薦 | 對目前執行帳號停用以診斷資料提供個人化推薦 |
+| 活動歷程 | 停用活動摘要、發布及上傳 |
+| 回饋提示 | 不顯示 Microsoft 回饋邀請 |
+| 線上語音辨識 | 停用 Microsoft 雲端語音辨識，因此 **Win + H 雲端聽寫也會受影響**；不是禁止所有麥克風使用 |
+| 手寫與輸入改善 | 不傳送手寫及打字資料供改善辨識服務 |
+
+Home 或無法辨識／未支援的版本會明確回報 `Unsupported`，不寫入政策，也不會標為通過。每次會逐項核對九個登錄政策值及 DWORD 型別；讀回不符、權限錯誤或寫入未生效均視為失敗。結果保存於 `%ProgramData%\NUC8-Setup\Privacy-Result.json`。`-VerifyOnly` 只讀政策並更新診斷結果，不重新寫入政策；`windows.cmd -VerifyOnly` 也會檢查本輪隱私結果，不能拿舊報告代替。
+
+這些設定不代表電腦完全不傳送資料：專業版仍有必要診斷，Windows Update、安全服務，以及 Edge、Office 或其他應用程式也各有自己的資料控制。本模組不關閉 Defender、Windows Update、防火牆，不加入安全例外，不封鎖遙測網域，也不一概停用相機、麥克風等應用程式權限。
+
+政策與支援範圍依 Microsoft 官方文件：[Windows 診斷資料級別](https://learn.microsoft.com/en-us/windows/privacy/configure-windows-diagnostic-data-in-your-organization)、[廣告 ID／語音／活動政策](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy)、[個人化推薦與回饋提示](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience)、[手寫及輸入資料分享](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-textinput#allowlinguisticdatacollection)。這是政策設定與讀回檢查，並非封包監測結果。
+
+### 開始選單政策與待處理狀態
+
+第 11 階段準備開始選單設定。支援新版政策的 Windows 使用 GPO；較舊的 Windows 11 22H2／23H2 或尚未具備該政策的版本使用隨包附帶的獨立開始選單設定包，沒有提高 Windows 最低版本。
+
+舊版設定包是整臺電腦的政策，會在每次登入重新清空釘選。主流程先跑完全部 19 階段與最後檢查；只有其他步驟和裝置沒有錯誤，才詢問是否套用。Windows 可能要求重新登入或重新啟動，必須明確輸入 `YES` 才安裝；拒絕、非互動執行或其餘步驟失敗會保留 `LegacyPendingApply`，不會偷裝或自行重新啟動。
+
+稍後要處理尚未套用的政策，先確認其他工作已完成，再從工具包根目錄執行：
+
+```cmd
+modules\start_menu\apply_start_menu_settings.cmd -ApplyPolicy
+```
+
+政策已準備但尚未由原生匯出確認空白時，結果為 `PendingSignIn`，不是已清空。待處理項目列在 `Setup-Result.json` 的 `PendingModules`，與真正失敗的 `StageErrors` 分開。手動重新登入後執行 `windows.cmd -AfterRestart`；此入口只驗證開始選單，不安裝其設定包。只有原生匯出確認零釘選才是 `Confirmed`，續跑會移除已確認的待處理項目。
+
 ## 19 個模組的執行順序
 
 | 順序 | 處理內容 |
 | --- | --- |
-| 01 | 目前帳號開機自動登入 |
+| 01 | 此電腦管理員提權免提示、目前帳號開機自動登入 |
 | 02 | 停用磁碟分頁檔（虛擬記憶體） |
 | 03 | 插電時停用自動睡眠／休眠 |
 | 04 | OpenSSH Server、區域網路防火牆、SSH 目錄與 hosts／SSH 同步框架 |
-| 05 | NUC8 選擇獨立包才安裝；未選包或 Generic 顯示略過 |
-| 06 | NUC8 拒絕 AMD Software 位置存取；Generic 顯示略過 |
-| 07 | Windows Update 建議更新 |
+| 05 | Windows Update 建議更新 |
+| 06 | 已選機型獨立包的驅動檢查與更新；未選包或 Generic 顯示略過 |
+| 07 | NUC8 拒絕 AMD Software 位置存取；Generic 顯示略過 |
 | 08 | Win11Debloat、OneDrive 與可移除的預裝 App 清理 |
 | 09 | 獨立版 Copilot 清理 |
-| 10 | 工作列顯示與 Edge 釘選 |
+| 10 | 工作列自動隱藏、顯示與 Edge 釘選 |
 | 11 | 開始選單釘選與推薦清理 |
 | 12 | 1920×1080、原生 100% 縮放 |
 | 13 | 桌面清理與四個系統圖示 |
@@ -338,6 +432,8 @@ $driverPath = Read-Host '貼上目前獨立驅動包 nuc8 的完整路徑（不�
 | 17 | 顯示一般隱藏項目與副檔名 |
 | 18 | 清除符合條件的舊系統／預設資料夾殘留 |
 | 19 | 最後套用桌面圖示排列 |
+
+驅動排在 Windows Update 之後，再套用畫面及工作列設定，避免更新顯示驅動後覆寫設定。初次整輪最後會重新盤點已選官方驅動目標；重開續跑先核對同機、同帳號與允許的失敗模組，再執行更新及驅動唯讀盤點。版本已達標或較新便不重新解壓安裝；需要更新才安裝，驅動未核正常時保留畫面重試，最後仍重新驗證。不會自動重新開機。
 
 第 15 模組會在缺少時新增英文（美國）`en-US`，並確保存在美式鍵盤 `0409:00000409`，再設為預設輸入法；保留中文、其他語言、既有鍵盤與順序，不安裝英文顯示語言包或切換 Windows 介面語言。若只要補英文鍵盤，可雙擊 `modules\input\apply_input_method_settings.cmd`；只檢查可在工具包目錄執行 `modules\input\apply_input_method_settings.cmd -VerifyOnly`。檢查會同時確認英文語言、美式鍵盤及預設輸入法，結果寫入 `%ProgramData%\NUC8-Setup\InputMethod-Result.json`。
 
@@ -358,7 +454,7 @@ SSH 與 hosts 可獨立或配合使用。這套工具目前提供可修改的網
 
 Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安裝。Windows 不允許移除的系統元件會保留，清理數量會隨 Windows 狀態而不同。
 
-既有設定曾在原 NUC 驗證；新增 Generic 路徑與第二臺全新 Windows 的完整安裝尚未實跑。非繁體中文系統略過既有桌面圖示座標範本，但仍處理系統圖示 GUID。硬體或語系不適用項目明確顯示 Skipped，不計為通過；其他語系的電源解析等仍可能需要實機調整。請以目前這臺電腦的驗收結果為準，不保證不同 Windows 版本、硬體或螢幕得到完全相同的更新版本及刪除數量。
+非繁體中文系統略過既有桌面圖示座標範本，但仍處理系統圖示 GUID。硬體或語系不適用項目明確顯示 Skipped，不計為通過；其他語系的電源解析等仍可能需要實機調整。請以目前這臺電腦的驗收結果為準，不保證不同 Windows 版本、硬體或螢幕得到完全相同的更新版本及刪除數量。
 
 使用者可見的修改見 [變更紀錄](doc/changelog/changelog.md)；詳細驗證結果與限制以中文 Git 提交及 GitHub Release 說明記錄。工具包內已建立本機 Git，但執行設定不需要安裝 Git；若要查看歷史，可在工具包目錄執行 `git log -5 --oneline`。每機執行結果不納入 Git，請保留需要的診斷紀錄。
 
@@ -368,6 +464,7 @@ Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安�
 | --- | --- |
 | `modules\init` | 初始帳號建立 |
 | `modules\accounts` | 自動登入 |
+| `modules\uac` | 管理員提權免提示、原值還原 |
 | `modules\memory` | 分頁檔 |
 | `modules\power` | 電源與睡眠 |
 | `modules\ssh` | SSH 與 hosts 同步 |
@@ -424,13 +521,18 @@ Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安�
 
 ### 主機名稱與區域網路
 
-- 連線時使用自己的帳號與主機名稱，例如 ssh your_user@nuc-001.local；名稱解析與連線須在實機確認。
-- .local 用於同網段 mDNS，訪客網路、隔離網路或跨VLAN可能無法使用。
+- 第 4 階段會在 SSH 與 LAN Ping 就緒後，啟動 Windows 原生持續 mDNS publisher，公告目前系統名稱的 `主機名稱.local`、各作用中介面的 A／AAAA 與 SSH `_ssh._tcp` 22。名稱與使用者動態取得；DHCP／網卡變更會重新綁定，改電腦名稱後重新啟動即可沿用新名稱。獨立入口是 `modules\ssh\apply_mdns_settings.cmd`，加 `-VerifyOnly` 可唯讀檢查。
+- 在**另一臺同網段電腦的 PowerShell**，先複製畫面的 `ping -4 '主機名稱.local'`，再試 `ssh -l '帳號' '主機名稱.local'`；IPv6 可另用畫面的 `ping -6`。若名稱解析失敗，先複製畫面的 IP 備援命令。多個 IP 會完整列出，單一備援範例優先選一般 IPv4。
+- IPv6 `fe80::` 是 link-local；畫面保留本機的 `%介面索引`，從另一臺直連時，scope 必須改用**用戶端**該網段的索引，可在該臺執行 `Get-NetIPInterface -AddressFamily IPv6 -ConnectionState Connected` 查看；不能直接沿用伺服器的索引。優先使用名稱或 IPv4 備援可避免手動選 scope。
+- publisher 使用受保護的本機來源快照與 SYSTEM 開機工作，拔除 USB 後仍持續運作，不需要 agent 或 Bonjour。驗證會讀回目前工作、來源、SYSTEM 程序、本輪 RunId、鮮活 heartbeat 與原生註冊狀態；失敗會讓模組與總驗收失敗。`Registered` 表示本機原生公告已註冊，`RemoteVerified` 保持 false；另一臺能否解析仍以你實際執行上述命令為準，不以本機 `LocalMatched` 冒充跨機成功。
+- `.local` 通常限同網段；訪客網路、AP 隔離、跨 VLAN、用戶端不支援 mDNS 或網路政策可能阻擋 multicast。工具不覆寫 GPO、開 UDP 5353 防火牆孔、修改 hosts、改名或關閉 IPv6；名稱失敗時可使用畫面中的實際 IP 備援。既有名稱觀測仍可用 `Resolve-DnsName -NoHostsFile` 協助診斷，不把觀測當公告或跨機證明；參見 [Microsoft 的名稱解析說明](https://techcommunity.microsoft.com/blog/networkingblog/resolve-dnsname-vs-nslookup-in-windows/4483858)及 [mDNS 管理說明](https://techcommunity.microsoft.com/blog/networkingblog/mdns-in-the-enterprise/3275777)。
 - 多臺電腦建議路由器固定 DHCP 租約；需要跨網段時使用區域 DNS，例如 nuc-001.home.arpa。
 - 沒有寫入固定 IP、個人 SSH 私鑰、hosts 站點資料或其他人的 SSH config。
 
 
 ## 清理與網路規則補充
+
+Win11Debloat 清理除了檢查已安裝與預佈建 App，還會逐項讀回 `debloat_profile.json` 所選功能的登錄型別及值，不把第三方程序退出 0 當成全部成功。目前十項功能包含建議、廣告、Bing 與部分 AI 設定；依上游 Windows build 適用範圍，不適用項目在結果中明列 `Skipped`，不宣稱已套用。結果保存在 `%ProgramData%\NUC8-Setup\Debloat-Result.json`；`windows.cmd -VerifyOnly` 會重新讀回本輪狀態，不重新清理或套用設定。登錄讀回不代表所有資料傳輸停止或所有應用程式 AI 功能已移除。
 
 OneDrive 獨立入口為 `modules\debloat\remove_one_drive.cmd`；解除安裝後僅清除空的預設資料夾，不刪除個人或雲端資料。清理模組對 Windows.old、Contacts、Saved Games、Favorites、Links、Searches 只清除符合空目錄條件的項目；含資料或連結時保留。具名預設 Bing 書籤、捷徑與內建搜尋定義可清除，其他自訂內容保留；不可移除及僅 Staged 的 Windows 元件不代表一般已安裝 App 未清理。
 
@@ -442,30 +544,42 @@ Hosts／SSH 獨立入口為 `modules\ssh\apply_hosts_sync.cmd`、`sync_hosts.cmd
 
 ### 主程式與可選驅動包
 
-主程式 `windows_setup` 與 `windows_driver_packages/nuc8` 是兩個獨立資料夾。只做一般 Windows 設定時帶主程式即可；需要 NUC 驅動才另帶驅動包。主程式不搜尋或偷偷使用旁邊的舊驅動，必須明確選擇。
+主程式 `windows_setup` 與 `windows_driver_packages/nuc8` 是兩個獨立資料夾。只做一般 Windows 設定時帶主程式即可；需要 NUC 驅動才另帶驅動包。主程式只提示相鄰標準目錄，仍須明確選擇才使用，並核對包身分與全部封存檔雜湊。
 
 ### 從原始碼準備完整工具包
 
-1. 保留主程式完整結構，不只複製 `init.cmd` 或 `windows.cmd`。
-2. 補入 `modules\accounts/Autologon64.exe`：可從已核對的主程式複製，或從 [Microsoft Sysinternals 官方頁](https://learn.microsoft.com/en-us/sysinternals/downloads/autologon) 取得；執行時驗證 Microsoft 簽章。
-3. 執行只讀主程式檢查：
+以下可以從全新的 Release 下載開始，不使用任何既有 Downloads／USB 資產。準備電腦需要 Windows 與網路；此階段只準備檔案，不執行 Init、Windows 設定或 Autologon。
 
-   ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\core\test_setup_prerequisites.ps1 -PackageOnly
+1. 開啟 [Releases](https://github.com/ycpss91255/windows_setup/releases)，選擇要使用的版本，先閱讀該版本說明與已知限制。標示 **Pre-release** 的版本是預覽版，不能當作已完成實機驗收。展開該版本的 **Assets**，下載 **Source code (zip)**。
+2. 在檔案總管對下載的 ZIP 按右鍵 →「全部解壓縮」。打開解壓後資料夾，直到同一層可看到 `init.cmd`、`windows.cmd`、`readme.md`、`core` 與 `modules`；這一層就是工具包根目錄。可將它重新命名為 `windows_setup`，保留完整內容，**不要直接在 ZIP 視窗內執行**。解壓與執行位置必須可寫入，而且不能是稍後會被清理的桌面。
+3. 開啟 [Microsoft Sysinternals Autologon 官方頁](https://learn.microsoft.com/en-us/sysinternals/downloads/autologon)，按 **Download Autologon** 取得 `Autologon.zip`，另行「全部解壓縮」。從中找到 **`Autologon64.exe`**；不要選 `Autologon.exe` 或 `Autologon64a.exe`，這套工具使用 x64 版本。
+4. 在 `Autologon64.exe` 按右鍵 →「內容」→「數位簽章」，選擇 Microsoft Corporation 的簽章並按「詳細資料」，確認顯示此數位簽章正常。若沒有簽章、不是 Microsoft 或驗證失敗，先停止，重新從官方取得並排查驗證問題，不要略過。將核對後的 **`Autologon64.exe`** 複製到剛才工具包根目錄的 **`modules\accounts`**，最終位置為 `windows_setup\modules\accounts\Autologon64.exe`；不用雙擊 EXE。
+5. 執行前閱讀 [Sysinternals 官方授權條款](https://learn.microsoft.com/en-us/sysinternals/license-terms)及下載包內的授權說明。後續 `windows.cmd` 的自動登入模組會驗證 Microsoft 簽章，並以 `/accepteula` 呼叫 Autologon 接受條款；不接受條款時不要執行該模組或 Windows 一鍵流程。下載與複製檔案本身不會設定自動登入，也不會執行 EXE。
+6. 回到工具包根目錄，在檔案總管的**位址欄**輸入 `cmd` 後按 Enter。黑色命令視窗會從這個資料夾開始；貼上以下一行並按 Enter，執行既有的只讀套件檢查：
+
+   ```cmd
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\core\test_setup_prerequisites.ps1 -PackageOnly -HardwareProfile Generic
    ```
 
-   未選擇驅動包不要求驅動檔；`-HardwareProfile Generic`／`NUC8` 只用於離線套件檢查，不可在實際設定時覆寫硬體。若要一併驗證 NUC 獨立包，加入 `-HardwareProfile NUC8 -DriverPackagePath "實際獨立包目錄"`。
-4. 通過後依 [初始設定操作](#先看目前在哪個階段) 執行 Init／Windows。原始碼不含 Autologon EXE，不能把 GitHub Source code ZIP 直接當成完整離線安裝包。
+   檢查會核對主程式檔案與語法，不安裝軟體、不變更 Windows 設定，也不代表已通過實機驗收；它不取代上一步數位簽章核對。出現缺檔或錯誤時先依訊息修正，不繼續。未選擇驅動包不要求驅動檔；`Generic` 是此離線檢查使用的設定檔，實際套用時仍自動辨識機型，不能用它強制套用特定硬體設定。
+7. 檢查成功後，將**整個**工具包根資料夾複製到可寫入的 USB；可保留名稱 `windows_setup`。確認 USB 副本內有兩個入口、`core`、`modules` 及剛補入的 EXE，不只複製 `.cmd`。也可直接在 USB 完成以上準備與檢查；不依賴固定磁碟代號或使用者名稱。
+8. 在目標電腦插上 USB：仍在地區／Wi-Fi 畫面時，依快速開始 A 以 Shift+F10 呼叫 Init；已登入正式帳號時依快速開始 B。OOBE 流程需要完整自有設定包；SSH 元件、Windows Update 與未快取下載需要網路。
 
-### 準備獨立 NUC 驅動包
+若要一併檢查已準備的 NUC 獨立包，將上述檢查參數改為 `-PackageOnly -HardwareProfile NUC8 -DriverPackagePath "實際獨立包目錄"`；這只驗證檔案，不安裝驅動。完整來源包準備不代表主程式自帶各硬體驅動，詳見下一節。以上採用官方下載與既有套件檢查，無需額外開發環境。
 
-既有可用包放在 `windows_driver_packages/nuc8`，包含 `install.cmd`、自身的 `core`／`modules` helper、`package.json`、`manifest.json` 與四個 ZIP；不依賴原主程式路徑。需要重新建包時，準備符合 `modules\drivers/manifests/nuc8.json` 的四個封存檔，並將此範本複製為來源目錄的 `manifest.json`，再執行：
+### 準備獨立驅動包
+
+一般使用者可在 **v0.2.1 Release → Assets** 下載可選的 **`windows_driver_nuc8_v0.2.1.zip`**。將它解壓到 **`USB 根目錄\windows_driver_packages\nuc8`**，該資料夾內應直接看得到 `install.cmd`、`core`、`modules`、`drivers`、`package.json`、`manifest.json`、`license` 與十二個 ZIP；不要多包一層 ZIP 檔名資料夾。執行 `windows.cmd` 時依機型提示選擇這個資料夾；一般電腦可略過，不需要下載。主程式仍依上節由 Source code ZIP 與官方 Autologon 準備，兩個包放在同一 USB 的相鄰資料夾。
+
+以下重新建包指令僅供維護者使用，使用者下載與解壓即可。準備符合 [drivers/nuc8i7hvk_hnk/manifest.json](drivers/nuc8i7hvk_hnk/manifest.json) 的十二個封存檔，並將此範本複製為來源目錄的 `manifest.json`，再執行：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_driver_package.ps1 -SourceDirectory "已核對的驅動來源目錄" -OutputDirectory "新的獨立包目錄"
 ```
 
-輸出目錄必須不存在。導出會驗證四個封存檔雜湊、產生可攜入口及機型識別；不安裝驅動。取得新驅動應使用原廠可信來源，改版需要重新驗證，不能直接修改 SHA256 來略過檢查。
+設定檔依主機板 Product 精準選擇，沒有對應型號或未選獨立包時略過；已知其他板號不能手動偽裝成 NUC。機型與套件／INF 版本、依賴及官方來源見 [驅動設定檔](drivers/readme.md)。新增電腦設定檔使用相同安裝引擎，另建立板號白名單與已查核 manifest，不複製安裝程式。
+
+輸出目錄必須不存在。導出會驗證全部封存檔雜湊、產生可攜入口及設定檔雜湊綁定的機型識別；不安裝驅動。取得新驅動應使用原廠可信來源，改版需要重新驗證，不能直接修改 SHA256 來略過檢查。
 
 `package_hashes.json` 是本機主程式交付快照，不追蹤於 Git，也不把外部驅動納入主程式。獨立驅動依自身 manifest 核對；Git clone 缺少交付快照不代表程式損壞。
 ### 不納入 Git 的內容
@@ -484,7 +598,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_
 發布前仍須掃描來源與提交歷史，確認沒有密碼、私鑰、個人網路規則或實機報告。Git 作者資訊應使用適合公開的身分。
 
 - 發布前核對目前 remote 指向的 windows_setup 儲存庫。
-- 自有程式對外使用的授權；目前沒有擅自加入 MIT 或其他授權。
+- 自有程式與文件採用 [Apache License 2.0](license)；第三方內容維持各自原有授權。
 - 若要提供完整二進位下載包，先確認各第三方再散布權限；不能直接把忽略中的驅動和 EXE 全數上傳。
 
 第三方來源與各自授權見 [第三方來源與授權](doc/third_party.md)。儲存庫可設定 remote 並依維護者授權發布；請以目前 Git remote 與 GitHub 狀態為準。
@@ -499,7 +613,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_
 | `script/test` | 測試調度與報告產生 |
 | `script/release` | 版本準備、發布門檻與 Release 說明 |
 | `script/package` | 從可信來源建立獨立驅動包 |
-| `test/powershell/unit`、`integration`、`system` | 各層測試案例；system 需明確指定可丟棄環境 |
+| `test/powershell/unit`、`integration` | 單元及隔離整合測試案例 |
 | `.github/workflows` | 雲端 CI 與發布編排 |
 
 依賴方向為維護工具／測試 → 交付執行樹。`core`／`modules` 不依賴 `script`、`test` 或 `.github`；一般使用與獨立驅動安裝不需要儲存庫維護工具。
@@ -507,35 +621,46 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\package\export_
 自有原始檔與目錄使用小寫與底線，新驅動安裝日誌位於 `modules\drivers/driver_logs`。為保留已部署電腦的續跑資料，`%ProgramData%\NUC8-Setup`、`NUC-Init`、`CustomHostsSync` 及既有排程工作名稱維持相容；這些是系統既存識別，不是新增的儲存庫目錄。第三方 `win11debloat` 內部目錄及內容保持上游原樣。
 
 ## Windows CI
+設定資產依平台分層驗證：Server runner 對真實三檔執行來源／雜湊／XML 正負測試，另以原生 WIM 唯讀抽取核對已審查基線。Windows 11 client 的 `Get-ProvisioningPackage` 不在 Server runner 提供；runtime 仍強制呼叫它，沒有略過或降級。要在 Windows 11 本機重做原生 metadata 六項唯讀檢查，可從儲存庫根目錄執行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File script/test/verify_client_provisioning.ps1
+```
+
+此指令只讀取設定包，不建立帳號、不套用設定；平台支援範圍見 [Microsoft 原生 cmdlet 文件](https://learn.microsoft.com/en-us/powershell/module/provisioning/get-provisioningpackage)。
 
 工作流程位於 .github/workflows/windows_tests.yml：使用 windows-2022、Windows PowerShell 5.1、唯讀 contents 權限，設定執行時間上限與併發控制。Action 固定到已核對的 commit。main 推送、版本標籤、Pull Request 與 workflow_dispatch 都可觸發；ci-rollup 統一呈現測試門檻。
 
 ### 自動報表與徽章
 
-徽章採用與 base 相同的 20px flat-square 樣式，依文字寬度排列；System `not run` 與 Coverage `not measured` 保留未驗證狀態。
+CI 使用與 base 相同的 GitHub Actions 原生徽章；整體覆蓋率使用儲存庫自行產生的 flat SVG。Pages 保留簡潔報表，提供測試結論、版本、提交、時間、整體覆蓋率、語言明細，以及 Release、README、Actions 與可下載證據。不依賴 Codecov、Coveralls 或外部報表平台。
 
-每次測試從實際斷言的結構化事件與程序退出碼產生 JSON、Markdown、自含 HTML、JUnit XML 及分層 SVG。報告先顯示一般使用者結論、宣告版本／分支或 Release 範圍、變更、已知限制與下載，再列所選層級、斷言結果、套件耗時、提交及工作樹狀態；新增 `test/powershell/unit` 或 `integration` 測試會自動列入執行清單。程序崩潰、缺少斷言事件或任何失敗均不能標成通過。
+README 只展示整體覆蓋率，語言分項放在報表與 Actions 摘要。整體以自有正式程式碼的可執行行計算，從各語言量測結果換算相同計量後加總覆蓋行與總行數，不取各語言百分比平均。測試、第三方內容及非執行設定檔依來源清單明確分類；缺來源、未支援語言或缺量測時不公布假的總率。
 
-正式測試證據只上傳去識別的 `public` 報表子目錄，附件保留 7 天；原始程序 log 留在 runner 暫存，不公開至 Pages。main 僅在必要測試、Go 覆蓋率與需求驗收全部通過後更新公開 HTML／SVG；失敗結果請查看 Actions 與短期附件，公開徽章保留最後一次成功部署。PR 只有短期附件；main 首頁呈現最新分支報表；版本頁由各 Release 保存的品質 JSON 快照重建，保留原 Version／Commit／MeasuredAt。舊版缺少快照時顯示 Unknown，不拿新測試補寫舊版證據。實機 reports 仍獨立保留，不納入 Git 或 Pages。
+每次測試從實際斷言事件及程序退出碼產生 JSON、Markdown、自含 HTML、JUnit XML 與徽章。程序崩潰、缺少斷言事件或任何失敗均不能標成通過。新增 `test/powershell/unit` 或 `integration` 測試會自動列入執行清單。公開報表只包含靜態檢查、單元與隔離整合結果。
 
-Go 徽章顯示最近一次成功部署 main 的實際 **statement coverage**，不是手填百分比或全儲存庫覆蓋率。量測涵蓋所有自有 Go 正式套件及 CLI；完整測試使用 `-coverpkg=./script/test/...`，命令列子程序另外 instrumentation，合併原始計數後以 `Covered × 100 >= TotalStatements × 80` 判定 CI 門檻，不以四捨五入後的顯示值過關。第三方 vendor、測試程式、PowerShell 與 Windows 系統操作不在 Go 分母內。
+PR 的去識別測試附件保留七天；main 通過全部必要門檻後更新 Pages，失敗時公開徽章仍保留上次成功部署的證據。Release 長期保存 `repo_coverage.json`、`coverage_inventory.json`、`coverage.xml` 與測試摘要，核對來源、計量、雜湊及計數。歷史版本依原始證據整理頁面並連回不可變原始附件；缺紀錄就如實說明，不以目前測試回填。
 
-[Go 量測 JSON](https://ycpss91255.github.io/windows_setup/main/go_coverage.json)與[原始合併 profile](https://ycpss91255.github.io/windows_setup/main/go_coverage.out)可下載核對數量、套件範圍、提交、執行來源、量測時間及 SHA256。徽章數值、來源提交與時間以已部署產物為準，不能代表尚未部署的修改。歷史 Release 沒有 Go 量測時維持未量測，不回填目前結果；既有不可變 Release 附件格式不變。
+維護者接線依序為：產生三份整體證據 → `script/test/attach_repo_coverage.ps1` 附加到測試報表 → `script/report/build_portal.ps1` 或 `publish_quality_release.ps1`。三個入口都使用已建置的 `repo_coverage_tool`，由 `-CoverageToolPath` 或 `WINDOWS_SETUP_COVERAGE_TOOL` 指定；缺工具、缺來源、未完整量測或未達精確 80% 都會停止。附加時以 `-SourceRoot` 核對真實 checkout。`build_portal.ps1 -Preview` 僅供本機合成樣本，不得用於正式 Pages 或 Release；本輪 publisher 不接受降級到歷史 schema1。
 
-PowerShell `Coverage` 與既有 `coverage.svg` 仍顯示 `NotMeasured`：目前沒有對 PowerShell 原始碼作行／分支執行量測，斷言數不是覆蓋率。沿用 base 由真實量測產生徽章的原則及 flat-square 外觀，不把 Go 百分比套用為 PowerShell 或整體覆蓋率。System／完整 E2E 保持 `Deferred / NotRun`，不計入已通過項目。
+各機續跑及排錯的 `reports` 保留於該機，不納入 Git 或 Pages。`windows.cmd -AfterRestart` 與 `windows.cmd -VerifyOnly` 是產品功能，繼續供設定後續跑及檢查。
 
 ### 測試分層與本機入口
 
-測試依 base 的 tool-first 方式放在 `test/powershell/<層級>`；不引入額外測試框架。純函式／模擬 Windows API 的單元測試與實際跨元件的隔離整合測試分開執行，不把同一套測試重複掛名兩層。
+測試依 base 的 tool-first 方式放在 `test/powershell/<層級>`；純函式／模擬 Windows API 的單元測試與實際跨元件的隔離整合測試分開執行，不把同一套測試重複掛名兩層。
 
 | 層級 | 範圍 | 執行環境與限制 |
 | --- | --- | --- |
 | `unit` | Init 路由、帳號／密碼與 XML；硬體適用性、略過與結果彙總；輸入法模組 | Windows API 以 mock 取代，不建立真實帳號或修改使用者語言 |
 | `integration` | 清理器與暫存 Windows 目錄；硬體入口、包身分／雜湊、獨立驅動包導出；hosts 規劃；真實 Git 發布；來源結構與入口路由 | 使用暫存檔案及隔離 Git，實際組件協作，不安裝驅動或套用系統偏好 |
-| `system` | 目標電腦既有設定的驗收 | 必須明確 opt-in；CI 不執行，預設 `NotRun` |
-| 完整安裝 E2E | 全新 Windows → Init → Windows 設定 → 手動重開機 → 續跑與驗收 | 尚未完成全流程實測，不以 unit／integration 成功替代 |
 
 ```powershell
+# 維護者先準備固定 workflow 語義檢查器（只放 TEMP，不做全域安裝）
+. .\script\docker\install_managed_tools.ps1
+$lintDirectory = Join-Path $env:TEMP ('windows_setup_actionlint_' + [guid]::NewGuid().ToString('N'))
+Install-ContainerToolArtifact -Artifact (Get-ContainerWorkflowLintArtifact) -Destination $lintDirectory -ArchiveDirectory (Join-Path $lintDirectory 'download')
+$env:WINDOWS_SETUP_ACTIONLINT = Join-Path $lintDirectory 'actionlint.exe'
+# 既有已備妥的 actionlint 1.7.12 亦可直接用此環境變數指定絕對路徑。
 # 全部單元與隔離整合測試（預設）
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\run_ci.ps1
 # 只跑指定層；仍會進行語法檢查
@@ -543,11 +668,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\run_ci.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\test\run_ci.ps1 -Layer Integration
 ```
 
-報告每項包含 `Layer`、`Status`、`Executed`。System 與完整 E2E 固定列 `NotRun`／`Executed=false`，不算成通過；未選擇的隔離層不宣稱已執行。`SourceOnly` 只略過 Git 不含的安裝二進位，仍檢查程式、資產、驅動中繼資料及入口。
+Workflow 隔離整合測試使用固定的 [actionlint 1.7.12](https://github.com/rhysd/actionlint/releases/tag/v1.7.12)，真實檢查 YAML 的 GitHub context 可用範圍、運算式及工作相依；同時以正負控制樣本防止只做 YAML 語法檢查。下載前述 ZIP 會核對官方 SHA256，CI 主機及 Docker 建置會自動準備；容器執行保持離線。這是儲存庫維護工具，一般使用者執行 `init.cmd`／`windows.cmd` 不需要它。
+
+報告每項包含 `Layer`、`Status`、`Executed`。未選擇的隔離層不宣稱已執行。`SourceOnly` 只略過 Git 不含的安裝二進位，仍檢查程式、資產、驅動中繼資料及入口。
 
 ### 開發用 Windows Docker 環境
 
-這是維護者的程式與隔離測試環境。控制入口沿用 base 將維護操作集中於工具腳本的方向，採 Windows 原生 PowerShell；不宣稱與 base 的 Linux／just 指令完全相同。一般使用者從 USB 執行 `init.cmd`／`windows.cmd` 不需要 Docker；容器不會替代完整 Windows 安裝、桌面、驅動或重開機 E2E 驗收。
+這是維護者的程式與隔離測試環境。控制入口沿用 base 將維護操作集中於工具腳本的方向，採 Windows 原生 PowerShell；不宣稱與 base 的 Linux／just 指令完全相同。一般使用者從 USB 執行 `init.cmd`／`windows.cmd` 不需要 Docker。
 
 先準備可使用 **Windows containers** 的 Docker engine 與 Compose v2，建議使用乾淨、未放入個人資料的完整 Git checkout（必須包含 `.git` 目錄）。Linux containers 模式不能執行這份 Windows PowerShell 5.1 環境。Windows Server 與 Windows 用戶端的隔離模式相容條件不同，依 [Microsoft 容器需求](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/system-requirements)與[版本相容說明](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/version-compatibility)設定；使用 Docker Desktop 時另依 [Docker 官方 Windows 安裝條件](https://docs.docker.com/desktop/setup/install/windows-install/)。本工具只檢查，不會自動安裝 Docker、切換引擎或啟用主機功能。
 
@@ -566,31 +693,24 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\docker\docker.p
 
 預設使用 `process` 隔離；有相容 Hyper-V 環境時可明確加 `-Isolation hyperv`。`test` 自動建置，不會沿用不明版本映像。完整來源 checkout 以唯讀方式掛載，包含 `.git` 與被 Git 忽略的本機檔案，容器能讀取它們；這不是去識別的來源副本。建置 context 另由 `.dockerignore` 白名單限制。容器 shell 用於檢查與執行程式，不能直接編輯唯讀來源；請在主機編輯後重跑測試。報告寫入儲存庫以外的新目錄；預設位置會顯示在輸出，也可用 `-ReportDirectory` 指定一個尚不存在的絕對路徑。容器失敗會回傳非零退出碼，不會以空報告或略過當作通過。
 
+CI 將工具映像建置與完整容器測試分成兩個有界階段（60／35 分鐘），工作總預算為 120 分鐘，另保留原生失敗負例與報告驗收。建置收據綁定來源提交、完整工具輸入、隔離模式與實際映像 ID；後續 `test-built` 將已驗證設定複製至來源外的私有暫存設定，只移除建置指令並鎖定映像 ID，重新使用真 Compose 解析及核對原有唯讀掛載、命令、隔離與其他設定，再以 `--pull never` 執行；缺少或不符即失敗，暫存設定於結束後清除。這是 CI 的分段入口；一般維護者仍可使用自動建置的 `-Action test`。官方下載與通過雜湊驗證後的解壓會分別輸出耗時，便於診斷，不把未完成的測試算作通過。
+
 維護工具以 Go 為主要實作語言；Windows 原生設定與 PowerShell 5.1 測試保留 PowerShell，一般使用者執行設定不需要 Go。根目錄 `go.mod` 僅管理 `script/test` 工具與 `test/go` 案例，沒有改變交付程式的依賴方向。HTML5 解析使用固定版本的官方 `golang.org/x/net/html`，其餘驗收使用標準庫；必要上游原碼及授權保存在 `vendor`，離線容器不下載模組。
 
 直接執行 Go 測試時，在完整 checkout 根目錄使用 `go test -mod=vendor -count=1 ./...`，並將 `WINDOWS_SETUP_ARTIFACT_DIR` 指向 PS5.1 產生的 public 報告、`WINDOWS_SETUP_PORTAL_FIXTURE_DIR` 指向 `script/test/create_portal_fixture.ps1` 產生的 portal 目錄。兩者缺少即失敗，不以跳過掩蓋缺證據；上述 Docker `test` 入口會自動準備這些輸入。Go 單元及整合測試包含原有 21 項驗收契約與新增解析／命令列邊界案例，結果獨立於 PS5.1 報表數量。
 
-容器映像提供 Windows PowerShell 5.1、固定版本且核對雜湊的 MinGit 與 Go 1.27.3。一般本機未設定 GitHub 執行來源時，PS5.1 仍測試目前真實 checkout，保留其 Clean／Dirty 狀態；Go 需求合約使用另外明確標示 Synthetic 的暫存樣本，不改寫或冒充本機正式報告。本機模式不產生已通過 80% 的 CI 覆蓋率證據。CI 則必須以本次真實報告驗收，執行 Go 量測並通過 80% 門檻；GitHub 提交、儲存庫、執行 ID、ref 類型與 ref 名稱這五項只要部分存在或格式錯誤就停止，不會降級成合成證據通過。
+容器映像提供 Windows PowerShell 5.1、固定版本且核對雜湊的 MinGit 與 Go 1.27.3。一般本機未設定 GitHub 執行來源時，PS5.1 仍測試目前真實 checkout，保留其 Clean／Dirty 狀態；Go 需求合約使用另外明確標示 Synthetic 的暫存樣本，不改寫或冒充本機正式報告。本機模式不產生已通過 80% 的 CI 覆蓋率證據。CI 則必須以本次真實報告驗收；正式發布另要求整體自有程式碼量測完整，並以原始覆蓋行數通過精確 80% 門檻；GitHub 提交、儲存庫、執行 ID、ref 類型與 ref 名稱這五項只要部分存在或格式錯誤就停止，不會降級成合成證據通過。
+
+GitHub hosted Windows 的 Docker 預檢在兩分鐘內確認真實 Windows daemon；未就緒時最多啟動或重啟 Docker 服務一次。所有探測、服務操作與輸出等待共用期限，失敗仍阻擋發布。這項恢復不會套用於本機或 self-hosted runner，也不會切換引擎、修改網路或安裝 daemon。
 
 CI 的 `docker-tests` 使用真正的 `windows-2022` runner 執行 Docker build/run；容器內執行全部 PS5.1 單元／隔離整合測試，再產生明確的合成首頁樣本並執行 Go 需求正負例、全套 Go 覆蓋率量測與產物驗收。主機另核對容器報告中的提交、執行來源、測試狀態與環境，不以主機驗收代替容器內 Go 執行。PS5.1 報表的套件／斷言統計不把 Go 驗收數量混入；Go 結果與實際退出碼另列於 Docker 工作日誌。`ci-rollup` 同時要求主機測試、需求驗收及 Docker 測試成功。在 [Actions](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml) 開啟該次執行，於 Artifacts 下載 `docker-test-reports-執行ID-重試次數`，解壓後開 `index.html`；這是容器的獨立 public 報告，只保留七天。原始 logs 不上傳。Pages 仍展示 Windows runner 的報告，與明確標記 Windows container 的短期報告分開；Docker 門檻未通過時不發布新的 Pages 報表，避免混淆兩個環境的證據。
 
-### 實機 system 驗收與完整安裝驗證
+每次 CI 將去識別的 HTML／JSON／Markdown／JUnit 與徽章上傳為 windows-test-reports artifact，保留 7 天；原始套件 log 不上傳。 完成的 PowerShell collector 另匯出 powershell-raw-evidence 附件保留 7 天，即使後續整體彙整失敗也可重播原始命令計數；附件只含核對過的相對路徑 JSON／XML，不包含 stdout、Pester 原始 XML 或帶絕對路徑的收集清單。這是分項原始證據，不表示整體覆蓋率門檻通過。另有 requirements-fixture artifact，只含程式明確建立的合成首頁樣本，固定假 SHA、示例執行網址及 Synthetic 環境標記，不含帳密或實機資料，同樣保留 7 天供需求門檻驗證。這份樣本不是正式測試證據，不混入 windows-test-reports、Release 或 Pages。其他測試副本、帳號 answer XML、每機 Reports 與秘密均不上傳。Actions 本身執行 log 的保留天數另由儲存庫設定控制，不是 YAML artifact 保留期。
 
-在指定測試機先依本文完成 Init／Windows，手動重新開機並執行 `windows.cmd -AfterRestart`。再以該機目標使用者的管理員 PowerShell 明確呼叫：
+完整 PowerShell 量測先由四個 Windows 工作平行執行；每片保留全部來源分母，主機重新核對同一提交、執行 ID、attempt、原生測試及 wrapper 雜湊後才聚合。重新量測時，在 Actions 選擇「重新執行所有工作」（Re-run all jobs），讓四片與後續主機驗收都使用新的同一次 attempt；只重跑失敗工作而混用舊片會被拒絕，不會沿用先前的計數補成通過。
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\test\powershell\system\invoke_acceptance.ps1 -RunOnThisComputer
-```
+實機 Setup-Result.json、Setup-Progress.json、Acceptance-Result.json 與驗證結果是續跑或排錯資料，原有 Git 忽略規則保留；CI 不清理這些檔案。設定未完成時不要刪除 Setup-Result.json。
 
-此入口只呼叫既有 `Verify-Only`、更新驗收報告並檢查本輪結果，不安裝更新、不重新套用偏好、不重新開機；不帶開關只回傳 `NotRun`。它能證明既有狀態驗收，不能單獨證明曾從全新系統完整安裝。自動登入、實際工作列、顯示、Terminal 快捷鍵與適用時的 AMD 提示仍須人工目視確認。
-
-完整 E2E 必須在可重建的測試機或 VM 記錄起始 Windows 映像／版本、主機型號、使用者、是否選驅動包、工具版本，依本文從 Init 跑到重開後驗收；保留該機 reports 與每一階段的失敗／略過。沒有執行過的階段必須記為未執行。此輪未執行這項完整安裝測試，CI 不會自動修改 runner 來模擬通過。
-
-每次 CI 將去識別的 HTML／JSON／Markdown／JUnit 與徽章上傳為 windows-test-reports artifact，保留 7 天；原始套件 log 不上傳。另有 requirements-fixture artifact，只含程式明確建立的合成首頁樣本，固定假 SHA、示例執行網址及 Synthetic 環境標記，不含帳密或實機資料，同樣保留 7 天供需求門檻驗證。這份樣本不是正式測試證據，不混入 windows-test-reports、Release 或 Pages。其他測試副本、帳號 answer XML、每機 Reports 與秘密均不上傳。Actions 本身執行 log 的保留天數另由儲存庫設定控制，不是 YAML artifact 保留期。
-
-實機 Setup-Result.json、Setup-Progress.json、Acceptance-Result.json 與驗證結果是續跑或排錯資料，原有 Git 忽略規則保留；CI 不清理這些檔案。設定未完成時不要刪除 Setup-Result.json。雲端通過僅代表來源／隔離測試成功，不表示 NUC 硬體或 OOBE 已通過實機驗收。
-
-目前尚未取得合適的 Windows 11 x64 可丟棄測試環境，依使用者決定暫緩 System／完整安裝 E2E；未執行不等於通過。合併仍要求 PR 與 ci-rollup，暫不將尚無環境的 system-e2e 設為必要檢查。v0.2.0 保持預覽版及未完成完整驗證的聲明。
 
 ## 維護者版本發布
 
@@ -598,13 +718,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\test\powershell\system
 
 ### 準備版本與 Pull Request
 
-日常變更寫入 `doc/changelog/changelog.md` 的 `## [Unreleased]`。要發布時，在工作分支執行：
+日常變更寫入 `doc/changelog/changelog.md` 的 `## [Unreleased]`。要發布時，先選擇尚未使用的新版本（不是目前 `.version` 或既有標籤），在工作分支執行：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\prepare_release.ps1 -Version v0.2.0
+$newVersion = Read-Host '輸入尚未使用的新版本（vX.Y.Z 或 vX.Y.Z-rcN）'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\prepare_release.ps1 -Version $newVersion
 ```
 
-此命令將 Unreleased 區段提升為指定版本、寫入 `.version`，不提交、不建立標籤也不推送。審查版本內容後，以中文提交並開啟 Pull Request。主分支要求 `ci-rollup` 通過；使用保留各階段提交的 rebase merge，不以 squash 抹掉 TDD 證據。版本必須符合 `vX.Y.Z` 或 `vX.Y.Z-rcN`。
+此命令將 Unreleased 區段提升為指定版本、寫入 `.version`，不提交、不建立標籤也不推送。審查版本內容後，以中文提交並開啟 Pull Request。主分支要求 `ci-rollup` 通過；使用保留各階段提交的 rebase merge，或儲存庫允許時使用 merge commit，不以 squash 抹掉 TDD 證據。版本必須符合 `vX.Y.Z` 或 `vX.Y.Z-rcN`。
 
 ### 標籤與發布門檻
 
@@ -613,8 +734,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\prepare
 ```powershell
 git switch main
 git pull --ff-only
-git tag -a v0.2.0 -m "發布 v0.2.0：通用 Windows 設定與版本流程"
-git push origin v0.2.0
+$version = (Get-Content -LiteralPath .\.version -Raw).Trim()
+git tag -a $version -m $version
+git push origin "refs/tags/$version"
 ```
 
 同一個 Windows workflow 接受 main 推送、Pull Request、手動執行與版本標籤。`isolated-tests` 完成後由 `ci-rollup` 統一回報；只有版本標籤通過測試，且提交位於 main 歷史、`.version` 與 changelog 精確匹配，才發布 Release。RC 標為預覽版；正式版本整合同版 RC 的版本紀錄。既有標籤與版本不應刪除、移動或重用。
@@ -623,20 +745,42 @@ git push origin v0.2.0
 
 ### 下載內容與保留期限
 
-從 GitHub Release 使用內建 **Source code (zip)** 或 **Source code (tar.gz)** 下載來源，不額外上傳重複來源 ZIP／SHA256。內建來源封存檔的根目錄名稱由 GitHub 決定，解壓後可自行改名。
+從 GitHub Release 使用內建 **Source code (zip)** 或 **Source code (tar.gz)** 下載來源，不額外上傳重複來源 ZIP／SHA256。內建來源封存檔的根目錄名稱由 GitHub 決定。若使用快速開始的 USB 自動尋找指令，請改名為 `windows_setup` 並放在 USB 根目錄；腳本本身可放任意路徑，手動呼叫該位置的 `init.cmd` 即可。
+
+需要特定型號驅動時，依 [準備獨立驅動包](#準備獨立驅動包) 下載同版 Release 的型號獨立 ZIP 並解壓；執行 `windows.cmd` 時選取該資料夾。一般電腦可略過，不需下載驅動。資產檔名、大小、SHA256、機型設定檔與包內 manifest 雜湊，列在該版來源的 [驅動資產清單](script/release/driver_release_assets.json)；只選擇自己機型對應的包，不把其他型號包套用到本機。
 
 - 來源不包含 `.git`、驅動 ZIP、Autologon EXE、實機 Reports 或密碼暫存；來源檢查會拒絕錯誤追蹤的敏感檔案。
 - 依 [來源包準備說明](#從原始碼準備完整工具包) 補齊所選功能需要的二進位，不能把來源 ZIP 當成完整離線安裝包。
 - CI 報告與 Actions 日誌短期保留 7 天，不提交進 Git；實機續跑紀錄仍留在原機。
-- Release 只發布來源與版本說明，不會連線部署到任何電腦。OOBE、驅動、自動登入及硬體功能仍須實機驗證。
+- Release 提供來源、品質證據與該版明確宣告的可選驅動資產，不會連線部署到任何電腦。
 - v0.1.x 已發布的舊來源 ZIP／SHA256 保持原樣，新流程不回寫舊版本。
+
+### 維護者準備獨立驅動資產
+
+一般使用者只需下載與解壓，不需執行本節命令。維護者先完成獨立驅動包的離線完整性驗證，再於來源目錄載入打包函式，將已驗證的完整包封存到來源樹外的新檔案：
+
+```powershell
+. .\script\release\driver_release_library.ps1
+New-DeterministicDriverArchive -PackageDirectory '已驗證的獨立包資料夾' -OutputPath '來源樹外的資料夾\driver_機型.zip'
+```
+
+封存使用固定 UTC 時間、相對路徑與排序，且不重壓包內現成 ZIP。將實際檔名、位元數、SHA256、ProfileId、manifest SHA256 加入上述資產清單的當版紀錄，經 PR、CI 與獨立審查後再合併、建立該版標籤。歷史版本紀錄保留；未宣告驅動資產的其他版本不受影響。
+
+推送標籤後，立即從該標籤的來源目錄建立一次性草稿：
+
+```powershell
+.\script\release\stage_driver_release.ps1 -Version vX.Y.Z -Repository ycpss91255/windows_setup -AssetDirectory '已封存的資產資料夾'
+```
+
+此命令只建立尚未公開的暫時草稿，先核對標籤位於 main、遠端提交一致以及本地資產雜湊。標籤 CI 全綠後，CD 才會核對草稿身分、既有驅動與全部品質附件，最後一次發布為不可變 Release。已有其他草稿、上傳不完整或雜湊不符會停止，保留現場供維護者檢查，不覆寫或刪除既有版本。若建立草稿太晚造成 CD 失敗，先核對草稿完整，再選擇該次執行的「重新執行所有工作」，重新產生同 attempt 的分片及品質證據；勿只重跑發布工作、移動標籤或跳過品質門檻。
 
 ### 本機檢查發布內容
 
 對已提交、版本檔及 changelog 已一致的來源執行：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\build_source_release.ps1 -Version v0.2.0 -OutputDirectory "$env:TEMP\windows_setup_release_check"
+$version = (Get-Content -LiteralPath .\.version -Raw).Trim()
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\build_source_release.ps1 -Version $version -OutputDirectory "$env:TEMP\windows_setup_release_check"
 ```
 
 此命令驗證來源並產生 Release 說明，不再重複打包來源 ZIP；不建立標籤、不推送、不發布，也不代表雲端 CI 已通過。
@@ -651,7 +795,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\build_s
 
 PR 與 main 的 `requirements-gate` 讀取同一次 PS5.1 測試產物，驗證來源、統計、JUnit／JSON 狀態、文件連結、隱私與 base 徽章規格，並用破壞性負例確認錯誤會被拒絕；`ci-rollup` 必須同時取得測試與需求驗收成功才能合併。PR 的證據保留原分支身分，不會冒充 main。
 
-Pages 部署後會匿名 GET 公開首頁、main 報表、JSON／Markdown／JUnit、四個 SVG、README 徽章實際網址及歷史版本頁；提交與 Actions 執行必須屬於本次 main。CDN 延遲只有限重試，舊報表或不一致會使 workflow 失敗。這些是可重複的自動驗收，不需要 agent 才能續跑；人工看畫面是否清楚、實機安裝是否成功仍是另外的驗收。
+Pages 部署後匿名讀取首頁、main 報表、JSON／Markdown／JUnit、整體及分層 SVG、README 的原生 CI／整體 coverage 徽章，以及歷史版本頁。驗收會重算 `repo_coverage.json`、`coverage_inventory.json`、`coverage.xml`，核對本次提交、Actions 來源與實際 checkout 的自有原始碼清單；整體量測必須完整，且 `Covered × 100 >= Executable × 80` 才能通過。分項資訊保留在報表與 Actions 摘要，不要求 README 顯示分項徽章。CDN 只有限重試，舊證據或不一致會失敗，無需 agent 代替腳本處理。
 
 實作、freeze、主代理與未參與實作的獨立代理完整審查流程見 [維護規範](agents.md)。發現問題必須修正後重新全需求審查，不能把上次 PASS 沿用到修改後版本。
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -9,9 +8,11 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	a "windows_setup/script/test/acceptance"
+	c "windows_setup/script/test/repo_coverage"
 )
 
 func run() error {
@@ -38,30 +39,28 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	goBadge, e := a.GoCoverageBadgePath(string(b), *base)
-	if e != nil {
-		return e
-	}
-	var measured a.GoCoverage
+	var measured *c.Evidence
 	r, e := a.VerifyWithRetry(read, string(b), *sha, *run, *base, 12, func() {
 		fmt.Println("部署驗收尚未符合本次來源，有限等待 CDN 更新。")
 		time.Sleep(10 * time.Second)
 	}, func() error {
-		var captured []byte
-		reportReader := func(n string) ([]byte, error) {
-			if n == "go_coverage.svg" {
-				n = goBadge
-			}
-			data, err := read("main/" + n)
-			if n == "go_coverage.json" {
-				captured = data
-			}
-			return data, err
-		}
-		if err := a.ValidateGoCoverageReport(reportReader, files, *sha, *run, true); err != nil {
+		reportReader := func(n string) ([]byte, error) { return read("main/" + n) }
+		summary, err := reportReader("summary.json")
+		if err != nil {
 			return err
 		}
-		return json.Unmarshal(captured, &measured)
+		measured, err = a.ValidateRepoCoverageReport(reportReader, summary, *sha, *run, true)
+		if err != nil {
+			return err
+		}
+		inventory, err := reportReader("coverage_inventory.json")
+		if err != nil {
+			return err
+		}
+		if err = c.ValidateInventory(".", inventory); err != nil {
+			return err
+		}
+		return a.ValidateGoCoverageReport(reportReader, files, *sha, *run, false)
 	})
 	if e != nil {
 		return e
@@ -98,7 +97,16 @@ func run() error {
 	if svg.XMLName.Local != "svg" || svg.XMLName.Space != "http://www.w3.org/2000/svg" {
 		return fmt.Errorf("R05 GitHub CI 徽章不是SVG")
 	}
-	summary := fmt.Sprintf("## 公開部署需求驗收通過\n\n- 本次 main 提交：`%s`\n- 報告執行：%s\n- 首頁、報告、JSON／JUnit／Markdown、Go 與分層徽章及歷史頁均可讀取。\n- Go statements：%.1f%%（%d/%d，包含 CLI），精確八成門檻通過。\n- System／E2E 未執行，PowerShell 覆蓋率未量測；人工視覺審查不由此 job 代替。\n", r.Commit, r.RunUrl, measured.Percent, measured.Covered, measured.TotalStatements)
+	summary := fmt.Sprintf("## 公開部署需求驗收通過\n\n- 本次 main 提交：`%s`\n- 報告執行：%s\n- 首頁、測試報告、整體徽章與三份永久覆蓋率證據可讀，來源清單與本次checkout一致。\n- 整體可執行行覆蓋率：%.1f%%（%d/%d），完整量測且精確八成門檻通過。\n", r.Commit, r.RunUrl, *measured.Result.Percent, measured.Result.Covered, measured.Result.Executable)
+	languages := []string{}
+	for language := range measured.Result.Languages {
+		languages = append(languages, language)
+	}
+	sort.Strings(languages)
+	for _, language := range languages {
+		counts := measured.Result.Languages[language]
+		summary += fmt.Sprintf("- %s：%d/%d 可執行行\n", language, counts.Covered, counts.Executable)
+	}
 	fmt.Print(summary)
 	if p := os.Getenv("GITHUB_STEP_SUMMARY"); p != "" {
 		return os.WriteFile(p, []byte(summary), 0600)

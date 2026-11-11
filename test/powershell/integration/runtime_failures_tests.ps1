@@ -8,8 +8,7 @@ New-Item -ItemType Directory $fixture|Out-Null
 . (Join-Path $root 'core/verification.ps1')
 # Exercise the real orchestration body with filesystem-only module doubles.
 # Privilege/preflight are excluded; no production system-setting module is loaded.
-$config=[IO.File]::ReadAllText((Join-Path $root 'core/configure_nuc.ps1'))
-$body=$config.Substring($config.IndexOf('$log=Resolve-NucPath'))
+$body=". '"+(Join-Path $root 'core/configuration_library.ps1').Replace("'","''")+"'`nInvoke-SetupConfiguration -Hardware `$hardware -UserName `$UserName -AutoLogonPassword `$AutoLogonPassword"
 $prefix=@'
 $ErrorActionPreference='Stop'
 $caseRoot=$PSScriptRoot
@@ -32,6 +31,9 @@ function Test-Path {param($Path);if([string]$Path -like 'HKLM:*'){return $false}
 '@
 foreach($mode in @('success','module-fail','device-fail')){
  $dir=Join-Path $fixture $mode;New-Item -ItemType Directory $dir|Out-Null
+ foreach($helper in @('start_pins_policy_library.ps1','start_pins_asset_library.ps1')){Copy-Item -LiteralPath (Join-Path $root ('modules/start_menu/'+$helper)) -Destination (Join-Path $dir $helper)}
+ [IO.File]::WriteAllText((Join-Path $dir 'apply_start_menu_settings.ps1'),'param([switch]$NonInteractive);[pscustomobject]@{Success=$true;Status=''Confirmed'';PinCount=0}')
+ Assert (Test-Path (Join-Path $dir 'start_pins_policy_library.ps1')) 'controller fixture includes actual Start completion helper'
  $runner=Join-Path $dir 'run.ps1';[IO.File]::WriteAllText($runner,$prefix+"`n"+$body,[Text.UTF8Encoding]::new($true))
  $oldMode=$env:CASE_MODE;$env:CASE_MODE=$mode;$oldPreference=$ErrorActionPreference;$ErrorActionPreference='Continue'
  try{& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $runner *> (Join-Path $dir 'output.txt');$code=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference;$env:CASE_MODE=$oldMode}
@@ -45,9 +47,22 @@ foreach($mode in @('success','module-fail','device-fail')){
   Assert ((Get-Content (Join-Path $dir 'executed.txt')) -contains 'desktop_icon_layout.ps1') 'later stages execute before aggregate failure'
  }
 }
-# Load real cache/extraction functions only, never the installer or pnputil.
-$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'modules/drivers/install_drivers.ps1'),[ref]$tokens,[ref]$errors)
-foreach($name in @('Expand-DriverArchive','Expand-CachedDriverArchive')){$fn=$ast.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true);. ([scriptblock]::Create($fn.Extent.Text))}
+# Load the original file using its explicit no-package/PackageOnly early return.
+# Any accidental installation path fails before native commands or system queries.
+function Start-Process {throw 'fixture forbids installer processes'}
+function pnputil.exe {throw 'fixture forbids pnputil'}
+function Add-WindowsDriver {throw 'fixture forbids driver installation'}
+function Get-CimInstance {throw 'fixture forbids device queries during safe loading'}
+function Get-PnpDevice {throw 'fixture forbids driver device queries during safe loading'}
+$previousSystemRoot=$env:SystemRoot
+try{
+ $env:SystemRoot=Join-Path $fixture 'blocked_native_root'
+ $loaded=@(. (Join-Path $root 'modules/drivers/install_drivers.ps1') -PackageOnly -DriverPackagePath '')
+ Assert ($loaded.Count -eq 1 -and $loaded[0].Status -eq 'Skipped') 'real driver source takes no-package PackageOnly return without installer commands'
+}finally{
+ $env:SystemRoot=$previousSystemRoot
+ foreach($name in @('Start-Process','pnputil.exe','Add-WindowsDriver','Get-CimInstance','Get-PnpDevice')){Remove-Item -LiteralPath ('Function:\'+$name)}
+}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $cache=Join-Path $fixture 'cache';$archive=Join-Path $fixture 'same.zip'
 $one=Join-Path $fixture 'one';$two=Join-Path $fixture 'two';New-Item -ItemType Directory $one,$two|Out-Null
@@ -84,27 +99,39 @@ foreach($case in @(@{Selected=0;Updates=@();Expected=$true},@{Selected=1;Updates
 # Mock task construction, not scheduling: prove run IDs and ownership reach desktop workers.
 function New-ScheduledTaskAction {param($Execute,$Argument);[pscustomobject]@{Arguments=$Argument}}
 function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel);[pscustomobject]@{UserId=$UserId}}
-foreach($relative in @('modules/display/apply_display_settings.ps1','modules/theme/apply_theme_settings.ps1','modules/desktop/desktop_icon_layout.ps1')){
- $source=[IO.File]::ReadAllText((Join-Path $root $relative))
- $VerificationRunId=[guid]::NewGuid().ToString();$VerifyOnly=$true;$Mode='Verify';$workerPath='C:\fixture\worker.ps1'
- if($relative -notmatch 'desktop_icon_layout'){
-  $start=$source.IndexOf(" `$workerArgs=");$end=$source.IndexOf(" `$principal=",$start)
-  . ([scriptblock]::Create($source.Substring($start,$end-$start)))
- }else{
-  $line=($source -split "`n"|Where-Object {$_ -match '^\s*\$action=New-ScheduledTaskAction'})
-  . ([scriptblock]::Create($line))
- }
- Assert ($action.Arguments.Contains('-VerificationRunId '+$VerificationRunId)) ('desktop worker receives exact run ID: '+$relative)
- if($relative -notmatch 'desktop_icon_layout'){Assert ($action.Arguments.Contains('-VerifyOnly')) ('desktop worker preserves VerifyOnly: '+$relative)}
- $line=($source -split "`n"|Where-Object {$_ -match '^\s*\$principal=New-ScheduledTaskPrincipal'})
- . ([scriptblock]::Create($line))
- Assert ($principal.UserId -eq [Security.Principal.WindowsIdentity]::GetCurrent().Name) ('desktop worker uses invoking identity: '+$relative)
+function Invoke-SetupGuiRole {param($PackageRoot,$Role,[switch]$Worker,[switch]$VerifyOnly,$VerificationRunId);$script:capturedGuiCall=[pscustomobject]@{Root=$PackageRoot;Role=$Role;Worker=[bool]$Worker;VerifyOnly=[bool]$VerifyOnly;RunId=$VerificationRunId}}
+foreach($role in @('Display','Theme')){
+ $relative='modules/'+$role.ToLowerInvariant()+'/apply_'+$role.ToLowerInvariant()+'_settings.ps1'
+ $tokens=$null;$parseErrors=$null;$entryAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root $relative),[ref]$tokens,[ref]$parseErrors)
+ $call=$entryAst.Find({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Invoke-SetupGuiRole'},$true)
+ $VerificationRunId=[guid]::NewGuid().ToString();$VerifyOnly=$true;$Worker=$true
+ $moduleLiteral="'"+(Split-Path (Join-Path $root $relative) -Parent).Replace("'","''")+"'"
+ & ([scriptblock]::Create($call.Extent.Text.Replace('$PSScriptRoot',$moduleLiteral)))|Out-Null
+ Assert ($script:capturedGuiCall.RunId -ceq $VerificationRunId) ('private GUI role receives exact verification run ID: '+$relative)
+ Assert ($script:capturedGuiCall.VerifyOnly -and $script:capturedGuiCall.Worker) ('private GUI role preserves Worker and VerifyOnly modes: '+$relative)
+ $identityParameters=@($call.CommandElements|Where-Object {$_ -is [Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -in @('UserSID','Computer','SessionId','ScriptPath')})
+ Assert ($script:capturedGuiCall.Root -ieq $root -and $script:capturedGuiCall.Role -ceq $role -and $identityParameters.Count -eq 0) ('private GUI role preserves portable package root and delegates current identity to fixed protected controller: '+$relative)
 }
+$relative='modules/desktop/desktop_icon_layout.ps1';$tokens=$null;$errors=$null
+$layoutAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root $relative),[ref]$tokens,[ref]$errors)
+$call=$layoutAst.Find({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Invoke-SetupGuiRole'},$true)
+function Invoke-SetupGuiRole {param($PackageRoot,$Role,[switch]$Worker,[switch]$VerifyOnly,$VerificationRunId,$IconMode);$script:capturedGuiCall=[pscustomobject]@{Root=$PackageRoot;Role=$Role;Worker=[bool]$Worker;VerifyOnly=[bool]$VerifyOnly;RunId=$VerificationRunId;IconMode=$IconMode}}
+$VerificationRunId=[guid]::NewGuid().ToString();$Mode='Verify';$Worker=$true
+$moduleLiteral="'"+(Split-Path (Join-Path $root $relative) -Parent).Replace("'","''")+"'"
+& ([scriptblock]::Create($call.Extent.Text.Replace('$PSScriptRoot',$moduleLiteral)))|Out-Null
+Assert ($script:capturedGuiCall.RunId -ceq $VerificationRunId -and $script:capturedGuiCall.VerifyOnly -and $script:capturedGuiCall.IconMode -ceq 'Verify') 'Icons public entry carries exact fresh ID and finite verification mode'
+Assert ($script:capturedGuiCall.Worker -and $script:capturedGuiCall.Root -ieq $root -and $script:capturedGuiCall.Role -ceq 'Icons') 'Icons Worker delegates current invoking SID to same private scoped controller'
 # Execute the actual Verify-Only finalization and AfterRestart acceptance tail.
-$verifySource=[IO.File]::ReadAllText((Join-Path $root 'core/verify_only.ps1'))
-$verifyTail=$verifySource.Substring($verifySource.IndexOf('$result=[ordered]'))
-$afterSource=[IO.File]::ReadAllText((Join-Path $root 'core/verify_after_restart.ps1'))
-$afterTail=$afterSource.Substring($afterSource.IndexOf('$verificationRunId='))
+$verifyTokens=$null;$verifyErrors=$null
+$verifyAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/verification_library.ps1'),[ref]$verifyTokens,[ref]$verifyErrors)
+$verifyFunction=$verifyAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-SetupVerification'},$true)
+$verifyStarted=$false
+$verifyTail=(@(foreach($statement in $verifyFunction.Body.EndBlock.Statements){if($statement.Extent.Text.StartsWith('$result=[ordered]')){$verifyStarted=$true};if($verifyStarted){$statement.Extent.Text}}) -join "`r`n")
+$afterSource=[IO.File]::ReadAllText((Join-Path $root 'core/after_restart_library.ps1'))
+$tokens=$null;$parseErrors=$null;$afterAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/after_restart_library.ps1'),[ref]$tokens,[ref]$parseErrors)
+$afterFunction=$afterAst.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Invoke-SetupAfterRestart'},$true)
+$afterStarted=$false
+$afterTail=(@(foreach($statement in $afterFunction.Body.EndBlock.Statements){if($statement.Extent.Text.StartsWith('$verificationRunId=')){$afterStarted=$true};if($afterStarted){$statement.Extent.Text}}) -join "`r`n")
 foreach($mode in @('fresh-failure','stale-success')){
  $dir=Join-Path $fixture $mode;New-Item -ItemType Directory $dir|Out-Null
  $verifyPrefix=@'

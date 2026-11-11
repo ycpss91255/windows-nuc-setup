@@ -12,7 +12,11 @@ type Page struct {
 	Visible             string
 }
 
-func ParsePage(data []byte) (Page, error) {
+func ParsePage(data []byte) (Page, error) { return parsePage(data, false) }
+
+// parsePage optionally exposes the named user-expandable coverage detail, while
+// keeping unrelated closed details and hidden content excluded.
+func parsePage(data []byte, coverageDetails bool) (Page, error) {
 	root, err := html.Parse(bytes.NewReader(data))
 	if err != nil {
 		return Page{}, err
@@ -26,11 +30,32 @@ func ParsePage(data []byte) (Page, error) {
 		}
 		closed := false
 		if n.Type == html.ElementNode {
+			for _, attr := range n.Attr {
+				if attr.Key == "hidden" || (attr.Key == "aria-hidden" && attr.Val == "true") {
+					visible = false
+				}
+				if attr.Key == "style" {
+					style := strings.ReplaceAll(strings.ToLower(attr.Val), " ", "")
+					if strings.Contains(style, "display:none") || strings.Contains(style, "visibility:hidden") {
+						visible = false
+					}
+				}
+			}
 			if n.Data == "details" {
 				closed = true
 				for _, a := range n.Attr {
 					if a.Key == "open" {
 						closed = false
+					}
+				}
+			}
+			if coverageDetails && closed {
+				for child := n.FirstChild; child != nil; child = child.NextSibling {
+					if child.Type == html.ElementNode && child.Data == "summary" {
+						if child.FirstChild != nil && child.FirstChild.Type == html.TextNode && strings.TrimSpace(child.FirstChild.Data) == "分項量測明細" {
+							closed = false
+						}
+						break
 					}
 				}
 			}

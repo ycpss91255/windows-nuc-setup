@@ -44,7 +44,7 @@ foreach($relative in @('modules\drivers\install_drivers.ps1','modules\amd\apply_
 # Build a source-only package with no driver payload; Autologon is only an existence fixture.
 $genericPackage=Join-Path $fixture 'generic_package'
 New-Item -ItemType Directory -Path $genericPackage|Out-Null
-foreach($dir in @('core','modules')){
+foreach($dir in @('core','modules','drivers')){
  foreach($file in @(Get-ChildItem -LiteralPath (Join-Path $packageRoot $dir) -Recurse -File|Where-Object {$_.FullName -notmatch '[\\/]Payload[\\/]|[\\/]Reports[\\/]' -and $_.Extension -notin @('.exe','.zip','.log')})){
   $relative=$file.FullName.Substring($packageRoot.Length).TrimStart('\')
   $destination=Join-Path $genericPackage $relative
@@ -55,6 +55,33 @@ foreach($dir in @('core','modules')){
 foreach($entry in @('init.cmd','windows.cmd','readme.md')){Copy-Item -LiteralPath (Join-Path $packageRoot $entry) -Destination $genericPackage}
 [IO.File]::WriteAllText((Join-Path $genericPackage 'modules\accounts\Autologon64.exe'),'existence fixture, never executed')
 & (Join-Path $genericPackage 'core\test_setup_prerequisites.ps1') -PackageOnly -HardwareProfile Generic
+# PackageOnly must remain a source check on Server: never query/install native provisioning.
+function Get-ProvisioningPackage {throw 'PackageOnly must not invoke client provisioning APIs'}
+function Install-ProvisioningPackage {throw 'PackageOnly must not install provisioning assets'}
+foreach($relative in @('core/verification_library.ps1','modules/ssh/hosts_sync_library.ps1','modules/init/provisioning_library.ps1','modules/init/provisioning_asset_library.ps1','modules/init/provisioning_launcher_library.ps1','modules/init/assets/hide_oobe.ppkg','modules/init/assets/hide_oobe.xml','modules/init/assets/provenance.json')){
+ $path=Join-Path $genericPackage $relative;$backup=$path+'.fixture-backup'
+ [IO.File]::Move($path,$backup)
+ $rejected=$false
+ try{& (Join-Path $genericPackage 'core/test_setup_prerequisites.ps1') -PackageOnly -HardwareProfile Generic}catch{$rejected=$true}finally{[IO.File]::Move($backup,$path)}
+ Assert $rejected ('PackageOnly 拒絕遺失 Init runtime 相依：'+$relative)
+}
+foreach($mutation in @('package','source','manifest','source_with_updated_hash')){
+ $assets=Join-Path $genericPackage 'modules/init/assets';$packageFile=Join-Path $assets 'hide_oobe.ppkg';$sourceFile=Join-Path $assets 'hide_oobe.xml';$manifestFile=Join-Path $assets 'provenance.json'
+ $originalPackage=[IO.File]::ReadAllBytes($packageFile);$originalSource=[IO.File]::ReadAllBytes($sourceFile);$originalManifest=[IO.File]::ReadAllBytes($manifestFile)
+ $rejected=$false
+ try{
+  switch($mutation){
+   package{[IO.File]::AppendAllText($packageFile,'corrupt')}
+   source{[IO.File]::AppendAllText($sourceFile,'corrupt')}
+   manifest{$data=Get-Content $manifestFile -Raw|ConvertFrom-Json;$data.SourceSHA256='0'*64;[IO.File]::WriteAllText($manifestFile,($data|ConvertTo-Json))}
+   source_with_updated_hash{$text=[IO.File]::ReadAllText($sourceFile).Replace('>True<','>False<');[IO.File]::WriteAllText($sourceFile,$text);$data=Get-Content $manifestFile -Raw|ConvertFrom-Json;$data.SourceSHA256=(Get-FileHash $sourceFile).Hash;[IO.File]::WriteAllText($manifestFile,($data|ConvertTo-Json))}
+  }
+  & (Join-Path $genericPackage 'core/test_setup_prerequisites.ps1') -PackageOnly -HardwareProfile Generic
+ }catch{$rejected=$true}finally{[IO.File]::WriteAllBytes($packageFile,$originalPackage);[IO.File]::WriteAllBytes($sourceFile,$originalSource);[IO.File]::WriteAllBytes($manifestFile,$originalManifest)}
+ Assert $rejected ('PackageOnly 拒絕 Init 資產竄改：'+$mutation)
+}
+& (Join-Path $genericPackage 'core/test_setup_prerequisites.ps1') -PackageOnly -HardwareProfile Generic
+Assert $true 'PackageOnly 完整 Init source 驗證不依賴 Windows client API'
 $verificationHelper=Join-Path $genericPackage 'core\verification.ps1'
 Move-Item -LiteralPath $verificationHelper -Destination ($verificationHelper+'.fixture-backup')
 $missingHelperRejected=$false
@@ -85,6 +112,17 @@ Assert ($exportResult.Count -eq 4 -and (Test-Path (Join-Path $exported 'install.
 $standalone=& (Join-Path $exported 'modules\drivers\install_drivers.ps1') -DriverPackagePath $exported -PackageOnly
 Assert ($standalone.Status -eq 'Passed') '獨立包只用自身 helper 完成唯讀驗證'
 Assert (-not(Test-Path (Join-Path $exported 'script')) -and -not(Test-Path (Join-Path $exported 'test')) -and -not(Test-Path (Join-Path $exported '.github'))) '獨立包不攜帶維護工具且已獨立執行驗證'
+# Exercise the exported installer's actual pre-install selection and payload checks.
+$exportSource=[IO.File]::ReadAllText((Join-Path $exported 'modules/drivers/install_drivers.ps1'))
+$exportPrefix=$exportSource.Substring(0,$exportSource.IndexOf('$principal='))
+$tokens=$null;$errors=$null;$exportAst=[Management.Automation.Language.Parser]::ParseInput($exportPrefix,[ref]$tokens,[ref]$errors)
+$exportBody=$exportPrefix.Remove($exportAst.ParamBlock.Extent.StartOffset,$exportAst.ParamBlock.Extent.Text.Length).Replace('$PSScriptRoot','$exportScriptRoot')
+$exportScriptRoot=Join-Path $exported 'modules/drivers';$DriverPackagePath=$exported;$PackageOnly=$false;$NonInteractive=$true;$ConfirmedBoard='NUC8i7HNB';$ConfirmationComputer=$env:COMPUTERNAME
+function Get-CimInstance {param($ClassName,$ErrorAction);[pscustomobject]@{Product=''}}
+$bound=@{DriverPackagePath=$exported}
+. ([scriptblock]::Create($exportBody.Replace('$PSBoundParameters','$bound')))
+Assert ($hardware.DriverBoard -eq 'NUC8i7HNB' -and $hardware.BoardProduct -eq '' -and $payload.Status -eq 'Passed') '匯出包真安裝前綴可獨立選型並驗包，不呼叫安裝或UAC'
+Remove-Item Function:Get-CimInstance
 @{SchemaVersion=1;HardwareProfile='Other';Architecture='x64';SupportedBoards=@('Other')}|ConvertTo-Json|Set-Content (Join-Path $exported 'package.json') -Encoding UTF8
 $caught=$false;try{Test-SetupDriverPayload $hv $exported|Out-Null}catch{$caught=$true}
 Assert $caught '其他型號的獨立包被拒絕'

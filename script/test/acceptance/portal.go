@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func ValidatePortal(read Reader, readme, sha, run, base string) (Report, error) {
@@ -38,6 +39,20 @@ func ValidatePortal(read Reader, readme, sha, run, base string) (Report, error) 
 	if strings.Contains(page.Visible, "Unknown") || !strings.Contains(page.Visible, title) {
 		return fail("R02/R06 首頁結論不符")
 	}
+	stamp, e := time.Parse(time.RFC3339Nano, r.MeasuredAt)
+	if e != nil {
+		return r, e
+	}
+	if !strings.Contains(page.Visible, r.Commit[:7]) || !strings.Contains(page.Visible, stamp.UTC().Format("2006-01-02 15:04:05")+" UTC") {
+		return fail("R03 首頁提交或時間與本次報告不一致")
+	}
+	summary, e := read("main/summary.json")
+	if e != nil {
+		return r, e
+	}
+	if e = ValidatePortalCoverage(page.Visible, summary); e != nil {
+		return r, e
+	}
 	var versions []struct{ Version, Status, Path string }
 	b, e = read("versions.json")
 	if e != nil {
@@ -67,23 +82,8 @@ func ValidatePortal(read Reader, readme, sha, run, base string) (Report, error) 
 			return fail("R06 舊版本缺少測試紀錄說明")
 		}
 	}
-	for _, a := range versions {
-		for _, v := range versions {
-			b, e = read("comparisons/" + a.Version + "--" + v.Version + ".json")
-			if e != nil {
-				return r, e
-			}
-			var c struct{ Status string }
-			if e = decode(b, &c); e != nil {
-				return r, e
-			}
-			if (a.Status != "Verified" || v.Status != "Verified") && c.Status != "Unknown" {
-				return fail("R06 缺少證據卻推論版本比較")
-			}
-		}
-	}
 	images := regexp.MustCompile(`!\[[^\]]*\]\(([^)]+)\)`).FindAllStringSubmatch(readme, -1)
-	for _, n := range []string{"unit", "integration", "system", "coverage"} {
+	for _, n := range []string{"coverage"} {
 		found := []string{}
 		for _, m := range images {
 			if strings.Split(m[1], "?")[0] == base+"main/"+n+".svg" {

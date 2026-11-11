@@ -1,6 +1,6 @@
-﻿# 第三方來源與授權
+# 第三方來源與授權
 
-本文件列出工具包使用的第三方內容；各自的授權不代表本專案自有程式已採用相同授權。本專案自有程式目前尚未選定對外散布授權，公開發布前需由維護者決定，不能把下列 MIT 授權套用到整個工具包。
+本專案自有程式與文件採用 [Apache License 2.0](../license)。本文件列出的第三方內容各自維持原有授權、著作權及必要聲明，不因本專案採用 Apache-2.0 而改變；下列 MIT、BSD 或供應商條款不能互相套用，也不代表已取得第三方二進位重新散布許可。
 
 ## Win11Debloat
 
@@ -18,9 +18,11 @@
 
 ## 裝置驅動
 
-四個驅動封存檔保留於主程式之外的可選獨立包 `windows_driver_packages/nuc8`，不納入 Git。檔名及已核對的 SHA256 範本見 [nuc8.json](../modules/drivers/manifests/nuc8.json)；獨立包自身使用 `manifest.json` 核對完整性。
+十二個驅動封存檔保留於主程式之外的可選獨立包 `windows_driver_packages/nuc8`，不納入 Git。檔名及已核對的 SHA256 範本見 [manifest.json](../drivers/nuc8i7hvk_hnk/manifest.json)；獨立包自身使用 `manifest.json` 核對完整性。
 
-目前用途為晶片組、Serial IO、UCM 及 AMD 顯示驅動。這些檔案具有各供應商自己的授權，不能把本專案或 Win11Debloat 的授權視為驅動的散布許可。儲存庫只追蹤雜湊清單，不承諾第三方下載位置永久有效。
+Wi-Fi 的原始 BurnManifest UX 內 27 份語系 EULA 與藍牙原 MSI/CAB 的兩份授權文件已逐位元組保留至獨立包，來源及雜湊記錄於 manifest 的 Provenance.PreservedLicenseFiles。Realtek、SD、CIR 的原擷取樹已逐檔查閱授權類檔名；SD MSI 的 File／Control 表亦唯讀查閱，未發現另一份可保留的外掛授權文字。LAN 既有 license.txt 與 3rd_party_licenses.txt、MEI 及 Intel Graphics 的原授權檔保持。這是已取得原文的保留查核，不宣稱安裝器所有資源或每份原廠條款均已解讀，也不新增或推定二進位重新散布許可。
+
+目前涵蓋晶片組、Serial IO、UCM、AMD／Intel 顯示、Wi-Fi、藍牙、乙太網路、音效、MEI、SD 及 CIR；精確版本與來源見 [機型說明](../drivers/nuc8i7hvk_hnk/readme.md)。這些檔案具有各供應商自己的授權，不能把本專案或 Win11Debloat 的授權視為驅動的散布許可。儲存庫只追蹤雜湊清單，不承諾第三方下載位置永久有效。
 
 ## Windows 內建元件
 

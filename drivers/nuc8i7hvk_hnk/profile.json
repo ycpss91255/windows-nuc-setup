@@ -1,0 +1,10 @@
+{
+  "SchemaVersion": 1,
+  "ProfileId": "nuc8i7hvk_hnk",
+  "PackageDirectory": "nuc8",
+  "Architecture": "x64",
+  "SupportedBoards": [
+    "NUC8i7HVB",
+    "NUC8i7HNB"
+  ]
+}

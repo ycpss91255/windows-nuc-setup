@@ -1,5 +1,8 @@
-# 工具與驅動二進位由既有下載/雜湊流程管理，不提交 Git。
-/drivers/
+﻿# 工具與驅動二進位由既有下載/雜湊流程管理，不提交 Git。
+/drivers/*/*
+!/drivers/*/profile.json
+!/drivers/*/manifest.json
+!/drivers/*/readme.md
 /Driver/
 *.zip
 *.bin
@@ -100,6 +103,7 @@ id_ecdsa*
 /modules/init/answer.xml
 /modules/init/state.json
 /modules/init/cleanup-result.json
+/modules/init/assets/*.cat
 NUC-Init/
 
 # Win11Debloat 上游原始資產；不是安裝程式或每機資料。

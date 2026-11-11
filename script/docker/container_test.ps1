@@ -1,7 +1,8 @@
 ﻿#Requires -Version 5.1
 $ErrorActionPreference='Stop'
 try {
- foreach($tool in @('powershell.exe','cmd.exe','git.exe','go.exe')){Get-Command $tool -CommandType Application -ErrorAction Stop|Out-Null}
+ . C:/tools/ci_tasks.ps1
+ Assert-CIRequiredTools -Managed
  if($PSVersionTable.PSVersion.Major -ne 5 -or $PSVersionTable.PSVersion.Minor -ne 1){throw 'Windows PowerShell 5.1 required.'}
  $null=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
  & git.exe --version
@@ -29,6 +30,8 @@ try {
  Invoke-ContainerGo -Arguments @('run','./script/test/requirements_gate','--artifact-dir',$plan.ArtifactDirectory,'--source-root','C:/workspace','--expected-sha',$plan.Commit,'--expected-run-url',$plan.RunUrl)
  exit 0
 } catch {
- Write-Error $_ -ErrorAction Continue
+ $failure=$_
+ try{Write-CIContainerFailureDiagnostics -ReportDirectory C:/reports}catch{Write-Warning 'Container diagnostics could not be read; original failure is preserved.'}
+ Write-Error $failure -ErrorAction Continue
  exit 1
 }

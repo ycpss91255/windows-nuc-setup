@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsCustomizations>
+  <PackageConfig xmlns="urn:schemas-Microsoft-com:Windows-ICD-Package-Config.v1.0">
+    <ID>{1C2605EA-96AE-42FC-8F11-45FC0CB9D133}</ID>
+    <Name>windows_setup_hide_oobe</Name>
+    <Version>1.0</Version>
+    <OwnerType>ITAdmin</OwnerType>
+    <Rank>0</Rank>
+  </PackageConfig>
+  <Settings xmlns="urn:schemas-microsoft-com:windows-provisioning">
+    <Customizations><Common><OOBE><Desktop><HideOobe>True</HideOobe></Desktop></OOBE></Common></Customizations>
+  </Settings>
+</WindowsCustomizations>

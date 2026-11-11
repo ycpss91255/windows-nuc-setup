@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$CatalogPath,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$MainSnapshotPath,[switch]$RequireGoCoverage)
+param([Parameter(Mandatory=$true)][string]$CatalogPath,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$MainSnapshotPath,[switch]$RequireGoCoverage,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL,[switch]$Preview)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../test/test_report.ps1')
 . (Join-Path $PSScriptRoot 'portal.ps1')
@@ -16,14 +16,19 @@ foreach($entry in $catalog){
  $dir=Join-Path $output ('versions/'+$entry.Version)
  $state='Unknown';$reason='此舊版本未提供可驗證品質快照；不以目前 CI 回填。';$evidence=$null
  if($entry.SnapshotPath -and $entry.ManifestPath){
-  try{$evidence=Test-PortalReleaseEvidence $entry}catch{$reason='品質證據未通過驗證：'+(Protect-ReportText $_.Exception.Message);$state='Invalid'}
+  try{$evidence=Test-PortalReleaseEvidence -Entry $entry -CoverageToolPath $CoverageToolPath}catch{$reason='品質證據未通過驗證：'+(Protect-ReportText $_.Exception.Message);$state='Invalid'}
  }
  if($evidence){
-  New-Item -ItemType Directory $dir -Force|Out-Null
+  Write-SnapshotView $evidence.Snapshot $dir -OmitGoProfileLink:(-not $evidence.HasGoProfile)
   foreach($file in $evidence.Manifest.Files){
+   if($file.Name -eq 'index.html'){continue}
    $source=if($file.Name -eq 'summary.json'){$entry.SnapshotPath}else{Join-Path $entry.AssetDirectory $file.Name}
    Copy-Item -LiteralPath $source -Destination (Join-Path $dir $file.Name)
   }
+  $rendered=Join-Path $dir 'index.html'
+  $releaseLink=[Net.WebUtility]::HtmlEncode($entry.ReleaseUrl)
+  $notice='<p>此頁依原始版本紀錄整理；<a href="'+$releaseLink+'">不可變原始附件見 Release</a>。</p>'
+  [IO.File]::WriteAllText($rendered,([IO.File]::ReadAllText($rendered)).Replace('</body>',$notice+'</body>'),$utf8)
   $snapshots[$entry.Version]=$evidence.Snapshot;$state='Verified';$reason='原始量測與不可變 Release digest 已核對。'
  }else{
   New-Item -ItemType Directory $dir -Force|Out-Null
@@ -33,19 +38,22 @@ foreach($entry in $catalog){
  $versions.Add([pscustomobject]@{Version=$entry.Version;Commit=$entry.Commit;Status=$state;Reason=$reason;Path=('versions/'+$entry.Version+'/index.html');ReleaseUrl=$entry.ReleaseUrl;MeasuredAt=$(if($evidence){$evidence.Snapshot.MeasuredAt}else{'Unknown'});Digest=$entry.SnapshotDigest})
 }
 $mainStatus='Unknown'
+ if(-not $Preview -and (-not $MainSnapshotPath -or -not(Test-Path -LiteralPath $MainSnapshotPath -PathType Leaf))){throw '正式Pages需要本次完整報告。'}
 if($RequireGoCoverage -and (-not $MainSnapshotPath -or -not(Test-Path -LiteralPath $MainSnapshotPath -PathType Leaf))){throw 'main 發布必須提供 Go 覆蓋率報告。'}
 if($MainSnapshotPath -and (Test-Path -LiteralPath $MainSnapshotPath)){
  $main=Get-Content -LiteralPath $MainSnapshotPath -Raw -Encoding UTF8|ConvertFrom-Json
  Assert-TestReportSnapshot -Report $main
  if($main.RefType -cne 'Branch' -or $main.RefName -cne 'main' -or $main.SourceState -cne 'Clean' -or $main.RequestedLayer -cne 'All'){throw 'main 品質來源標記不符。'}
+ if(-not $Preview){Assert-RepoCoverageArtifacts -Report $main -Directory (Split-Path -Parent $MainSnapshotPath) -CoverageToolPath $CoverageToolPath -RequireComplete}
+ $hasRepo=$null -ne $main.PSObject.Properties['RepoCoverage']
+ if($Preview -and $hasRepo){Assert-RepoCoverageArtifacts -Report $main -Directory (Split-Path -Parent $MainSnapshotPath) -CoverageToolPath $CoverageToolPath}
  $hasGo=$null -ne $main.PSObject.Properties['GoCoverage']
  if($RequireGoCoverage -and -not $hasGo){throw 'main 發布缺少 Go 覆蓋率。'}
  if($hasGo){Assert-GoCoverageProfile -Coverage $main.GoCoverage -Directory (Split-Path -Parent $MainSnapshotPath)}
  Write-SnapshotView $main (Join-Path $output 'main');$mainStatus='Available'
+ if($hasRepo){foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml')){Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $MainSnapshotPath) $name) -Destination (Join-Path $output ('main/'+$name))}}
  if($hasGo){Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $MainSnapshotPath) 'go_coverage.out') -Destination (Join-Path $output 'main/go_coverage.out')}
 }
-$pairs=Join-Path $output 'comparisons';New-Item -ItemType Directory $pairs|Out-Null
-foreach($a in $versions){foreach($b in $versions){$comparison=Compare-TestSnapshots $snapshots[$a.Version] $snapshots[$b.Version];[IO.File]::WriteAllText((Join-Path $pairs ($a.Version+'--'+$b.Version+'.json')),($comparison|ConvertTo-Json -Depth 10),$utf8)}}
 [IO.File]::WriteAllText((Join-Path $output 'versions.json'),(ConvertTo-Json -InputObject @($versions.ToArray()) -Depth 6),$utf8)
 $links=(@($versions|ForEach-Object {
  $label=if($_.Status -eq 'Verified'){'已保存測試紀錄'}elseif($_.Status -eq 'Invalid'){'測試紀錄無法驗證'}else{'未保存測試紀錄'}
@@ -59,14 +67,10 @@ if($mainStatus -eq 'Available'){
  $shortCommit=if($main.Commit.Length -ge 7){$main.Commit.Substring(0,7)}else{$main.Commit}
  $mainLink='<h2>'+$headline+'</h2><p>檢查對象：開發主線 main · 提交 <code>'+[Net.WebUtility]::HtmlEncode($shortCommit)+'</code><br>檢查時間：'+[Net.WebUtility]::HtmlEncode($stamp)+'</p><p>已執行程式邏輯檢查（單元測試），以及隔離環境中的模組配合檢查（整合測試）。</p><p><a class="button" href="main/index.html">查看本次檢查明細</a></p>'
 }
-$html=@'
-<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Windows 設定工具｜測試結果</title><style>body{font:16px/1.65 system-ui;max-width:960px;margin:36px auto;padding:0 20px;color:#17202a;background:#f7f9fb}h1{font-size:28px}h2{font-size:22px;margin-top:0}.card,details{background:white;border:1px solid #dce3ea;border-radius:10px;padding:24px;margin:20px 0}.notice{border-left:4px solid #b27b14;padding:12px 18px;background:#fff8e8}a{color:#1558ad}.button{display:inline-block;padding:8px 14px;border:1px solid #1558ad;border-radius:6px;text-decoration:none}summary{cursor:pointer;font-weight:600}select,button{padding:8px;font:inherit}li{margin:8px 0}code{font-size:14px}.muted{color:#526170}</style><body><h1>Windows 設定工具｜測試結果</h1><p>這裡告訴你程式檢查是否通過，以及哪些操作還沒有實際驗證。</p><section class="card">@@MAIN@@</section><section class="notice"><strong>完整安裝尚未實測</strong><p>目前還沒有完成「全新 Windows → 初始化帳號 → 套用設定 → 重新開機」的整套實機測試。程式檢查通過，不代表每臺電腦都已安裝成功；驅動與桌面設定仍需在目標電腦確認。程式碼覆蓋率也尚未量測。</p></section><section class="card"><h2>準備使用</h2><p>請先依操作說明準備工具包，再從 USB 執行。GitHub 的來源下載不包含 Autologon 或獨立驅動包。</p><a class="button" href="https://github.com/ycpss91255/windows_setup/blob/main/readme.md">查看 USB 安裝與使用步驟</a> <a href="https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml">查看檢查執行紀錄</a></section><details><summary>舊版本與進階比較</summary><p>較早版本未保存測試紀錄時，這裡不會用現在的結果代替。</p><ul>@@VERSIONS@@</ul><h2>比較兩個版本</h2><label>基準 <select id="baseline"></select></label> <label>比較 <select id="candidate"></select></label> <button id="compare">比較</button><p class="muted">只有兩個版本都有完整且相容的測試紀錄，才能比較新增、移除或失敗的檢查。這不是完整 Windows 安裝結果的比較。</p><div id="result" aria-live="polite"></div></details><script src="compare.js"></script></body></html>
-'@
-[IO.File]::WriteAllText((Join-Path $output 'index.html'),$html.Replace('@@MAIN@@',$mainLink).Replace('@@VERSIONS@@',$links),$utf8)
-$js=@'
-const base=document.getElementById('baseline'),candidate=document.getElementById('candidate'),result=document.getElementById('result');
-fetch('versions.json').then(r=>{if(!r.ok)throw Error('版本索引 unavailable');return r.json()}).then(rows=>{for(const row of rows){for(const select of [base,candidate]){const option=document.createElement('option');option.value=row.Version;option.textContent=row.Version+' · '+(row.Status==='Verified'?'已保存紀錄':row.Status==='Invalid'?'紀錄無法驗證':'未保存紀錄');select.append(option)}}}).catch(e=>result.textContent='暫時無法讀取測試紀錄，請稍後再試。');
-document.getElementById('compare').onclick=async()=>{result.textContent='讀取比較…';try{const response=await fetch('comparisons/'+encodeURIComponent(base.value)+'--'+encodeURIComponent(candidate.value)+'.json');if(!response.ok)throw Error('缺少比較證據');const data=await response.json();result.textContent='';const conclusion=document.createElement('p');conclusion.textContent=data.Status==='Compared'?'基準 '+data.BaselineVersion+' → '+data.CandidateVersion+'；程式碼覆蓋率尚未量測。':'這兩個版本缺少可比較的測試紀錄。'+(data.Reason||'');result.append(conclusion);if(data.Status!=='Compared')return;for(const [key,label] of [['Added','新增'],['Removed','移除'],['NewFailures','新失敗'],['Fixed','已修復'],['NotRun','未執行']]){const heading=document.createElement('h3');heading.textContent=label+'：'+(data[key]||[]).length;result.append(heading);const list=document.createElement('ul');for(const name of data[key]||[]){const item=document.createElement('li');item.textContent=name;list.append(item)}result.append(list)}}catch(e){result.textContent='暫時無法讀取測試紀錄，請稍後再試。'}};
-'@
-[IO.File]::WriteAllText((Join-Path $output 'compare.js'),$js,$utf8)
+$coverageNotice='尚未提供完整量測。'
+ if($mainStatus -eq 'Available' -and $hasRepo){$coverageNotice=[Net.WebUtility]::HtmlEncode((Get-RepoCoverageSummary $main.RepoCoverage))}
+$html=@"
+<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Windows 設定工具｜測試結果</title><style>body{font:16px/1.65 system-ui;max-width:880px;margin:32px auto;padding:0 20px;color:#17202a}h1{font-size:28px}h2{font-size:22px}section{border-top:1px solid #dce3ea;padding:16px 0}a{color:#1558ad}li{margin:8px 0}code{font-size:14px}</style><body><h1>Windows 設定工具｜測試結果</h1><section>$mainLink</section><section><h2>整體覆蓋率</h2><p>$coverageNotice</p></section><section><h2>使用與下載</h2><p><a href="https://github.com/ycpss91255/windows_setup/blob/main/readme.md">USB 安裝與使用步驟</a> · <a href="https://github.com/ycpss91255/windows_setup/releases">下載 Release</a> · <a href="https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml">Actions 執行紀錄</a></p></section><section><h2>版本紀錄</h2><ul>$links</ul></section></body></html>
+"@
+[IO.File]::WriteAllText((Join-Path $output 'index.html'),$html,$utf8)
 [pscustomobject]@{OutputDirectory=$output;Versions=$versions.Count;MainStatus=$mainStatus}

@@ -1,7 +1,8 @@
 ﻿#Requires -Version 5.1
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$Version,[string]$PackageRoot=([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))))
+param([Parameter(Mandatory=$true)][string]$Version,[string]$PackageRoot)
 $ErrorActionPreference='Stop'
+if(-not $PackageRoot){$PackageRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))}
 . (Join-Path $PSScriptRoot 'release.ps1')
 $null=Get-ReleaseVersion $Version
 $path=Join-Path $PackageRoot 'doc/changelog/changelog.md'

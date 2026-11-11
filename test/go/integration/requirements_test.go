@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	a "windows_setup/script/test/acceptance"
 )
 
@@ -16,7 +17,7 @@ var names = []string{"unit", "integration", "system", "coverage"}
 
 func readme() string {
 	s := ""
-	for _, n := range names {
+	for _, n := range []string{"coverage"} {
 		s += fmt.Sprintf("![%s](%smain/%s.svg?style=fixture)\n", n, base, n)
 	}
 	return s
@@ -73,25 +74,13 @@ func copyFiles(m map[string][]byte) map[string][]byte {
 }
 func flag(b bool) *bool { return &b }
 func badge(r a.Report, n string) []byte {
-	value := "not run"
-	if n == "coverage" {
-		value = "not measured"
-	} else if n != "system" {
-		for _, c := range r.Checks {
-			if strings.EqualFold(c.Layer, n) && c.Executed {
-				if value == "not run" {
-					value = "passed"
-				}
-				if c.Passed == nil || !*c.Passed {
-					value = "failed"
-				}
-			}
-		}
-	}
+	value := a.BadgeStatus(r, n)
 	label := n + " " + strings.ToLower(r.RefType)
 	l, q := len(label)*7+12, len(value)*7+12
 	color := "#9f9f9f"
-	if value == "passed" {
+	if n == "coverage" && r.RepoCoverage != nil && r.RepoCoverage.Result.Complete {
+		color = "#007ec6"
+	} else if value == "passed" {
 		color = "#4c1"
 	} else if value == "failed" {
 		color = "#e05d44"
@@ -180,7 +169,17 @@ func portal(t *testing.T, m map[string][]byte) map[string][]byte {
 	if !r.Success {
 		title = "目前程式檢查未通過"
 	}
-	p["index.html"] = []byte(`<h1>` + title + `</h1><a href="main/index.html">結果</a><a href="https://github.com/example/windows_setup/blob/main/readme.md">說明</a>`)
+	stamp, e := time.Parse(time.RFC3339Nano, r.MeasuredAt)
+	if e != nil {
+		t.Fatal(e)
+	}
+	identity := "提交 <code>" + r.Commit[:7] + "</code> 檢查時間：" + stamp.UTC().Format("2006-01-02 15:04:05") + " UTC"
+	overview := "<h2>整體覆蓋率</h2><p>尚未提供完整量測。</p>"
+	if r.RepoCoverage != nil && r.RepoCoverage.Result.Complete {
+		c := r.RepoCoverage.Result
+		overview = fmt.Sprintf("<h2>整體覆蓋率</h2><p>%.1f%%（%d/%d 可執行行）</p>", *c.Percent, c.Covered, c.Executable)
+	}
+	p["index.html"] = []byte(overview + `<h1>` + title + `</h1><a href="main/index.html">結果</a><a href="https://github.com/example/windows_setup/blob/main/readme.md">說明</a>` + identity)
 	p["versions.json"] = []byte(`[]`)
 	return p
 }
@@ -222,9 +221,12 @@ func TestRequirementsParity(t *testing.T) {
 		m := copyFiles(original)
 		q := decode(t, m)
 		for i := range q.Checks {
-			if q.Checks[i].Layer == "System" {
+			if !q.Checks[i].Executed {
 				q.Checks[i].Passed = flag(true)
 			}
+		}
+		if q.SchemaVersion == 2 {
+			q.Checks = append(q.Checks, a.Check{Name: "removed", Layer: "System", Status: "Passed", Passed: flag(true)})
 		}
 		save(m, q)
 		reject(t, m)
@@ -335,4 +337,27 @@ func TestRequirementsParity(t *testing.T) {
 			t.Fatalf("retry contract: calls=%d sleeps=%d err=%v", calls, sleeps, e)
 		}
 	})
+}
+
+func TestActualReadmeCoverageBadgeLinks(t *testing.T) {
+	raw, e := os.ReadFile(filepath.Join("..", "..", "..", "readme.md"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	doc := strings.ReplaceAll(string(raw), "https://ycpss91255.github.io/windows_setup/", base)
+	original := files(t, os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"))
+	p := portal(t, synthetic(t, original, true, "Branch"))
+	r := decode(t, original)
+	checkPortal := func(p map[string][]byte, doc string) (a.Report, error) {
+		return a.ValidatePortal(reader(p), doc, r.Commit, r.RunUrl, base)
+	}
+	if _, e := checkPortal(p, doc); e != nil {
+		t.Fatalf("actual README coverage links rejected: %v", e)
+	}
+	if _, e := checkPortal(p, strings.ReplaceAll(doc, "main/coverage.svg", "main/missing.svg")); e == nil {
+		t.Fatal("missing actual PS coverage URL accepted")
+	}
+	if _, e := checkPortal(p, doc+"\n![duplicate]("+base+"main/coverage.svg)"); e == nil {
+		t.Fatal("duplicate actual coverage URL accepted")
+	}
 }

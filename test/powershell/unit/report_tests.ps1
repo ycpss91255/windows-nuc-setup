@@ -9,7 +9,7 @@ $checks=@(
  [pscustomobject]@{Name='integration';Layer='Integration';Status='Failed';Executed=$true;Passed=$false;ExitCode=1;DurationSeconds=2;Assertions=@([pscustomobject]@{Name='file C:\Users\secret\private';Passed=$false})},
  [pscustomobject]@{Name='system';Layer='System';Status='NotRun';Executed=$false;Passed=$null;Assertions=@()}
 )
-$r=Write-TestReports -Checks $checks -OutputDirectory $fixture -Commit ('a'*40)
+$r=Write-TestReports -SchemaVersion 1 -Checks $checks -OutputDirectory $fixture -Commit ('a'*40)
 Assert (-not $r.Success -and $r.Coverage -eq 'NotMeasured') '真失敗不標成功，未量測不捏造覆蓋率'
 [xml]$junit=Get-Content (Join-Path $fixture 'junit.xml') -Raw -Encoding UTF8
 Assert ($junit.SelectNodes('//failure').Count -eq 1 -and $junit.SelectNodes('//skipped').Count -eq 1) 'JUnit 分開失敗與未執行'
@@ -35,13 +35,13 @@ $contradiction.Checks[0].ExitCode=1
 Refuse {Assert-TestReportSnapshot $contradiction} '退出碼與成功不符被拒絕'
 $passChecks=$checks|ConvertTo-Json -Depth 8|ConvertFrom-Json
 $passChecks[1].Status='Passed';$passChecks[1].Passed=$true;$passChecks[1].ExitCode=0;$passChecks[1].Assertions[0].Passed=$true
-$release=Write-TestReports -Checks $passChecks -OutputDirectory (Join-Path $fixture 'release') -Version v1.2.3 -RefType Release -RefName v1.2.3 -Commit ('a'*40) -RunUrl 'https://github.com/example/repo/actions/runs/1' -SourceState Clean -Environment 'Windows PowerShell 5.1' -MeasuredAt '2026-11-08T00:00:00.0000000Z' -Changes @('修正範例')
+$release=Write-TestReports -SchemaVersion 1 -Checks $passChecks -OutputDirectory (Join-Path $fixture 'release') -Version v1.2.3 -RefType Release -RefName v1.2.3 -Commit ('a'*40) -RunUrl 'https://github.com/example/repo/actions/runs/1' -SourceState Clean -Environment 'Windows PowerShell 5.1' -MeasuredAt '2026-11-08T00:00:00.0000000Z' -Changes @('修正範例')
 Assert-TestReportSnapshot $release -Release
 Assert ($release.Version -eq 'v1.2.3') '乾淨完整的版本證據可驗證'
 $release.SourceState='Dirty'
 Refuse {Assert-TestReportSnapshot $release -Release} 'Dirty 版本快照拒絕發布'
 $release.SourceState='Clean'
-$null=Write-TestReports -Checks $release.Checks -OutputDirectory (Join-Path $fixture 'replay') -Layer $release.RequestedLayer -Version $release.Version -RefType $release.RefType -RefName $release.RefName -Commit $release.Commit -RunUrl $release.RunUrl -SourceState $release.SourceState -Environment $release.Environment -MeasuredAt $release.MeasuredAt -Changes $release.Changes
+$null=Write-TestReports -SchemaVersion 1 -Checks $release.Checks -OutputDirectory (Join-Path $fixture 'replay') -Layer $release.RequestedLayer -Version $release.Version -RefType $release.RefType -RefName $release.RefName -Commit $release.Commit -RunUrl $release.RunUrl -SourceState $release.SourceState -Environment $release.Environment -MeasuredAt $release.MeasuredAt -Changes $release.Changes
 $equal=$true
 foreach($file in Get-ChildItem (Join-Path $fixture 'release') -File){if((Get-FileHash $file.FullName).Hash -ne (Get-FileHash (Join-Path (Join-Path $fixture 'replay') $file.Name)).Hash){$equal=$false}}
 Assert $equal '同一版本 JSON 重建所有公開檔案位元組一致且保留量測時間'
@@ -52,28 +52,30 @@ $contradiction=$r|ConvertTo-Json -Depth 10|ConvertFrom-Json
 $contradiction.Checks[2].Assertions=@([pscustomobject]@{Name='not executed';Passed=$true})
 Refuse {Assert-TestReportSnapshot $contradiction} 'NotRun 不得攜帶斷言污染執行總數'
 $privateOutput=Join-Path $fixture 'private_metadata'
-$null=Write-TestReports -Checks $checks -OutputDirectory $privateOutput -Version 'C:\Users\secret\version' -Environment 'C:\Users\secret\environment' -RefName 'C:\Users\secret\branch' -Changes @('C:\Users\secret\change')
+$null=Write-TestReports -SchemaVersion 1 -Checks $checks -OutputDirectory $privateOutput -Version 'C:\Users\secret\version' -Environment 'C:\Users\secret\environment' -RefName 'C:\Users\secret\branch' -Changes @('C:\Users\secret\change')
 $leaked=@(Get-ChildItem $privateOutput -File|Where-Object {(Get-Content $_.FullName -Raw -Encoding UTF8).Contains('secret')})
 Assert ($leaked.Count -eq 0) '所有公開格式的版本環境分支與變更均去識別'
 Write-Host ('Report preview: '+(Join-Path $fixture 'release/index.html'))
 $badgeWidths=@()
 foreach($name in @('unit','integration','system','coverage')){
  [xml]$badge=Get-Content (Join-Path $fixture ($name+'.svg')) -Raw -Encoding UTF8
+ $rects=if($name -eq 'coverage'){@($badge.svg.g[0].rect)}else{@($badge.svg.rect)}
+ $font=if($name -eq 'coverage'){$badge.svg.g[1].'font-size'}else{$badge.svg.g.'font-size'}
  $badgeWidths+=[int]$badge.svg.width
- Assert ($badge.svg.height -eq '20' -and $badge.svg.g.'font-size' -eq '11' -and $badge.svg.rect[0].fill -eq '#555') ('flat-square 徽章對齊 base 字體與高度：'+$name)
- Assert ([int]$badge.svg.width -eq ([int]$badge.svg.rect[0].width+[int]$badge.svg.rect[1].width) -and $badge.svg.'aria-label'.Contains('branch')) ('徽章寬度符合兩段文字且保留範圍：'+$name)
+ Assert ($badge.svg.height -eq '20' -and $font -eq '11' -and $rects[0].fill -eq '#555') ('徽章保留一致字體與高度：'+$name)
+ Assert ([int]$badge.svg.width -eq ([int]$rects[0].width+[int]$rects[1].width) -and $badge.svg.'aria-label'.Contains('branch')) ('徽章寬度符合兩段文字且保留範圍：'+$name)
 }
 Assert (@($badgeWidths|Select-Object -Unique).Count -gt 1 -and ($badgeWidths|Measure-Object -Maximum).Maximum -lt 360) '不同文字使用自適應寬度而非固定寬度大色塊'
 [xml]$passedBadge=Get-Content (Join-Path $fixture 'unit.svg') -Raw -Encoding UTF8
 [xml]$failedBadge=Get-Content (Join-Path $fixture 'integration.svg') -Raw -Encoding UTF8
 Assert ($passedBadge.svg.rect[1].fill -eq '#4c1' -and $failedBadge.svg.rect[1].fill -eq '#e05d44') '通過與失敗使用 base 色階且保留原測試狀態'
 [xml]$coverageBadge=Get-Content (Join-Path $fixture 'coverage.svg') -Raw -Encoding UTF8
-Assert ($coverageBadge.svg.rect[1].fill -eq '#9f9f9f' -and $coverageBadge.svg.'aria-label'.Contains('not measured') -and -not $coverageBadge.OuterXml.Contains('%')) 'Coverage 未量測使用中性灰色而非假百分比'
+Assert ($coverageBadge.svg.g[0].rect[1].fill -eq '#9f9f9f' -and $coverageBadge.svg.'aria-label'.Contains('not measured') -and -not $coverageBadge.svg.'aria-label'.Contains('%')) 'Coverage 未量測使用中性灰色而非假百分比'
 
 Assert ($html.Contains('archive/'+('a'*40)+'.zip') -and -not $html.Contains('href="https://github.com/ycpss91255/windows_setup/releases"')) '分支報告下載指向本次提交，不導向舊發布版'
-Assert ($html.Contains('完整 Windows 安裝、重開機與真實硬體設定尚未實測') -and $html.Contains('blob/main/readme.md')) '明細首屏保留未實測界限與目前使用步驟'
+Assert (-not $html.Contains('完整 Windows 安裝') -and $html.Contains('blob/main/readme.md')) '明細保留目前使用步驟且不顯示取消的交付要求'
 
 $changeOutput=Join-Path $fixture 'maintenance_changes'
-$changeReport=Write-TestReports -Checks $checks -OutputDirectory $changeOutput -Changes @('版本比較缺證據時明示 Unknown')
+$changeReport=Write-TestReports -SchemaVersion 1 -Checks $checks -OutputDirectory $changeOutput -Changes @('版本比較缺證據時明示 Unknown')
 $changeHtml=Get-Content (Join-Path $changeOutput 'index.html') -Raw -Encoding UTF8
-Assert ($changeReport.Changes[0].Contains('Unknown') -and $changeHtml -match '(?s)<details><summary>本次維護變更摘要</summary>.*?Unknown.*?</details>') '維護術語只在折疊摘要呈現，原始變更證據保持不變'
+Assert ($changeReport.Changes[0].Contains('Unknown') -and -not $changeHtml.Contains('Unknown')) '原始變更證據保持不變，簡潔前台不顯示維護比較術語'

@@ -36,18 +36,20 @@ Assert ((Get-SetupSavedDriverSelection $newResult fixture_machine fixture_user_a
 $selection.RelativePath='Z:\unknown'
 @{Computer='fixture_machine';UserSID='fixture_user_a';HardwareProfile=@{DriverPackagePath=$newDriver;DriverSelection=$selection}}|ConvertTo-Json -Depth 8|Set-Content $newResult -Encoding UTF8
 Refuse {Get-SetupSavedDriverSelection $newResult fixture_machine fixture_user_a $newPack} '相對紀錄不得夾帶磁碟代號'
-# Execute only the elevation command construction with a fake Start-Process.
-$source=[IO.File]::ReadAllText((Join-Path $root 'modules/init/initialize_nuc.ps1'))
-$start=$source.IndexOf(' $command=');$end=$source.IndexOf("`r`n return",$start)
-$block=$source.Substring($start,$end-$start).Replace('$PSCommandPath','$fakeEntry')
+# Exercise the actual named Init source with read-only/mocked platform context.
+. (Join-Path $root 'modules/init/init_entry_library.ps1')
+$source=[IO.File]::ReadAllText((Join-Path $root 'modules/init/init_entry_library.ps1'))
+function Invoke-InitProvisioningEntry {return $false}
+function Get-SetupInitContext {[pscustomobject]@{Sid='fixture_user_b';UserSID='fixture_user_b';IsAdministrator=$false;ImageState='IMAGE_STATE_COMPLETE';DesktopOwned=$true}}
 function Start-Process {param($FilePath,$Verb,$ArgumentList);$script:elevation=$ArgumentList}
 $fakeEntry=Join-Path $newPack "init ' 測試.ps1"
 [IO.File]::WriteAllText($fakeEntry,'param($ExpectedUserSID,$SshScriptPath);[pscustomobject]@{SID=$ExpectedUserSID;SSH=$SshScriptPath}',[Text.UTF8Encoding]::new($true))
-$PSCommandPath=$fakeEntry;$sid='fixture_user_b';$SshScriptPath=Join-Path $newPack "ssh ' 中文.ps1"
-. ([scriptblock]::Create($block))
+$SshScriptPath=Join-Path $newPack "ssh ' 中文.ps1"
+Invoke-SetupInit -EntryPath $fakeEntry -ModuleRoot (Join-Path $root 'modules/init') -SshScriptPath $SshScriptPath
 $decoded=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($script:elevation -split '-EncodedCommand ')[1]))
 $invoked=& ([scriptblock]::Create($decoded))
 Assert ($invoked.SID -eq 'fixture_user_b' -and $invoked.SSH -eq $SshScriptPath) '提權命令保留動態使用者與中文空白單引號路徑'
+Refuse {Invoke-SetupInit -EntryPath $fakeEntry -ModuleRoot (Join-Path $root 'modules/init') -ExpectedUserSID original_user} 'Init原始函式拒絕提權換帳號'
 # First-logon command must be independent of the removable package.
 $stage=Join-Path $fixture 'local_program_data\NUC-Init'
 $cleanup='powershell.exe -File "'+(Join-Path $stage 'cleanup_oobe.ps1')+'"'
@@ -57,7 +59,7 @@ Assert ($source.Contains("`$stage=Join-Path `$env:ProgramData 'NUC-Init'") -and 
 $otherRoot='\\fixture.invalid\share\package'
 $external=New-SetupDriverSelection -PackageRoot $otherRoot -DriverPackagePath $newDriver
 Assert (-not $external.RelativePath -and $external.AbsolutePath -eq $newDriver) '跨磁碟不產生假的相對路徑或掃描其他媒體'
-foreach($entry in @('modules/init/initialize_nuc.ps1','core/configure_nuc.ps1','core/verify_only.ps1','core/verify_after_restart.ps1')){
+foreach($entry in @('core/configure_nuc.ps1','core/verify_only.ps1','core/verify_after_restart.ps1')){
  $text=[IO.File]::ReadAllText((Join-Path $root $entry))
  $guard=($text -split "`r?`n"|Where-Object {$_ -match '^if\(\$ExpectedUserSID -and'})
  $ExpectedUserSID='original_user';$sid='different_user';$currentSID='different_user'
