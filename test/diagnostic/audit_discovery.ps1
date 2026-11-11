@@ -4,10 +4,16 @@ param([switch]$NativeSelfTest)
 $ErrorActionPreference='Stop'
 function Invoke-AuditDiagnosticNative([string[]]$Arguments,[string]$Stdout,[string]$Stderr){
  $quoted=@($Arguments|ForEach-Object {'"'+$_+'"'})
- $process=Start-Process -FilePath powershell.exe -ArgumentList $quoted -WindowStyle Hidden -PassThru -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr
+ $start=[Diagnostics.ProcessStartInfo]::new('powershell.exe',($quoted -join ' '))
+ $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.WindowStyle='Hidden';$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+ $process=[Diagnostics.Process]::new();$process.StartInfo=$start
+ if(-not $process.Start()){throw 'Diagnostic native process did not start.'}
+ $outTask=$process.StandardOutput.ReadToEndAsync();$errTask=$process.StandardError.ReadToEndAsync()
  $timedOut=-not $process.WaitForExit(600000)
  if($timedOut){$process.Kill();[void]$process.WaitForExit(5000)}
  $exitCode=if($timedOut){124}else{$process.ExitCode}
+ if(-not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($outTask,$errTask),5000)){throw 'Diagnostic output capture exceeded deadline.'}
+ [IO.File]::WriteAllText($Stdout,$outTask.Result,[Text.UTF8Encoding]::new($false));[IO.File]::WriteAllText($Stderr,$errTask.Result,[Text.UTF8Encoding]::new($false))
  return [pscustomobject]@{ExitCode=$exitCode;TimedOut=$timedOut}
 }
 if($NativeSelfTest){
