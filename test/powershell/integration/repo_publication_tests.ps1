@@ -69,7 +69,8 @@ function gh {
   Assert (-not($bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191)) 'ID PATCH 使用無 BOM UTF8 JSON'
   $payload=[Text.UTF8Encoding]::new($false,$true).GetString($bytes)|ConvertFrom-Json
   Assert ($words[[Array]::IndexOf($words,'--method')+1] -ceq 'PATCH') '只對已選中的 release ID PATCH'
-  if($payload.PSObject.Properties['draft']){
+  Assert ($payload.tag_name -is [string] -and $payload.tag_name -ceq 'v1.0.0' -and $payload.target_commitish -is [string] -and $payload.target_commitish -ceq $identity.Commit -and $payload.name -is [string] -and $payload.name -ceq 'v1.0.0' -and $payload.prerelease -is [bool] -and $payload.prerelease -ceq $false -and $payload.draft -is [bool]) '每次固定 ID PATCH 明確保留標籤、來源、名稱與布林狀態'
+  if(-not $payload.draft){
    Assert ($payload.draft -is [bool] -and $payload.draft -ceq $false -and $global:repoPublicationNotesApplied) '完整核對後最後一步才以 JSON false 發布'
    $global:repoPublicationPublished++
   }else{
