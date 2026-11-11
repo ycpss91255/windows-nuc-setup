@@ -36,6 +36,7 @@ $rows=@(foreach($item in $records){
   InvocationPosition=(Limit-PrivateText $record.InvocationInfo.PositionMessage)
   ScriptStackTrace=(Limit-PrivateText $record.ScriptStackTrace)
   ExceptionDetail=(Limit-PrivateText $record.Exception.ToString())
+  ErrorDetails=(Limit-PrivateText $record.ErrorDetails.Message)
  }
 })
 $value=[ordered]@{SchemaVersion=1;Errors=$rows}

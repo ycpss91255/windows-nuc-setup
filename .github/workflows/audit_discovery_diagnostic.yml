@@ -1,7 +1,6 @@
 name: Pester 原生前置失敗全分片診斷（非正式品質門檻）
 on:
-  push:
-    branches: [diagnostic/audit_discovery]
+  workflow_dispatch:
 permissions:
   contents: read
 env:

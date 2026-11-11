@@ -2,7 +2,7 @@ name: Windows 測試
 
 on:
   push:
-    branches: [main]
+    branches: [main, diagnostic/audit_discovery]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -107,10 +107,27 @@ jobs:
           Install-ContainerToolArtifact -Artifact $artifact -Destination $directory -ArchiveDirectory (Join-Path $env:RUNNER_TEMP 'actionlint-download')
           "WINDOWS_SETUP_ACTIONLINT=$(Join-Path $directory 'actionlint.exe')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - name: 真實執行分配的 Pester suites 並保留全部來源分母
+        id: original_pester_shard
         env:
           SHARD_INDEX: ${{ matrix.shard }}
+          WINDOWS_SETUP_PRIVATE_FAILURE_DIAGNOSTIC: '1'
         run: |
           .\script\test\powershell_coverage_shard.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-public') -PrivateDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-private') -ShardIndex ([int]$env:SHARD_INDEX) -ShardCount 4 -Commit $env:GITHUB_SHA -RunUrl ("https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID") -RunAttempt ([int]$env:GITHUB_RUN_ATTEMPT)
+      - name: 僅在原正式分片失敗後加密其私有原始診斷
+        if: ${{ failure() && steps.original_pester_shard.outcome == 'failure' }}
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+          ORIGINAL_STEP_OUTCOME: ${{ steps.original_pester_shard.outcome }}
+        run: |
+          .\test\diagnostic\audit_discovery.ps1 -ExportOnly -PrivateDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-private') -StepOutcome $env:ORIGINAL_STEP_OUTCOME
+      - name: 只保留加密的原正式分片失敗工件一天
+        if: ${{ always() && steps.original_pester_shard.outcome == 'failure' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pester-original-private-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/audit-discovery-encrypted/diagnostic.encrypted.json
+          retention-days: 1
+          if-no-files-found: error
       - name: 僅保留已驗證的相對路徑分片證據七天
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
