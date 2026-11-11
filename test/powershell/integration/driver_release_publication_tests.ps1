@@ -46,24 +46,25 @@ function gh {
  if($words[0] -eq 'api' -and $words[1] -eq 'repos/example/repo/releases/42'){
   $global:driverReleaseReadCount++
   $draft=@{id=42;immutable=$false;draft=$true;prerelease=$false;tag_name='v1.0.0';target_commitish=$identity.Commit;name='v1.0.0';body=$(if($global:driverReleaseNotesApplied){$global:driverReleaseNotes}else{$global:driverReleaseMarker});assets=$global:driverReleaseRemoteAssets;upload_url='https://untrusted.invalid/must_not_receive_credentials'}
+  if(($global:driverReleaseMode -eq 'size-upload' -and $global:driverReleaseReadCount -eq 2) -or ($global:driverReleaseMode -eq 'size-notes' -and $global:driverReleaseNotesApplied)){ $draft.assets=@($global:driverReleaseRemoteAssets|ForEach-Object { $_.Clone() }); $draft.assets[1].size++ }
   switch($global:driverReleaseMode){published{$draft.draft=$false}foreign{$draft.body='other draft'}wrong-commit{$draft.target_commitish='main'}changed-id{$draft.id=43}immutable{$draft.immutable=$true}changed-after-upload{if($global:driverReleaseReadCount -ge 2){$draft.id=43}}wrong-notes{if($global:driverReleaseNotesApplied){$draft.body='altered notes'}}}
   return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($draft|ConvertTo-Json -Depth 8 -Compress)))
  }
  if($words[0] -eq 'api' -and $words[1] -like '*/releases/tags/*'){
-  if($global:driverReleasePublished){return (@{id=42;immutable=$true;draft=$false;tag_name='v1.0.0';assets=$global:driverReleaseRemoteAssets;html_url='https://github.com/example/repo/releases/tag/v1.0.0'}|ConvertTo-Json -Depth 8)}
+  if($global:driverReleasePublished){$publishedAssets=@($global:driverReleaseRemoteAssets|ForEach-Object { $_.Clone() });if($global:driverReleaseMode -eq 'size-published'){$publishedAssets[1].size++};return (@{id=42;immutable=$true;draft=$false;tag_name='v1.0.0';assets=$publishedAssets;html_url='https://github.com/example/repo/releases/tag/v1.0.0'}|ConvertTo-Json -Depth 8)}
   $global:LASTEXITCODE=1;return
  }
  throw ('Unexpected driver publication call: '+($words -join ' '))
 }
-foreach($mode in @('success','missing-draft','published','foreign','wrong-commit','wrong-tag','extra','bad-digest','partial-upload','duplicate','changed-id','immutable','changed-after-upload','wrong-notes')){
+foreach($mode in @('success','missing-draft','published','foreign','wrong-commit','wrong-tag','extra','bad-digest','partial-upload','duplicate','changed-id','immutable','changed-after-upload','wrong-notes','size-upload','size-notes','size-published')){
  $global:driverReleaseMode=$mode;$global:driverReleasePublished=0;$global:driverReleaseUploaded=0;$global:driverReleaseReadCount=0;$global:driverReleaseNotesApplied=$false
  $global:driverReleaseRemoteAssets=@(@{name=$driverAsset.Name;size=$driverAsset.Size;digest=('sha256:'+$driverAsset.SHA256)})
  if($mode -eq 'extra'){$global:driverReleaseRemoteAssets+=@{name='foreign.zip';size=1;digest='sha256:'+('f'*64)}}
  if($mode -eq 'bad-digest'){$global:driverReleaseRemoteAssets[0].digest='sha256:'+('f'*64)}
  $accepted=$true;try{& $publisher -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $driverMetadata|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publisher error: '+$_.Exception.Message)}
  Assert ($accepted -eq ($mode -eq 'success')) ('驅動品質全集發布結果 '+$mode)
- Assert ($global:driverReleasePublished -eq $(if($mode -eq 'success'){1}else{0})) ('錯誤草稿不發布 '+$mode)
- if($mode -notin @('success','partial-upload','changed-after-upload','wrong-notes')){Assert ($global:driverReleaseUploaded -eq 0) ('核對失敗不改草稿 '+$mode)}
+ Assert ($global:driverReleasePublished -eq $(if($mode -in @('success','size-published')){1}else{0})) ('錯誤草稿不發布 '+$mode)
+ if($mode -notin @('success','partial-upload','changed-after-upload','wrong-notes','size-upload','size-notes','size-published')){Assert ($global:driverReleaseUploaded -eq 0) ('核對失敗不改草稿 '+$mode)}
 }
 Remove-Item Function:\gh
 Write-Host 'ALL PASS: driver-aware publication; mocked GitHub, no network writes'
