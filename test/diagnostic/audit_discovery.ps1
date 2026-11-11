@@ -1,6 +1,24 @@
 #Requires -Version 5.1
+param([switch]$NativeSelfTest)
 # Temporary hosted diagnostic only; not a product command or coverage result.
 $ErrorActionPreference='Stop'
+function Invoke-AuditDiagnosticNative([string[]]$Arguments,[string]$Stdout,[string]$Stderr){
+ $quoted=@($Arguments|ForEach-Object {'"'+$_+'"'})
+ $process=Start-Process -FilePath powershell.exe -ArgumentList $quoted -WindowStyle Hidden -PassThru -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr
+ $timedOut=-not $process.WaitForExit(600000)
+ if($timedOut){$process.Kill();[void]$process.WaitForExit(5000)}
+ $exitCode=if($timedOut){124}else{$process.ExitCode}
+ return [pscustomobject]@{ExitCode=$exitCode;TimedOut=$timedOut}
+}
+if($NativeSelfTest){
+ $fixture=Join-Path ([IO.Path]::GetTempPath()) ('audit-native-test-'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($fixture)
+ foreach($expected in @(0,23)){
+  $observed=Invoke-AuditDiagnosticNative -Arguments @('-NoProfile','-Command',('exit '+$expected)) -Stdout (Join-Path $fixture ($expected.ToString()+'.stdout')) -Stderr (Join-Path $fixture ($expected.ToString()+'.stderr'))
+  if($observed.ExitCode -isnot [int] -or $observed.ExitCode -ne $expected -or $observed.TimedOut){throw ('Native exit contract failed: expected='+$expected+' actual='+$observed.ExitCode)}
+ }
+ Write-Output 'Native diagnostic exit 0/23 contract passed.'
+ return
+}
 $source=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $owned=Join-Path $env:RUNNER_TEMP ('audit-discovery-'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($owned)
@@ -15,11 +33,8 @@ $inputPath=Join-Path $owned 'pair.json'
 $collector=Join-Path $owned 'collector'
 $stdout=Join-Path $owned 'manager.stdout.private.log';$stderr=Join-Path $owned 'manager.stderr.private.log'
 $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $source 'script/test/powershell_coverage.ps1'),'-ManifestPath',$inputPath,'-OutputDirectory',$collector,'-ThrottleLimit','2')
-$quoted=@($arguments|ForEach-Object {'"'+$_+'"'})
-$process=Start-Process -FilePath powershell.exe -ArgumentList $quoted -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-$timedOut=-not $process.WaitForExit(600000)
-if($timedOut){$process.Kill();[void]$process.WaitForExit(5000)}
-$exitCode=if($timedOut){124}else{$process.ExitCode}
+$observed=Invoke-AuditDiagnosticNative -Arguments $arguments -Stdout $stdout -Stderr $stderr
+$timedOut=$observed.TimedOut;$exitCode=$observed.ExitCode
 $identity=[ordered]@{Commit=$env:GITHUB_SHA;RunId=$env:GITHUB_RUN_ID;Attempt=$env:GITHUB_RUN_ATTEMPT;ExitCode=$exitCode;TimedOut=$timedOut;SourceCount=131;SuiteCount=2}
 [IO.File]::WriteAllText((Join-Path $owned 'identity.json'),($identity|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
 # Only this fresh owned output is archived. No environment dump, checkout,
