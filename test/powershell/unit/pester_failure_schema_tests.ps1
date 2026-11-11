@@ -11,6 +11,8 @@ function Read-Record([string]$Text){[IO.File]::WriteAllText($file,$Text,[Text.UT
 $valid='{"SchemaVersion":1,"Failures":[{"Phase":"ContainerDiscovery","Type":"RuntimeException","File":"suite.ps1","Line":1}]}'
 $result=Read-Record $valid
 Assert ($result.PesterFailures.Count -eq 1 -and $result.PesterFailures[0].Phase -ceq 'ContainerDiscovery') '合法有界sidecar只輸出固定typed欄位'
+$modern=Read-Record ($valid.Replace('ContainerDiscovery','ContainerFailure'))
+Assert ($modern.PesterFailures.Count -eq 1 -and $modern.PesterFailures[0].Phase -ceq 'ContainerFailure') '中性 ContainerFailure 通過嚴格固定欄位驗證且保留原樣'
 $cases=@(
  $valid.Replace('"SchemaVersion":1','"SchemaVersion":1,"SchemaVersion":1'),
  $valid.Replace('"Failures":','"PRIVATE":true,"Failures":'),
