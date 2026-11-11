@@ -177,7 +177,27 @@ func TestNativeStageRejectsIdentityTamperAndIncompleteInputs(t *testing.T) {
 				output = filepath.Join(f.root, "stage")
 				args = f.args("native-stage-pack", "", output)
 			case "report_failure":
-				mutateSummary(func(q map[string]any) { q["Success"] = false })
+				mutateSummary(func(q map[string]any) {
+					q["Success"] = false
+					check := q["Checks"].([]any)[1].(map[string]any)
+					check["Passed"], check["Status"] = false, "Failed"
+					check["Assertions"].([]any)[0].(map[string]any)["Passed"] = false
+					totals := q["Totals"].(map[string]any)
+					totals["AssertionsPassed"], totals["AssertionsFailed"] = 1, 1
+				})
+				junit := filepath.Join(f.report, "junit.xml")
+				b, _ := os.ReadFile(junit)
+				os.WriteFile(junit, bytes.Replace(b, []byte(`<testsuite name="Unit.owned"><testcase/>`), []byte(`<testsuite name="Unit.owned"><testcase><failure/></testcase>`), 1), 0600)
+				badge := filepath.Join(f.report, "unit.svg")
+				b, _ = os.ReadFile(badge)
+				b = bytes.ReplaceAll(bytes.ReplaceAll(b, []byte("passed"), []byte("failed")), []byte("#4c1"), []byte("#e05d44"))
+				os.WriteFile(badge, b, 0600)
+				page := filepath.Join(f.report, "index.html")
+				b, _ = os.ReadFile(page)
+				os.WriteFile(page, bytes.ReplaceAll(b, []byte("單元與隔離整合測試通過"), []byte("本次測試未通過")), 0600)
+				if _, err := a.ValidateReport(func(n string) ([]byte, error) { return os.ReadFile(filepath.Join(f.report, n)) }, f.sha, f.run, false); err != nil {
+					t.Fatalf("failed producer fixture must otherwise be internally consistent: %v", err)
+				}
 			case "report_unit_only":
 				mutateSummary(func(q map[string]any) { q["RequestedLayer"] = "Unit" })
 			case "report_old_schema":
