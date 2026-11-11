@@ -82,3 +82,44 @@ func TestTagReleaseGoCoverageRejectsInvalidIdentity(t *testing.T) {
 		})
 	}
 }
+
+func TestTagReleaseKeepsGoEvidenceGuards(t *testing.T) {
+	for _, mutation := range []string{"missing_metadata", "missing_profile", "profile_digest", "foreign_sidecar_commit", "foreign_sidecar_run", "embedded_disagrees", "missing_owned_source"} {
+		t.Run(mutation, func(t *testing.T) {
+			data, files, sha, run := tagReleaseGoFixture(t, "Release")
+			if mutation == "missing_metadata" {
+				delete(data, "go_coverage.json")
+			} else if mutation == "missing_profile" {
+				delete(data, "go_coverage.out")
+			} else if mutation == "profile_digest" {
+				data["go_coverage.out"] = append(data["go_coverage.out"], ' ')
+			} else if mutation == "missing_owned_source" {
+				files = append(files, "windows_setup/script/test/omitted.go")
+			} else {
+				var c map[string]any
+				if err := json.Unmarshal(data["go_coverage.json"], &c); err != nil {
+					t.Fatal(err)
+				}
+				switch mutation {
+				case "foreign_sidecar_commit":
+					c["Commit"] = strings.Repeat("b", 40)
+				case "foreign_sidecar_run":
+					c["RunUrl"] = "https://github.com/example/repo/actions/runs/124"
+				case "embedded_disagrees":
+					c["Covered"] = 9
+				}
+				data["go_coverage.json"], _ = json.Marshal(c)
+			}
+			read := func(n string) ([]byte, error) {
+				v, ok := data[n]
+				if !ok {
+					return nil, fmt.Errorf("missing synthetic fixture %s", n)
+				}
+				return v, nil
+			}
+			if err := a.ValidateGoCoverageReport(read, files, sha, run, true); err == nil {
+				t.Fatal("fresh Release must preserve the existing exact Go evidence guards")
+			}
+		})
+	}
+}

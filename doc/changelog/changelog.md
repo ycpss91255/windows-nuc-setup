@@ -29,6 +29,8 @@
 
 ### Fixed（修正）
 
+- 新 schema2 Tag 報告附加本次 Go 量測後可通過正式驗收；只允許合法版本、乾淨來源與同次完整成功測試，保留歷史 Release、來源／執行錯置及原始 profile 遭竄改的拒絕門檻。
+
 - Docker 就緒入口依 PATH 優先順序只執行第一份同名程式；有多份 docker.exe 時不再把路徑串接成不存在的檔名，第一份失敗也不回退執行後方程式。
 
 - GitHub hosted Windows 的 Docker 工作先以有界程序探測 Windows daemon；尚未就緒時最多啟動或重啟 Docker 服務一次，再以真實引擎資訊確認。超時、錯誤引擎或服務失敗仍阻擋後續容器測試，沒有降低發布門檻；一般電腦與 self-hosted runner 不會因此操作服務。
