@@ -34,6 +34,8 @@ if($LASTEXITCODE -ne 0){throw 'Diagnostic manifest preparation failed.'}
 $manifest=Get-Content -LiteralPath $canonical -Raw -Encoding UTF8|ConvertFrom-Json
 if($manifest.Sources.Count -ne 131 -or $manifest.Tests.Count -ne 215 -or $manifest.Tests[2] -cne 'test/powershell/integration/audit_runtime_tests.ps1' -or $manifest.Tests[6] -cne 'test/powershell/integration/ci_runner_tests.ps1'){throw 'Diagnostic baseline differs from the failed source.'}
 $manifest.Tests=@($manifest.Tests[2],$manifest.Tests[6]);$manifest.TestEngines=[pscustomobject]@{}
+$context=[pscustomobject][ordered]@{Commit=$env:GITHUB_SHA;RunUrl=('https://github.com/'+$env:GITHUB_REPOSITORY+'/actions/runs/'+$env:GITHUB_RUN_ID);RunAttempt=[int]$env:GITHUB_RUN_ATTEMPT;ShardIndex=2;ShardCount=4;GlobalIndices=@(2,6)}
+$manifest|Add-Member -MemberType NoteProperty -Name ShardContext -Value $context
 $inputPath=Join-Path $owned 'pair.json'
 [IO.File]::WriteAllText($inputPath,($manifest|ConvertTo-Json -Depth 7),[Text.UTF8Encoding]::new($false))
 $collector=Join-Path $owned 'collector'
@@ -41,7 +43,7 @@ $stdout=Join-Path $owned 'manager.stdout.private.log';$stderr=Join-Path $owned '
 $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $source 'script/test/powershell_coverage.ps1'),'-ManifestPath',$inputPath,'-OutputDirectory',$collector,'-ThrottleLimit','2')
 $observed=Invoke-AuditDiagnosticNative -Arguments $arguments -Stdout $stdout -Stderr $stderr
 $timedOut=$observed.TimedOut;$exitCode=$observed.ExitCode
-$identity=[ordered]@{Commit=$env:GITHUB_SHA;RunId=$env:GITHUB_RUN_ID;Attempt=$env:GITHUB_RUN_ATTEMPT;ExitCode=$exitCode;TimedOut=$timedOut;SourceCount=131;SuiteCount=2}
+$identity=[ordered]@{Commit=$env:GITHUB_SHA;RunId=$env:GITHUB_RUN_ID;Attempt=$env:GITHUB_RUN_ATTEMPT;Case=$env:DIAGNOSTIC_CASE;ExitCode=$exitCode;TimedOut=$timedOut;SourceCount=131;SuiteCount=2;ShardContext=$context}
 [IO.File]::WriteAllText((Join-Path $owned 'identity.json'),($identity|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
 # Only this fresh owned output is archived. No environment dump, checkout,
 # parent TEMP directories, credentials, or secrets are read into the archive.

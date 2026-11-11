@@ -4,14 +4,45 @@ on:
     branches: [diagnostic/audit_discovery]
 permissions:
   contents: read
+env:
+  GOTOOLCHAIN: local
+  GOPROXY: "off"
+  GOFLAGS: "-mod=vendor"
+  CGO_ENABLED: "0"
 jobs:
   diagnostic:
     runs-on: windows-2022
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [0, 1, 2]
+    env:
+      DIAGNOSTIC_CASE: ${{ matrix.case }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: 準備相同固定 Go 維護工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 準備相同固定 managed 維護編譯器
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: '10.0.300'
+          cache: false
+      - name: 準備相同固定 workflow 語義檢查器
+        shell: powershell
+        run: |
+          . .\script\docker\install_managed_tools.ps1
+          $artifact = Get-ContainerWorkflowLintArtifact
+          $directory = Join-Path $env:RUNNER_TEMP 'actionlint-1.7.12'
+          Install-ContainerToolArtifact -Artifact $artifact -Destination $directory -ArchiveDirectory (Join-Path $env:RUNNER_TEMP 'actionlint-download')
+          "WINDOWS_SETUP_ACTIONLINT=$(Join-Path $directory 'actionlint.exe')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - name: 先確認原生退出碼零與二十三都如實保留
         shell: powershell
         run: .\test\diagnostic\audit_discovery.ps1 -NativeSelfTest
@@ -22,7 +53,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: audit-discovery-encrypted-${{ github.run_id }}-${{ github.run_attempt }}
+          name: audit-discovery-encrypted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.case }}
           path: ${{ runner.temp }}/audit-discovery-encrypted/diagnostic.encrypted.json
           retention-days: 1
           if-no-files-found: error
