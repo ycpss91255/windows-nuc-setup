@@ -1,0 +1,25 @@
+name: Audit 前置失敗窄診斷（非正式品質門檻）
+on:
+  push:
+    branches: [diagnostic/audit_discovery]
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 原始雙 worker 僅輸出加密診斷
+        shell: powershell
+        run: .\test\diagnostic\audit_discovery.ps1
+      - name: 僅保存加密工件一天
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: audit-discovery-encrypted-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/audit-discovery-encrypted/diagnostic.encrypted.json
+          retention-days: 1
+          if-no-files-found: error
