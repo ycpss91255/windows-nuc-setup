@@ -31,7 +31,7 @@ func TestCIWholeCoverageHasProducerAndStrictConsumers(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(b)
-	producer := coverageJob(text, "isolated-tests")
+	producer := coverageJob(text, "coverage-aggregation")
 	for _, required := range []string{"actions/setup-dotnet@", "dotnet-version: '10.0.300'", "DOTNET_INSTALL_DIR:", "managed_coverage.ps1", "run_repo_coverage.ps1", "-GoCoverageDirectory", "-ManagedEvidencePath", "repo-coverage-evidence", "Export-CIPowerShellRawEvidence", "powershell-raw-evidence", "retention-days: 7"} {
 		if !strings.Contains(producer, required) {
 			t.Fatalf("producer missing %s", required)
