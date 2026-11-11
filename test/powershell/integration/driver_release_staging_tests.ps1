@@ -18,10 +18,17 @@ $global:releaseStageMode='success';$global:releaseStageCreated=0;$global:release
 function git { $words=@($args);$global:LASTEXITCODE=0;if($words -contains 'rev-parse'){return ('a'*40)};if($words -contains 'merge-base'){if($global:releaseStageMode -eq 'not-main'){$global:LASTEXITCODE=1};return};throw 'unexpected git' }
 function gh {
  $words=@($args);$global:LASTEXITCODE=0
- if($words[0] -eq 'api' -and $words -contains '--paginate'){if($global:releaseStageMode -eq 'existing'){return 'v1.0.0'};return}
+ if($words[0] -eq 'api' -and $words -contains '--paginate'){
+  if(($words -join ' ') -match '@json'){return (@{id=42;draft=$true;immutable=$false;tag_name='v1.0.0'}|ConvertTo-Json -Compress)}
+  if($global:releaseStageMode -eq 'existing'){return 'v1.0.0'};return
+ }
  if($words[0] -eq 'api' -and $words[1] -like '*/commits/*'){if($global:releaseStageMode -eq 'wrong-tag'){return ('b'*40)};return ('a'*40)}
  if($words[0] -eq 'release' -and $words[1] -eq 'create'){$global:releaseStageCreated++;Assert ($words -contains '--draft' -and $words -contains '--verify-tag' -and $words -contains '--target' -and $words -contains $zip -and $words -cnotcontains '--clobber') '只建立新草稿且固定tag與資產';return}
- if($words[0] -eq 'api' -and $words[1] -like '*/releases/tags/*'){return (@{draft=$true;prerelease=$false;tag_name='v1.0.0';target_commitish=('a'*40);name='v1.0.0';body=$global:releaseStageMarker;assets=@(@{name=$asset.Name;size=$asset.Size;digest=('sha256:'+$asset.SHA256)})}|ConvertTo-Json -Depth 8)}
+ if($words[0] -eq 'api' -and $words[1] -like '*/releases/tags/*'){$global:LASTEXITCODE=1;return}
+ if($words[0] -eq 'api' -and $words[1] -eq 'repos/example/repo/releases/42'){
+  $data=@{id=42;immutable=$false;draft=$true;prerelease=$false;tag_name='v1.0.0';target_commitish=('a'*40);name='v1.0.0';body=$global:releaseStageMarker;assets=@(@{name=$asset.Name;size=$asset.Size;digest=('sha256:'+$asset.SHA256)})}|ConvertTo-Json -Depth 8 -Compress
+  return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($data))
+ }
  throw ('unexpected gh '+($words -join ' '))
 }
 $arguments=@{Version='v1.0.0';Repository='example/repo';PackageRoot=$root;AssetDirectory=$temp;MetadataPath=$metadata}

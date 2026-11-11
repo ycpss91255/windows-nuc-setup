@@ -12,6 +12,18 @@
           "ManifestSHA256": "62f6bb64988eb60c3fcfcf5a7d9ba3a9670ff2cd50770422af3dd6b6a02fcc20"
         }
       ]
+    },
+    {
+      "Version": "v0.2.2",
+      "Assets": [
+        {
+          "Name": "windows_driver_nuc8_v0.2.2.zip",
+          "Size": 1757949457,
+          "SHA256": "57e8efb38486ae05d8fdbde2f87392949606d10db605c8b4541833821e687ca3",
+          "ProfileId": "nuc8i7hvk_hnk",
+          "ManifestSHA256": "62f6bb64988eb60c3fcfcf5a7d9ba3a9670ff2cd50770422af3dd6b6a02fcc20"
+        }
+      ]
     }
   ]
 }

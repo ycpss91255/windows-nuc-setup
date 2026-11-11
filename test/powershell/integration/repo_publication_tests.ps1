@@ -47,32 +47,53 @@ $report|Add-Member -NotePropertyName GoCoverage -NotePropertyValue $go
 Write-SnapshotView $report $public
 function gh {
  $words=@($args);$global:LASTEXITCODE=0
- if($words[0] -eq 'api' -and $words -contains '--paginate'){return}
+ if($words[0] -eq 'api' -and $words -contains '--paginate'){
+  if(($words -join ' ') -match '@json' -and $global:repoPublicationCreated){return (@{id=42;tag_name='v1.0.0';draft=$true;immutable=$false}|ConvertTo-Json -Compress)}
+  return
+ }
  if($words[0] -eq 'release' -and $words[1] -eq 'create'){
   $global:repoPublicationTitle=$words[[Array]::IndexOf($words,'--title')+1]
   $global:repoPublicationDraft=$words -contains '--draft'
-  $global:repoPublicationAssets=@($words|Where-Object {Test-Path -LiteralPath ([string]$_) -PathType Leaf}|Where-Object {[IO.Path]::GetExtension($_) -ne '.md' -or [IO.Path]::GetFileName($_) -eq 'summary.md'}|Select-Object -Unique|ForEach-Object {@{name=[IO.Path]::GetFileName($_);digest=('sha256:'+(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant())}})
+  $global:repoPublicationCreated++
+  $global:repoPublicationBody=[IO.File]::ReadAllText((Join-Path $public 'summary.md'))
+  $global:repoPublicationAssets=@($words|Where-Object {Test-Path -LiteralPath ([string]$_) -PathType Leaf}|Where-Object {[IO.Path]::GetExtension($_) -ne '.md' -or [IO.Path]::GetFileName($_) -eq 'summary.md'}|Select-Object -Unique|ForEach-Object {@{name=[IO.Path]::GetFileName($_);size=(Get-Item -LiteralPath $_).Length;digest=('sha256:'+(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant())}})
   return
  }
- if($words[0] -eq 'release' -and $words[1] -eq 'view'){
+ if($words[0] -eq 'api' -and $words[1] -eq 'repos/example/repo/releases/42' -and $words -notcontains '--method'){
   if($global:repoPublicationMode -eq 'bad-digest'){$global:repoPublicationAssets[0].digest='sha256:'+('0'*64)}
-  return (@{isDraft=$true;assets=$global:repoPublicationAssets}|ConvertTo-Json -Depth 5)
+  $json=@{id=42;immutable=$false;draft=$true;prerelease=$false;tag_name='v1.0.0';name='v1.0.0';target_commitish=$identity.Commit;body=$global:repoPublicationBody;assets=$global:repoPublicationAssets}|ConvertTo-Json -Depth 8 -Compress
+  return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
  }
- if($words[0] -eq 'release' -and $words[1] -eq 'edit'){$global:repoPublicationPublished++;return}
+ if($words[0] -eq 'api' -and $words[1] -eq 'repos/example/repo/releases/42' -and $words -contains '--method'){
+  $inputPath=$words[[Array]::IndexOf($words,'--input')+1];$bytes=[IO.File]::ReadAllBytes($inputPath)
+  Assert (-not($bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191)) 'ID PATCH 使用無 BOM UTF8 JSON'
+  $payload=[Text.UTF8Encoding]::new($false,$true).GetString($bytes)|ConvertFrom-Json
+  Assert ($words[[Array]::IndexOf($words,'--method')+1] -ceq 'PATCH') '只對已選中的 release ID PATCH'
+  if($payload.PSObject.Properties['draft']){
+   Assert ($payload.draft -is [bool] -and $payload.draft -ceq $false -and $global:repoPublicationNotesApplied) '完整核對後最後一步才以 JSON false 發布'
+   $global:repoPublicationPublished++
+  }else{
+   Assert ($payload.name -ceq 'v1.0.0' -and $payload.body -ceq [IO.File]::ReadAllText((Join-Path $public 'summary.md'))) '中文 notes 以原字串寫入固定 ID'
+   $global:repoPublicationBody=$payload.body;$global:repoPublicationNotesApplied=$true
+  }
+  return '{}'
+ }
  if($words[0] -eq 'api' -and $words[1] -like '*/releases/tags/*'){
   $assets=if($global:repoPublicationMode -eq 'missing-asset'){@($global:repoPublicationAssets|Select-Object -Skip 1)}else{$global:repoPublicationAssets}
-  return (@{immutable=$(if($global:repoPublicationMode -eq 'string-immutable'){'true'}else{$global:repoPublicationMode -ne 'mutable'});draft=$false;tag_name='v1.0.0';assets=$assets;html_url='https://github.com/example/repo/releases/tag/v1.0.0'}|ConvertTo-Json -Depth 5)
+  if(-not $global:repoPublicationPublished){$global:LASTEXITCODE=1;return}
+  return (@{id=42;immutable=$(if($global:repoPublicationMode -eq 'string-immutable'){'true'}else{$global:repoPublicationMode -ne 'mutable'});draft=$false;tag_name='v1.0.0';assets=$assets;html_url='https://github.com/example/repo/releases/tag/v1.0.0'}|ConvertTo-Json -Depth 5)
  }
  if($words[0] -eq 'api' -and $words[1] -like '*/commits/*'){return $(if($global:repoPublicationMode -eq 'wrong-sha'){'c'*40}else{'a'*40})}
  throw ('Unexpected mock call: '+($words -join ' '))
 }
 foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immutable','wrong-sha')){
- $global:repoPublicationMode=$mode;$global:repoPublicationPublished=0
- $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool|Out-Null}catch{$accepted=$false}
+ $global:repoPublicationMode=$mode;$global:repoPublicationPublished=0;$global:repoPublicationCreated=0;$global:repoPublicationNotesApplied=$false;$global:repoPublicationAssets=@()
+ $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publication error: '+$_.Exception.Message)}
  Assert ($accepted -eq ($mode -eq 'success')) ('Schema2只發布真完整不可變證據：'+$mode)
- Assert ($global:repoPublicationTitle -ceq 'v1.0.0' -and $global:repoPublicationDraft) ('版本標題及草稿先行：'+$mode)
- Assert ($global:repoPublicationAssets.Count -eq 12) ('含Go原始檔的新Release精確12附件：'+$mode)
- Assert ($global:repoPublicationPublished -eq $(if($mode -eq 'bad-digest'){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
+ Assert ($global:repoPublicationCreated -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('來源在建立草稿前核對：'+$mode)
+ if($mode -ne 'wrong-sha'){Assert ($global:repoPublicationTitle -ceq 'v1.0.0' -and $global:repoPublicationDraft) ('版本標題及草稿先行：'+$mode)}
+ Assert ($global:repoPublicationAssets.Count -eq $(if($mode -eq 'wrong-sha'){0}else{12})) ('含Go原始檔的新Release精確12附件：'+$mode)
+ Assert ($global:repoPublicationPublished -eq $(if($mode -in @('bad-digest','wrong-sha')){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
 }
 Remove-Item Function:\gh
 function New-LocalEntry {

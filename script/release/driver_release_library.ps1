@@ -27,6 +27,38 @@ function Get-DriverDraftMarker {
  if($Commit -cnotmatch '^[a-f0-9]{40}$'){throw 'Invalid staging commit.'}
  return ('<!-- windows_setup_driver_stage_v1 '+$Version+' '+$Commit+' '+(Get-FileHash -LiteralPath $MetadataPath -Algorithm SHA256).Hash.ToLowerInvariant()+' -->')
 }
+function Assert-ReleaseDraftRecord {
+ param($Value,[string]$Version,$ExpectedId)
+ if($Value -isnot [pscustomobject] -or ($Value.id -isnot [int] -and $Value.id -isnot [long]) -or $Value.id -le 0 -or $Value.id -ne $ExpectedId -or $Value.tag_name -isnot [string] -or $Value.tag_name -cne $Version -or $Value.draft -isnot [bool] -or $Value.draft -cne $true -or $Value.immutable -isnot [bool] -or $Value.immutable -cne $false){throw 'Selected release ID is foreign, changed or not an editable draft.'}
+}
+function Get-ReleaseDraftByTag {
+ param([ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[ValidatePattern('^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$')][string]$Version,$ExpectedId)
+ if($PSBoundParameters.ContainsKey('ExpectedId')){
+  if(($ExpectedId -isnot [int] -and $ExpectedId -isnot [long]) -or $ExpectedId -le 0){throw 'Expected draft ID must be a positive integer.'}
+  $selectedId=[long]$ExpectedId
+ }else{
+  $rows=@(& gh api --paginate ('repos/'+$Repository+'/releases?per_page=100') --jq '.[] | {id,tag_name,draft,immutable} | @json')
+  if($LASTEXITCODE -ne 0){throw 'Cannot list release drafts; no fallback or overwrite.'}
+  $matches=@()
+  foreach($line in $rows){
+   if($line -isnot [string] -or -not $line.Trim().StartsWith('{')){throw 'Release list must contain JSON object rows.'}
+   $row=ConvertFrom-Json -InputObject $line
+   if($row -isnot [pscustomobject] -or ($row.id -isnot [int] -and $row.id -isnot [long]) -or $row.id -le 0 -or $row.tag_name -isnot [string] -or $row.draft -isnot [bool] -or $row.immutable -isnot [bool]){throw 'Release list row has invalid typed identity.'}
+   if($row.tag_name -ceq $Version){$matches+=@($row)}
+  }
+  if($matches.Count -ne 1){throw 'Release tag must identify exactly one listed draft.'}
+  Assert-ReleaseDraftRecord -Value $matches[0] -Version $Version -ExpectedId $matches[0].id
+  $selectedId=[long]$matches[0].id
+ }
+ # ASCII transport preserves UTF-8 notes under native PS5 console code pages.
+ $encoded=@(& gh api ('repos/'+$Repository+'/releases/'+$selectedId) --jq 'tojson | @base64')
+ if($LASTEXITCODE -ne 0 -or $encoded.Count -ne 1 -or $encoded[0] -isnot [string]){throw 'Cannot read the selected draft ID.'}
+ $json=[Text.UTF8Encoding]::new($false,$true).GetString([Convert]::FromBase64String($encoded[0]))
+ if(-not $json.Trim().StartsWith('{')){throw 'Release ID response must be a JSON object.'}
+ $draft=ConvertFrom-Json -InputObject $json
+ Assert-ReleaseDraftRecord -Value $draft -Version $Version -ExpectedId $selectedId
+ return $draft
+}
 function Assert-ReleaseAssetSet {
  param($Actual,[object[]]$Expected)
  if(@($Actual).Count -ne $Expected.Count){throw 'Release asset count mismatch.'}
@@ -123,8 +155,7 @@ function Invoke-StageDriverRelease {
   & gh @arguments
   if($LASTEXITCODE -ne 0){throw 'Driver draft staging failed; no publication or automatic overwrite.'}
  }finally{Remove-Item -LiteralPath $notes -Force -ErrorAction SilentlyContinue}
- $draft=(& gh api ('repos/'+$Repository+'/releases/tags/'+$Version))|ConvertFrom-Json
- if($LASTEXITCODE -ne 0){throw 'Cannot verify staged driver draft.'}
+ $draft=Get-ReleaseDraftByTag -Repository $Repository -Version $Version
  Assert-ReleaseDriverDraft $draft $Version $commit $MetadataPath $assets
  Write-Host 'Driver draft verified; tag CI must attach complete quality evidence before publication.'
 }
