@@ -13,8 +13,34 @@ foreach($line in $lines){
  $sha=& gh api ('repos/'+$Repository+'/commits/'+$release.tag_name) --jq '.sha'
  if($LASTEXITCODE -ne 0){throw '無法核對 Release tag SHA。'}
  $snapshot=@($release.assets|Where-Object name -ceq 'quality.json');$manifest=@($release.assets|Where-Object name -ceq 'quality-manifest.json')
- $row=[ordered]@{Version=$release.tag_name;Commit=$sha;ReleaseUrl=$release.html_url;Immutable=($release.immutable -is [bool] -and $release.immutable -ceq $true);SnapshotPath='';ManifestPath='';SnapshotDigest='';ManifestDigest='';AssetDirectory='';AssetDigests=@()}
- if($snapshot.Count -eq 1 -and $manifest.Count -eq 1){
+ $bundleName='windows_setup_report_'+$release.tag_name+'.zip'
+ $bundles=@($release.assets|Where-Object {$_.name -ilike 'windows_setup_report_*.zip'})
+ $row=[ordered]@{Version=$release.tag_name;Commit=$sha;ReleaseUrl=$release.html_url;Immutable=($release.immutable -is [bool] -and $release.immutable -ceq $true);SnapshotPath='';ManifestPath='';SnapshotDigest='';ManifestDigest='';AssetDirectory='';AssetDigests=@();ArchivePath='';ArchiveDigest='';ArchiveSize=0;SourcePath='';Repository=$Repository}
+ if($bundles.Count){
+  $dir=Join-Path $out $release.tag_name;New-Item -ItemType Directory $dir|Out-Null
+  $row.ArchivePath=Join-Path $dir $bundleName
+  $rawNames=@('quality.json','quality-manifest.json','index.html','summary.md','junit.xml','unit.svg','integration.svg','system.svg','coverage.svg','repo_coverage.json','coverage_inventory.json','coverage.xml','go_coverage.out','go_coverage.json','go_coverage.svg')
+  if(@($release.assets|Where-Object {$rawNames -icontains $_.name}).Count){$row.SnapshotPath='conflicting-raw'}
+  if($bundles.Count -eq 1 -and $bundles[0].name -ceq $bundleName){
+   & gh release download $release.tag_name --repo $Repository --dir $dir --pattern $bundleName
+   if($LASTEXITCODE -ne 0){throw 'Release ZIP 下載失敗。'}
+   $row.ArchiveDigest=$bundles[0].digest;$row.ArchiveSize=$bundles[0].size
+   $source=Join-Path $dir 'source';New-Item -ItemType Directory $source|Out-Null
+   $oldGlobal=$env:GIT_CONFIG_GLOBAL;$oldSystem=$env:GIT_CONFIG_NOSYSTEM
+   try {
+    $env:GIT_CONFIG_GLOBAL='NUL';$env:GIT_CONFIG_NOSYSTEM='1'
+    & git -C $source init -q
+    if($LASTEXITCODE -ne 0){throw '無法建立隔離來源。'}
+    & git -C $source -c core.hooksPath=NUL -c core.autocrlf=false fetch --no-tags --depth=1 ('https://github.com/'+$Repository+'.git') ('refs/tags/'+$release.tag_name)
+    if($LASTEXITCODE -ne 0){throw '無法取得版本 Git 物件。'}
+    $fetched=& git -C $source rev-parse 'FETCH_HEAD^{commit}'
+    if($LASTEXITCODE -ne 0 -or $fetched -cne $sha){throw '版本 Git 物件與 tag 提交不符。'}
+    & git -C $source -c core.hooksPath=NUL -c core.autocrlf=false checkout --detach --quiet $sha
+    if($LASTEXITCODE -ne 0){throw '無法取得乾淨版本來源。'}
+   } finally {$env:GIT_CONFIG_GLOBAL=$oldGlobal;$env:GIT_CONFIG_NOSYSTEM=$oldSystem}
+   $row.SourcePath=$source
+  }
+ } elseif($snapshot.Count -eq 1 -and $manifest.Count -eq 1){
   $dir=Join-Path $out $release.tag_name;New-Item -ItemType Directory $dir|Out-Null
   $download=@('release','download',$release.tag_name,'--repo',$Repository,'--dir',$dir)
   foreach($name in @('quality.json','quality-manifest.json','index.html','summary.md','junit.xml','unit.svg','integration.svg','system.svg','coverage.svg','repo_coverage.json','coverage_inventory.json','coverage.xml','go_coverage.out')){if($release.assets.name -ccontains $name){$download+=@('--pattern',$name)}}

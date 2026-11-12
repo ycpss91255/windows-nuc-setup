@@ -15,14 +15,14 @@ foreach($entry in $catalog){
  if(@($versions|Where-Object Version -ceq $entry.Version).Count){throw '重複版本，拒絕覆寫。'}
  $dir=Join-Path $output ('versions/'+$entry.Version)
  $state='Unknown';$reason='此舊版本未提供可驗證品質快照；不以目前 CI 回填。';$evidence=$null
- if($entry.SnapshotPath -and $entry.ManifestPath){
+ if(($entry.SnapshotPath -and $entry.ManifestPath) -or ($entry.PSObject.Properties['ArchivePath'] -and $entry.ArchivePath)){
   try{$evidence=Test-PortalReleaseEvidence -Entry $entry -CoverageToolPath $CoverageToolPath}catch{$reason='品質證據未通過驗證：'+(Protect-ReportText $_.Exception.Message);$state='Invalid'}
  }
  if($evidence){
   Write-SnapshotView $evidence.Snapshot $dir -OmitGoProfileLink:(-not $evidence.HasGoProfile)
   foreach($file in $evidence.Manifest.Files){
    if($file.Name -eq 'index.html'){continue}
-   $source=if($file.Name -eq 'summary.json'){$entry.SnapshotPath}else{Join-Path $entry.AssetDirectory $file.Name}
+   $source=if($evidence.PSObject.Properties['AssetDirectory']){Join-Path $evidence.AssetDirectory $file.Name}elseif($file.Name -eq 'summary.json'){$entry.SnapshotPath}else{Join-Path $entry.AssetDirectory $file.Name}
    Copy-Item -LiteralPath $source -Destination (Join-Path $dir $file.Name)
   }
   $rendered=Join-Path $dir 'index.html'
@@ -35,7 +35,8 @@ foreach($entry in $catalog){
   $safeVersion=[Net.WebUtility]::HtmlEncode($entry.Version);$safeReason=[Net.WebUtility]::HtmlEncode($reason)
   [IO.File]::WriteAllText((Join-Path $dir 'index.html'),('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>'+ $safeVersion +' · 測試紀錄</title><h1>'+ $safeVersion +'</h1><p>'+ $safeReason +'</p><p>這個版本未保存可用的測試紀錄，無法判斷當時的測試結果。</p><a href="../../index.html">版本索引</a></html>'),$utf8)
  }
- $versions.Add([pscustomobject]@{Version=$entry.Version;Commit=$entry.Commit;Status=$state;Reason=$reason;Path=('versions/'+$entry.Version+'/index.html');ReleaseUrl=$entry.ReleaseUrl;MeasuredAt=$(if($evidence){$evidence.Snapshot.MeasuredAt}else{'Unknown'});Digest=$entry.SnapshotDigest})
+ $versions.Add([pscustomobject]@{Version=$entry.Version;Commit=$entry.Commit;Status=$state;Reason=$reason;Path=('versions/'+$entry.Version+'/index.html');ReleaseUrl=$entry.ReleaseUrl;MeasuredAt=$(if($evidence){$evidence.Snapshot.MeasuredAt}else{'Unknown'});Digest=$(if($evidence -and $evidence.PSObject.Properties['SnapshotDigest']){$evidence.SnapshotDigest}else{$entry.SnapshotDigest});ArchiveDigest=$(if($evidence -and $evidence.PSObject.Properties['ArchiveDigest']){$evidence.ArchiveDigest}else{''})})
+ if($evidence -and $evidence.PSObject.Properties['TemporaryParent']){Remove-Item -LiteralPath $evidence.TemporaryParent -Recurse -Force}
 }
 $mainStatus='Unknown'
  if(-not $Preview -and (-not $MainSnapshotPath -or -not(Test-Path -LiteralPath $MainSnapshotPath -PathType Leaf))){throw '正式Pages需要本次完整報告。'}
