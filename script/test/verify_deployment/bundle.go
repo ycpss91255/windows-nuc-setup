@@ -46,6 +46,8 @@ func assetFromBytes(name string, b []byte) releaseAsset {
 	return releaseAsset{Name: name, Size: int64(len(b)), Digest: fmt.Sprintf("sha256:%x", h)}
 }
 
+var afterArchiveStat = func() {}
+
 var runReportVerifier = func(tool string, args ...string) error {
 	b, err := exec.Command(tool, args...).CombinedOutput()
 	if err != nil {
@@ -68,7 +70,9 @@ func prepareReleaseBundle(metadata []byte, tag, sha, run string, attempt int, to
 	}
 	if kind == "raw" {
 		if archive != "" {
-			return nil, fmt.Errorf("archive not declared")
+			if _, err := os.Lstat(archive); !os.IsNotExist(err) {
+				return nil, fmt.Errorf("archive not declared")
+			}
 		}
 		return nil, nil
 	}
@@ -88,6 +92,7 @@ func prepareReleaseBundle(metadata []byte, tag, sha, run string, attempt int, to
 	if err != nil || !info.Mode().IsRegular() || info.Size() != outer.Size || info.Size() > 256*1024*1024 {
 		return nil, fmt.Errorf("invalid archive file")
 	}
+	afterArchiveStat()
 	payload, err := os.ReadFile(archive)
 	if err != nil {
 		return nil, err
@@ -143,4 +148,43 @@ func prepareReleaseBundle(metadata []byte, tag, sha, run string, attempt int, to
 		return nil, fmt.Errorf("verified output mismatch")
 	}
 	return &verifiedBundle{Summary: summary, Profile: profile, ArchiveDigest: outer.Digest}, nil
+}
+
+var runAssetDownload = func(args ...string) error {
+	b, err := exec.Command("gh", args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("report download failed: %v: %s", err, b)
+	}
+	return nil
+}
+
+func downloadReportAsset(metadata []byte, tag, repository, archive string) error {
+	var r releaseMetadata
+	if err := json.Unmarshal(metadata, &r); err != nil {
+		return err
+	}
+	if r.Tag != tag || r.Draft == nil || *r.Draft || r.Immutable == nil || !*r.Immutable {
+		return fmt.Errorf("release identity mismatch")
+	}
+	kind, err := classifyReleaseEvidence(r.Assets, tag)
+	if err != nil {
+		return err
+	}
+	if !regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`).MatchString(repository) {
+		return fmt.Errorf("invalid repository")
+	}
+	if filepath.Base(archive) != "windows_setup_report_"+tag+".zip" {
+		return fmt.Errorf("invalid archive destination")
+	}
+	if _, err := os.Lstat(archive); !os.IsNotExist(err) {
+		return fmt.Errorf("archive already exists")
+	}
+	if kind == "raw" {
+		return nil
+	}
+	parent := filepath.Dir(archive)
+	if err := os.Mkdir(parent, 0700); err != nil {
+		return err
+	}
+	return runAssetDownload("release", "download", tag, "--repo", repository, "--pattern", filepath.Base(archive), "--dir", parent)
 }

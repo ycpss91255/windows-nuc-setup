@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -51,6 +53,26 @@ func Test報表封裝驗證與外層身分(t *testing.T) {
 	if err != nil || got.ArchiveDigest != a.Digest || string(got.Summary) != "summary" || calls != 1 {
 		t.Fatalf("valid bundle: %v", err)
 	}
+
+	t.Run("檔案識別在讀取前變更須拒絕", func(t *testing.T) {
+		replacement := filepath.Join(t.TempDir(), "replacement.zip")
+		if err := os.WriteFile(replacement, payload, 0600); err != nil {
+			t.Fatal(err)
+		}
+		oldHook := afterArchiveStat
+		defer func() { afterArchiveStat = oldHook }()
+		afterArchiveStat = func() {
+			if err := os.Remove(archive); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(replacement, archive); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := prepareReleaseBundle(meta([]releaseAsset{a}), tag, sha, run, 2, "trusted", archive); err == nil {
+			t.Fatal("不得接受檢查後被替換的檔案")
+		}
+	})
 	origin = "immutable_archive_manifest"
 	if _, err = prepareReleaseBundle(meta([]releaseAsset{a}), tag, sha, run, 2, "trusted", archive); err == nil {
 		t.Fatal("拒絕非 explicit 來源")
@@ -73,5 +95,73 @@ func Test報表封裝驗證與外層身分(t *testing.T) {
 				t.Fatal(fmt.Sprint("應拒絕 ", tc.name))
 			}
 		})
+	}
+}
+func Test真實封裝驗證器(t *testing.T) {
+	root, err := filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := filepath.Join(t.TempDir(), "fixture")
+	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestExportSyntheticConsumerFixture$", "./script/test/report_bundle_tool")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "WINDOWS_SETUP_BUNDLE_FIXTURE_DIR="+fixture)
+	if b, e := cmd.CombinedOutput(); e != nil {
+		t.Fatalf("建立測試資料: %v %s", e, b)
+	}
+	var f struct {
+		Version, Commit, RunURL, Archive, Source, SHA256 string
+		RunAttempt                                       int `json:"run_attempt"`
+		Size                                             int64
+	}
+	data, e := os.ReadFile(filepath.Join(fixture, "fixture.json"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = json.Unmarshal(data, &f); e != nil {
+		t.Fatal(e)
+	}
+	var fields map[string]any
+	if e = json.Unmarshal(data, &fields); e != nil {
+		t.Fatal(e)
+	}
+	f.RunURL = fields["run_url"].(string)
+	tool := filepath.Join(t.TempDir(), "report-bundle-tool")
+	if runtime.GOOS == "windows" {
+		tool += ".exe"
+	}
+	build := exec.Command("go", "build", "-o", tool, "./script/test/report_bundle_tool")
+	build.Dir = root
+	if b, e := build.CombinedOutput(); e != nil {
+		t.Fatalf("建置驗證器: %v %s", e, b)
+	}
+	archive := filepath.Join(fixture, filepath.FromSlash(f.Archive))
+	a := releaseAsset{Name: "windows_setup_report_" + f.Version + ".zip", Size: f.Size, Digest: "sha256:" + f.SHA256}
+	meta, _ := json.Marshal(map[string]any{"tag_name": f.Version, "draft": false, "immutable": true, "assets": []releaseAsset{a}})
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chdir(filepath.Join(fixture, filepath.FromSlash(f.Source))); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+	got, err := prepareReleaseBundle(meta, f.Version, f.Commit, f.RunURL, f.RunAttempt, tool, archive)
+	if err != nil || got == nil {
+		t.Fatalf("真實封裝應通過：%v", err)
+	}
+	if _, err = prepareReleaseBundle(meta, f.Version, f.Commit, f.RunURL, f.RunAttempt+1, tool, archive); err == nil {
+		t.Fatal("錯誤 attempt 應拒絕")
+	}
+	b, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b[len(b)/2] ^= 1
+	if err = os.WriteFile(archive, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = prepareReleaseBundle(meta, f.Version, f.Commit, f.RunURL, f.RunAttempt, tool, archive); err == nil {
+		t.Fatal("封裝竄改應拒絕")
 	}
 }
