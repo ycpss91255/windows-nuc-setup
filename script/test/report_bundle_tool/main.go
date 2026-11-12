@@ -500,9 +500,22 @@ func verify(args []string) error {
 	if !st.Mode().IsRegular() || st.Size() > int64(maxArchive) {
 		return errors.New("invalid archive file")
 	}
-	archiveBytes, e := os.ReadFile(archive)
+	input, e := os.Open(archive)
 	if e != nil {
 		return e
+	}
+	opened, e := input.Stat()
+	if e != nil || !opened.Mode().IsRegular() || !os.SameFile(st, opened) {
+		input.Close()
+		return errors.New("archive changed or is not regular")
+	}
+	archiveBytes, e := io.ReadAll(io.LimitReader(input, int64(maxArchive)+1))
+	closeErr := input.Close()
+	if e != nil {
+		return e
+	}
+	if closeErr != nil {
+		return closeErr
 	}
 	if len(archiveBytes) > maxArchive {
 		return errors.New("archive size limit")
@@ -603,7 +616,25 @@ func writeVerifiedOutput(output string, archive []byte, files map[string][]byte,
 	if _, err := os.Lstat(output); err == nil || !os.IsNotExist(err) {
 		return errors.New("output must not exist")
 	}
-	parent := filepath.Dir(output)
+	parent, err := filepath.Abs(filepath.Dir(output))
+	if err != nil {
+		return err
+	}
+	resolved, err := filepath.EvalSymlinks(parent)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(filepath.Clean(parent), filepath.Clean(resolved)) {
+		return errors.New("output parent must not contain symlinks")
+	}
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return err
+	}
+	if len(entries) != 0 {
+		return errors.New("output parent must be a dedicated empty private directory")
+	}
+	// The caller owns this private parent and must prevent concurrent writers.
 	staging, err := os.MkdirTemp(parent, ".report-verified-*")
 	if err != nil {
 		return err
