@@ -47,10 +47,12 @@ if(-not $VerifyOnly){
  for($i=0;$i -lt 20;$i++){if((Test-Path $log) -and ([IO.File]::ReadAllText($log)) -match 'REGISTERED|FAILED'){break};Start-Sleep -Seconds 1}
 }
 $text=if(Test-Path $log){[IO.File]::ReadAllText($log)}else{''}
-$running=@(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'"|Where-Object {$_.CommandLine -and $_.CommandLine.Contains($listener) -and $_.SessionId -gt 0})
+$currentSession=[Diagnostics.Process]::GetCurrentProcess().SessionId
+$running=@(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'"|Where-Object {$_.CommandLine -and $_.CommandLine.Contains($listener) -and $_.SessionId -eq $currentSession})
 $linkOK=$false
 if(Test-Path $startup){$link=(New-SetupTerminalShell).CreateShortcut($startup);$linkOK=$link.Arguments.Contains($listener)}
-$success=($text -match '^REGISTERED:' -and $text -notmatch 'FAILED' -and $running.Count -gt 0 -and $linkOK)
+$registeredPID=if($text -match '^REGISTERED: PID=([0-9]+) '){$Matches[1]}else{''}
+$success=($registeredPID -ne '' -and $text -notmatch 'FAILED' -and @($running|Where-Object {[string]$_.ProcessId -ceq $registeredPID}).Count -gt 0 -and $linkOK)
 New-Item -ItemType Directory (Split-Path $context.ReportPath) -Force|Out-Null
 [ordered]@{Success=$success;User=$context.IdentityName;Shortcut='Ctrl+Alt+T';StartupLink=$startup;ListenerPath=$listener;ProcessIDs=@($running.ProcessId);Log=$text;CheckedAt=(Get-Date).ToString('o')}|ConvertTo-Json -Depth 4|Set-Content $context.ReportPath -Encoding UTF8
 if(-not $success){throw ('Terminal 快捷鍵未成功註冊：'+$text)}
