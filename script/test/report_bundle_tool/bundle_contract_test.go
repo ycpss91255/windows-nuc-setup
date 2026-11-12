@@ -175,6 +175,97 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if data, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("valid same-run reports must export: %v\n%s", err, data)
 	}
+	optionsFor := func(nativePath, containerPath, outputPath string, attempt int) options {
+		return options{native: nativePath, container: containerPath, source: source, version: version, commit: sha, run: runURL, attempt: attempt, output: outputPath}
+	}
+	inProcess := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
+	if err := export(optionsFor(nativeDir, containerDir, inProcess, 1)); err != nil {
+		t.Fatalf("in-process export: %v", err)
+	}
+	cliBytes, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inProcessBytes, err := os.ReadFile(inProcess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(cliBytes, inProcessBytes) {
+		t.Fatal("identical inputs must yield deterministic archive bytes")
+	}
+	t.Run("command_dispatch_and_flags", func(t *testing.T) {
+		oldArgs := os.Args
+		defer func() { os.Args = oldArgs }()
+		for _, args := range [][]string{{"tool"}, {"tool", "unknown"}, {"tool", "export", "--unknown"}, {"tool", "verify", "--unknown"}, {"tool", "verify"}} {
+			os.Args = args
+			if e := run(); e == nil {
+				t.Fatalf("invalid command accepted: %v", args)
+			}
+		}
+		output := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
+		os.Args = []string{"tool", "export", "--native-dir", nativeDir, "--container-dir", containerDir, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output", output}
+		if e := run(); e != nil {
+			t.Fatal(e)
+		}
+		os.Args = []string{"tool", "verify", "--archive", output, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1"}
+		if e := run(); e != nil {
+			t.Fatal(e)
+		}
+	})
+	for _, kind := range []string{"version", "commit", "run", "attempt", "artifact_names", "output_name", "inside_source", "missing_source", "dirty_source", "missing_report", "extra_file", "container_as_native"} {
+		t.Run("invalid_export_"+kind, func(t *testing.T) {
+			output := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
+			o := optionsFor(nativeDir, containerDir, output, 1)
+			switch kind {
+			case "version":
+				o.version = "../bad"
+			case "commit":
+				o.commit = strings.Repeat("b", 40)
+			case "run":
+				o.run = "http://invalid"
+			case "attempt":
+				o.attempt = 0
+			case "artifact_names":
+				o.attempt = 2
+			case "output_name":
+				o.output = filepath.Join(t.TempDir(), "wrong.zip")
+			case "inside_source":
+				o.output = filepath.Join(source, "windows_setup_report_v0.1.0.zip")
+			case "missing_source":
+				o.source = filepath.Join(t.TempDir(), "missing")
+			case "dirty_source":
+				p := filepath.Join(source, "untracked.txt")
+				os.WriteFile(p, []byte("fixture"), 0600)
+				defer os.Remove(p)
+			case "missing_report":
+				o.native = filepath.Join(t.TempDir(), "windows-test-reports-1-1")
+			case "extra_file":
+				dir := filepath.Join(t.TempDir(), "windows-test-reports-1-1")
+				os.MkdirAll(dir, 0700)
+				for name, data := range native {
+					os.WriteFile(filepath.Join(dir, name), data, 0600)
+				}
+				os.WriteFile(filepath.Join(dir, "secret.txt"), []byte("fixture"), 0600)
+				o.native = dir
+			case "container_as_native":
+				dir := filepath.Join(t.TempDir(), "windows-test-reports-1-1")
+				os.MkdirAll(dir, 0700)
+				for name, data := range native {
+					if name == "summary.json" {
+						data = container[name]
+					}
+					os.WriteFile(filepath.Join(dir, name), data, 0600)
+				}
+				o.native = dir
+			}
+			if e := export(o); e == nil {
+				t.Fatalf("invalid export accepted: %s", kind)
+			}
+			if _, e := os.Stat(output); !os.IsNotExist(e) {
+				t.Fatalf("failed export created output: %s", kind)
+			}
+		})
+	}
 	z, err := zip.OpenReader(out)
 	if err != nil {
 		t.Fatal(err)
@@ -246,6 +337,29 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if len(seen) != len(files)-1 {
 		t.Fatal("manifest does not cover every non-manifest ZIP file")
 	}
+	t.Run("container_must_not_claim_unmeasured_go", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "docker-test-reports-1-1")
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		for name, data := range container {
+			if name == "summary.json" {
+				var raw map[string]any
+				if err := json.Unmarshal(data, &raw); err != nil {
+					t.Fatal(err)
+				}
+				raw["GoCoverage"] = goEvidence
+				data, _ = json.Marshal(raw)
+			}
+			if err := os.WriteFile(filepath.Join(dir, name), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		output := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
+		if err := export(optionsFor(nativeDir, dir, output, 1)); err == nil || !strings.Contains(err.Error(), "go_coverage.json") {
+			t.Fatalf("container unmeasured Go must be rejected for missing sidecar: %v", err)
+		}
+	})
 	for _, malicious := range []string{`<script>alert(1)</script>`, `<a href="javascript:alert(1)">x</a>`, `<p onclick="alert(1)">x</p>`, `<iframe src="https://untrusted.invalid"></iframe>`} {
 		t.Run("unsafe_public_html", func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "windows-test-reports-1-1")
@@ -261,31 +375,26 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 				}
 			}
 			output := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
-			cmd := exec.Command("go", "run", ".", "export", "--native-dir", dir, "--container-dir", containerDir, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output", output)
-			if data, err := cmd.CombinedOutput(); err == nil {
-				t.Fatalf("unsafe public report accepted: %s", data)
+			if err := export(optionsFor(dir, containerDir, output, 1)); err == nil {
+				t.Fatal("unsafe public report accepted")
 			}
 			if _, err := os.Stat(output); !os.IsNotExist(err) {
 				t.Fatal("unsafe report created output")
 			}
 		})
 	}
-	verify := func(path string, attempt string) error {
+	verifyArchive := func(path string, attempt string) error {
 		t.Helper()
-		cmd := exec.Command("go", "run", ".", "verify", "--archive", path, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", attempt)
-		data, err := cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("%w: %s", err, data)
-		}
-		return nil
+		return verify([]string{"--archive", path, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", attempt})
 	}
-	if err := verify(out, "1"); err != nil {
+
+	if err := verifyArchive(out, "1"); err != nil {
 		t.Fatalf("valid archive must verify: %v", err)
 	}
 	for _, kind := range []string{"tampered", "missing", "extra", "traversal", "duplicate", "wrong_attempt", "rehashed_scope", "rehashed_index", "rehashed_summary", "duplicate_manifest_key"} {
 		t.Run(kind, func(t *testing.T) {
 			if kind == "wrong_attempt" {
-				if err := verify(out, "2"); err == nil {
+				if err := verifyArchive(out, "2"); err == nil {
 					t.Fatal("wrong attempt accepted")
 				}
 				return
@@ -365,7 +474,7 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 				t.Fatal(e)
 			}
 			f.Close()
-			if err := verify(p, "1"); err == nil {
+			if err := verifyArchive(p, "1"); err == nil {
 				t.Fatalf("invalid archive accepted: %s", kind)
 			}
 		})
