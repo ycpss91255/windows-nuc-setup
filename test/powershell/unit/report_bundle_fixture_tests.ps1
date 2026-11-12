@@ -3,6 +3,8 @@ $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 . (Join-Path $root 'test/powershell/helpers/report_bundle_fixture.ps1')
 function Assert([bool]$condition,[string]$name){Write-Host ('@@ASSERT@@'+(@{Name=$name;Passed=$condition}|ConvertTo-Json -Compress));if(-not $condition){throw $name}}
+$helperBytes=[IO.File]::ReadAllBytes((Join-Path $root 'test/powershell/helpers/report_bundle_fixture.ps1'))
+Assert ($helperBytes.Length -ge 3 -and $helperBytes[0] -eq 0xEF -and $helperBytes[1] -eq 0xBB -and $helperBytes[2] -eq 0xBF) 'shared PowerShell helper uses UTF-8 BOM'
 $parent=Join-Path ([IO.Path]::GetTempPath()) ('bundle_helper_contract_'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($parent)
 $beforeLocation=(Get-Location).Path;$beforeEnv=$env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR

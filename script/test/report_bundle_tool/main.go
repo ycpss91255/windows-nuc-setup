@@ -16,7 +16,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -657,17 +656,11 @@ func writeVerifiedOutput(output string, archive []byte, files map[string][]byte,
 	if _, err := os.Lstat(output); err == nil || !os.IsNotExist(err) {
 		return errors.New("output must not exist")
 	}
-	parent, err := filepath.Abs(filepath.Dir(output))
+	parent, err := canonicalSafeParent(filepath.Dir(output))
 	if err != nil {
 		return err
 	}
-	resolved, err := filepath.EvalSymlinks(parent)
-	if err != nil {
-		return err
-	}
-	if !sameOutputParent(parent, resolved, runtime.GOOS) {
-		return errors.New("output parent must not contain symlinks")
-	}
+	output = filepath.Join(parent, filepath.Base(output))
 	entries, err := os.ReadDir(parent)
 	if err != nil {
 		return err
