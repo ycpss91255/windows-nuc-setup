@@ -32,7 +32,7 @@ if($LASTEXITCODE -ne 0 -or ($declared -join "`n").Trim() -cne $Version){throw '.
 $changelog=(& git -C $PackageRoot show ($commit+':doc/changelog/changelog.md'))
 if($LASTEXITCODE -ne 0){throw '來源提交缺少變更紀錄。'}
 $body=Get-ReleaseNotes $Version ($changelog -join "`n")
-$body='[此版本測試報表](https://ycpss91255.github.io/windows_setup/versions/'+$Version+'/index.html)'+"`n`n"+$body
+$body=(Get-ReleaseReportLink $Version)+"`n`n"+$body
 if($body.Length -gt 125000){throw '版本說明超過 GitHub 長度上限。'}
 $output=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 $notes=Join-Path $output 'release_notes.md'
