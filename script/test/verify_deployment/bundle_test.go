@@ -155,3 +155,29 @@ func Test真實封裝驗證器(t *testing.T) {
 		t.Fatal("封裝竄改應拒絕")
 	}
 }
+func Test下載版本報表附件(t *testing.T) {
+	tag := "v0.2.5"
+	a := releaseAsset{Name: "windows_setup_report_" + tag + ".zip", Size: 1, Digest: "sha256:" + strings.Repeat("a", 64)}
+	metadata := func(assets []releaseAsset) []byte {
+		b, _ := json.Marshal(map[string]any{"tag_name": tag, "draft": false, "immutable": true, "assets": assets})
+		return b
+	}
+	old := runAssetDownload
+	defer func() { runAssetDownload = old }()
+	calls := 0
+	runAssetDownload = func(args ...string) error { calls++; return nil }
+	path := filepath.Join(t.TempDir(), "new", a.Name)
+	if err := downloadReportAsset(metadata([]releaseAsset{a}), tag, "example/repo", path); err != nil || calls != 1 {
+		t.Fatalf("新附件應下載：%v", err)
+	}
+	rawPath := filepath.Join(t.TempDir(), "new", a.Name)
+	if err := downloadReportAsset(metadata([]releaseAsset{{Name: "quality.json"}}), tag, "example/repo", rawPath); err != nil || calls != 1 {
+		t.Fatalf("舊附件不應下載：%v", err)
+	}
+	if err := downloadReportAsset(metadata([]releaseAsset{a, {Name: "quality.json"}}), tag, "example/repo", filepath.Join(t.TempDir(), "new", a.Name)); err == nil {
+		t.Fatal("混合格式應拒絕")
+	}
+	if err := downloadReportAsset(metadata([]releaseAsset{a}), tag, "bad repo", filepath.Join(t.TempDir(), "new", a.Name)); err == nil {
+		t.Fatal("錯誤 repository 應拒絕")
+	}
+}
