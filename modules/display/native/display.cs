@@ -67,7 +67,10 @@ namespace NUC8Display {
   }
   static Mode NewMode(){Mode m=new Mode();m.dmSize=(ushort)Marshal.SizeOf(typeof(Mode));return m;}
   public static uint[] Read(){return Read(new NativeApi());}
-  internal static uint[] Read(NativeApi api){api.Aware();Mode m=NewMode();if(!api.Enumerate(null,-1,ref m))throw new Exception("Unable to read active primary display mode.");return new uint[]{m.dmPelsWidth,m.dmPelsHeight,NativeScales(false,api)[0]*96/100};}
+  internal static uint[] Read(NativeApi api){uint[] snapshot=ReadSnapshot(api);return new uint[]{snapshot[0],snapshot[1],snapshot[2]*96/100};}
+  // Width and height refer to the primary display; subsequent values are active source percentages in native order.
+  public static uint[] ReadSnapshot(){return ReadSnapshot(new NativeApi());}
+  internal static uint[] ReadSnapshot(NativeApi api){api.Aware();Mode m=NewMode();if(!api.Enumerate(null,-1,ref m))throw new Exception("Unable to read active primary display mode.");uint[] scales=NativeScales(false,api);uint[] snapshot=new uint[scales.Length+2];snapshot[0]=m.dmPelsWidth;snapshot[1]=m.dmPelsHeight;Array.Copy(scales,0,snapshot,2,scales.Length);return snapshot;}
   public static uint[] Apply(){return Apply(new NativeApi());}
   internal static uint[] Apply(NativeApi api){
    api.Aware();Mode current=NewMode();

@@ -198,6 +198,7 @@ public static class ManagedNativeTests {
   api.Set=delegate(IntPtr packet){Assert(Marshal.ReadInt32(packet)==-4 && Marshal.ReadInt32(packet,4)==24 && Marshal.ReadInt32(packet,20)==-2,"DPI preset uses minimum native relative step");sets++;return 0;};
   var read=NUC8Display.Display.Read(api);Assert(read[0]==1280 && read[1]==720 && read[2]==144 && freed==4 && gets==1,"display reads and deduplicates physical source without applying");
   var scales=NUC8Display.Display.NativeScales(true,api);Assert(scales.Length==1 && scales[0]==100 && sets==1 && gets==3 && freed==8,"native DPI applies and verifies preset then frees buffers");
+  var snapshot=NUC8Display.Display.ReadSnapshot(api);Assert(snapshot.Length==3 && snapshot[0]==1280 && snapshot[1]==720 && snapshot[2]==100,"snapshot retains primary mode and active source scale");
   var changed=NUC8Display.Display.Apply(api);Assert(changed[0]==1280 && changed[1]==720 && changed[2]==1920 && changed[3]==1080 && changes==1 && changed[5]==96,"display tests applies and reads back through fake native boundary");
   changes=0;afterUnavailable=true;int priorDpi=dpiReads;Exception displayError=null;
   try{NUC8Display.Display.Apply(api);}catch(Exception error){displayError=error;}
