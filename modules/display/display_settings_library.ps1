@@ -6,9 +6,11 @@ function Invoke-SetupDisplaySettings {
  if(-not ('NUC8Display.Display' -as [type])){Add-Type -Path (Join-Path $ModuleRoot 'native/display.cs')}
  $desktop='HKCU:\Control Panel\Desktop'
  if($VerifyOnly){
-  $actual=[NUC8Display.Display]::Read()
+  $actual=[NUC8Display.Display]::ReadSnapshot()
+  $scales=@($actual|Select-Object -Skip 2)
+  if(-not $scales.Count){throw 'No active display source.'}
   $custom=(Get-ItemProperty $desktop -ErrorAction SilentlyContinue).Win8DpiScaling -eq 1
-  $result=[ordered]@{Success=($actual[0] -eq 1920 -and $actual[1] -eq 1080 -and $actual[2] -eq 96 -and -not $custom);Width=$actual[0];Height=$actual[1];CurrentMonitorDPI=$actual[2];CurrentScalePercent=[math]::Round($actual[2]*100/96);CustomScalingEnabled=$custom;VerifiedAt=(Get-Date).ToString('o');Error='解析度或實際 DPI 尚未符合 1920×1080 / 100%，可能需要重新登入。'}
+  $result=[ordered]@{Success=($actual[0] -eq 1920 -and $actual[1] -eq 1080 -and @($scales|Where-Object {$_ -ne 100}).Count -eq 0 -and -not $custom);Width=$actual[0];Height=$actual[1];CurrentMonitorDPI=($scales[0]*96/100);CurrentScalePercent=$scales[0];NativeScalePercent=$scales;CustomScalingEnabled=$custom;VerifiedAt=(Get-Date).ToString('o');Error='解析度或實際 DPI 尚未符合 1920×1080 / 100%，可能需要重新登入。'}
   if($result.Success){$result.Error=$null}
   return [pscustomobject]$result
  }
