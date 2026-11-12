@@ -14,3 +14,22 @@ Assert (Test-Path -LiteralPath $owner.Path -PathType Container) '拒絕偽造後
 Remove-TestOwner $owner
 Assert (-not (Test-Path -LiteralPath $owner.Path)) '真 handle 成功清理'
 Refuse {Remove-TestOwner $owner} '已撤銷 handle 不可重用'
+$owner=New-TestOwner
+$nonce=$owner.Nonce;$owner.Nonce='altered'
+Refuse {Remove-TestOwner $owner} '竄改 nonce 必須拒絕'
+$owner.Nonce=$nonce
+$base=$owner.Root;$owner.Root=[IO.Path]::GetPathRoot($base)
+Refuse {Remove-TestOwner $owner} '竄改暫存根目錄必須拒絕'
+$owner.Root=$base
+. $helper
+Assert (Test-Path -LiteralPath $owner.Path -PathType Container) '重新載入 helper 不遺失已簽發 handle'
+$other=New-TestOwner
+$sentinel=Join-Path $other.Path 'sentinel';[IO.File]::WriteAllText($sentinel,'keep')
+$link=Join-Path $owner.Path 'junction'
+New-Item -ItemType Junction -Path $link -Target $other.Path|Out-Null
+Refuse {Remove-TestOwner $owner} '後代 junction 必須拒絕並保留'
+Assert ((Test-Path -LiteralPath $owner.Path) -and (Test-Path -LiteralPath $sentinel)) '拒絕後本人目錄及外部 sentinel 仍存在'
+[IO.Directory]::Delete($link)
+Remove-TestOwner $owner
+Remove-TestOwner $other
+Assert (-not (Test-Path -LiteralPath $owner.Path) -and -not (Test-Path -LiteralPath $other.Path)) '移除連結後已簽發目錄可清理'
