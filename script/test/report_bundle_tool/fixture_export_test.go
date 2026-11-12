@@ -41,7 +41,7 @@ func TestExportSyntheticConsumerFixture(t *testing.T) {
 	root = filepath.Clean(root)
 	parent := filepath.Dir(root)
 	resolved, err := filepath.EvalSymlinks(parent)
-	if err != nil || !strings.EqualFold(filepath.Clean(parent), filepath.Clean(resolved)) {
+	if err != nil || !sameOutputParent(parent, resolved, runtime.GOOS) {
 		t.Fatal("fixture parent must exist and not contain links")
 	}
 	if err := os.Mkdir(root, 0700); err != nil {
@@ -67,6 +67,10 @@ func TestExportSyntheticConsumerFixture(t *testing.T) {
 	summary["RefName"] = version
 	summary["Version"] = version
 	summary["Environment"] = "Windows synthetic native fixture"
+	summary["Changes"] = []string{"Synthetic fixture"}
+	for _, check := range summary["Checks"].([]any) {
+		check.(map[string]any)["ExitCode"] = 0
+	}
 	owned := []string{"windows_setup/script/test/example/value.go"}
 	goEvidence, profile, err := a.CreateCoverageEvidence([][]byte{[]byte("mode: set\n" + owned[0] + ":2.1,2.27 1 1\n")}, owned, a.CoverageProvenance{Commit: sha, RunUrl: runURL, MeasuredAt: "2026-01-01T00:00:00Z", SourceState: "Clean", GoVersion: "go1.27.3", Environment: "Synthetic Go fixture"})
 	if err != nil {
