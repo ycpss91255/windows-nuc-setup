@@ -99,3 +99,17 @@ func TestLongTemp(t *testing.T) {
 		t.Fatalf("8.3 fixture under longer TEMP must work: %v %s", err, out)
 	}
 }
+
+func TestSyntheticFixtureGitUnderLongTemp(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "fixture_long_path_segment_0123456789", "fixture_long_path_segment_0123456789", "fixture_long_path_segment_0123456789", "source")
+	if err := os.MkdirAll(source, 0700); err != nil {
+		t.Fatal(err)
+	}
+	syntheticNativeReport(t, source)
+	cmd := exec.Command("git", "-c", "core.longpaths=true", "-C", source, "config", "--local", "--get", "core.longpaths")
+	out, err := cmd.Output()
+	if err != nil || strings.TrimSpace(string(out)) != "true" {
+		t.Fatalf("fixture must keep long path configuration local: %v", err)
+	}
+}
