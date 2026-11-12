@@ -40,6 +40,42 @@ function Write-SnapshotView {
  param($Snapshot,[string]$OutputDirectory,[switch]$OmitGoProfileLink)
  Write-TestReports -OmitGoProfileLink:$OmitGoProfileLink -SchemaVersion $Snapshot.SchemaVersion -Checks @($Snapshot.Checks) -OutputDirectory $OutputDirectory -Layer $Snapshot.RequestedLayer -Commit $Snapshot.Commit -RunUrl $Snapshot.RunUrl -SourceState $Snapshot.SourceState -Version $Snapshot.Version -Environment $Snapshot.Environment -RefType $Snapshot.RefType -RefName $Snapshot.RefName -MeasuredAt $Snapshot.MeasuredAt -Changes $Snapshot.Changes -RepoCoverage $(if($Snapshot.PSObject.Properties['RepoCoverage']){$Snapshot.RepoCoverage}else{$null}) -GoCoverage $(if($Snapshot.PSObject.Properties['GoCoverage']){$Snapshot.GoCoverage}else{$null})|Out-Null
 }
+$script:PortalOwnedDirectories=@{}
+function Assert-PortalOrdinaryDirectory([string]$Path){
+ $full=[IO.Path]::GetFullPath($Path)
+ if((Resolve-Path -LiteralPath $full).ProviderPath.TrimEnd('\') -ine $full.TrimEnd('\')){throw '暫存目錄解析不一致。'}
+ $dir=[IO.DirectoryInfo]::new($full)
+ while($null -ne $dir){
+  $item=Get-Item -LiteralPath $dir.FullName -Force
+  if(-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw '暫存目錄或祖先不是一般目錄。'}
+  $dir=$dir.Parent
+ }
+ return $full.TrimEnd('\')
+}
+function New-PortalOwnedTemporaryDirectory {
+ $base=Assert-PortalOrdinaryDirectory ([IO.Path]::GetTempPath())
+ $path=Join-Path $base ('portal_zip_'+[guid]::NewGuid().ToString('N'))
+ New-Item -ItemType Directory -Path $path -ErrorAction Stop|Out-Null
+ $path=Assert-PortalOrdinaryDirectory $path
+ $script:PortalOwnedDirectories[$path]=$base
+ return $path
+}
+function Remove-PortalOwnedTemporaryDirectory([string]$Path){
+ $full=[IO.Path]::GetFullPath($Path).TrimEnd('\')
+ if(-not $script:PortalOwnedDirectories.ContainsKey($full)){throw '不是本次建立的暫存目錄。'}
+ $base=$script:PortalOwnedDirectories[$full]
+ if((Assert-PortalOrdinaryDirectory $base) -ine $base -or (Assert-PortalOrdinaryDirectory $full) -ine $full -or [IO.Path]::GetDirectoryName($full) -ine $base -or [IO.Path]::GetFileName($full) -cnotmatch '^portal_zip_[a-f0-9]{32}$'){throw '暫存清理範圍不符。'}
+ $pending=New-Object 'Collections.Generic.Stack[string]';$pending.Push($full)
+ while($pending.Count){
+  $current=$pending.Pop()
+  foreach($item in @(Get-ChildItem -LiteralPath $current -Force)){
+   if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw '暫存目錄包含連結，拒絕清理。'}
+   if($item.PSIsContainer){$pending.Push($item.FullName)}
+  }
+ }
+ Remove-Item -LiteralPath $full -Recurse -Force
+ $script:PortalOwnedDirectories.Remove($full)
+}
 function Test-PortalZipEvidence {
  param($Entry,[string]$BundleToolPath=$env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL,[string]$ExpectedRepository=$env:GH_REPO)
  if($Entry.Immutable -isnot [bool] -or -not $Entry.Immutable){throw 'Release 未鎖定。'}
@@ -47,8 +83,7 @@ function Test-PortalZipEvidence {
  if($ExpectedRepository -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or $Entry.Repository -cne $ExpectedRepository -or $Entry.ArchiveDigest -cnotmatch '^sha256:[a-f0-9]{64}$' -or $Entry.ArchiveSize -le 0){throw '儲存庫或附件摘要不合法。'}
  if($Entry.ReleaseUrl -cne ('https://github.com/'+$ExpectedRepository+'/releases/tag/'+$Entry.Version)){throw 'Release 網址與可信儲存庫或版本不符。'}
  if(-not (Test-Path -LiteralPath $Entry.ArchivePath -PathType Leaf) -or -not (Test-Path -LiteralPath $Entry.SourcePath -PathType Container) -or -not (Test-Path -LiteralPath $BundleToolPath -PathType Leaf)){throw '缺少 ZIP、精確來源或驗證工具。'}
- $parent=Join-Path ([IO.Path]::GetTempPath()) ('portal_zip_'+[guid]::NewGuid().ToString('N'))
- New-Item -ItemType Directory -Path $parent | Out-Null
+ $parent=New-PortalOwnedTemporaryDirectory
  $output=Join-Path $parent 'verified'
  $oldGlobal=$env:GIT_CONFIG_GLOBAL;$oldSystem=$env:GIT_CONFIG_NOSYSTEM
  try {
@@ -64,7 +99,7 @@ function Test-PortalZipEvidence {
   Assert-TestReportSnapshot -Report $snapshot -Release
   $files=@(Get-TestReportArtifactNames $snapshot.SchemaVersion -IncludeGoProfile|ForEach-Object {[pscustomobject]@{Name=$_}})
   return [pscustomobject]@{Snapshot=$snapshot;Manifest=[pscustomobject]@{Files=$files};HasGoProfile=$true;AssetDirectory=$native;SnapshotPath=$summary;SnapshotDigest=('sha256:'+$metadata.summary_sha256);ArchiveDigest=$Entry.ArchiveDigest;TemporaryParent=$parent}
- } catch {Remove-Item -LiteralPath $parent -Recurse -Force -ErrorAction SilentlyContinue;throw} finally {$env:GIT_CONFIG_GLOBAL=$oldGlobal;$env:GIT_CONFIG_NOSYSTEM=$oldSystem}
+ } catch {Remove-PortalOwnedTemporaryDirectory $parent;throw} finally {$env:GIT_CONFIG_GLOBAL=$oldGlobal;$env:GIT_CONFIG_NOSYSTEM=$oldSystem}
 }
 function Test-PortalReleaseEvidence {
  param($Entry,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL)

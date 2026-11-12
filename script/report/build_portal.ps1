@@ -18,6 +18,7 @@ foreach($entry in $catalog){
  if(($entry.SnapshotPath -and $entry.ManifestPath) -or ($entry.PSObject.Properties['ArchivePath'] -and $entry.ArchivePath)){
   try{$evidence=Test-PortalReleaseEvidence -Entry $entry -CoverageToolPath $CoverageToolPath}catch{$reason='品質證據未通過驗證：'+(Protect-ReportText $_.Exception.Message);$state='Invalid'}
  }
+ try {
  if($evidence){
   Write-SnapshotView $evidence.Snapshot $dir -OmitGoProfileLink:(-not $evidence.HasGoProfile)
   foreach($file in $evidence.Manifest.Files){
@@ -36,7 +37,7 @@ foreach($entry in $catalog){
   [IO.File]::WriteAllText((Join-Path $dir 'index.html'),('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>'+ $safeVersion +' · 測試紀錄</title><h1>'+ $safeVersion +'</h1><p>'+ $safeReason +'</p><p>這個版本未保存可用的測試紀錄，無法判斷當時的測試結果。</p><a href="../../index.html">版本索引</a></html>'),$utf8)
  }
  $versions.Add([pscustomobject]@{Version=$entry.Version;Commit=$entry.Commit;Status=$state;Reason=$reason;Path=('versions/'+$entry.Version+'/index.html');ReleaseUrl=$entry.ReleaseUrl;MeasuredAt=$(if($evidence){$evidence.Snapshot.MeasuredAt}else{'Unknown'});Digest=$(if($evidence -and $evidence.PSObject.Properties['SnapshotDigest']){$evidence.SnapshotDigest}else{$entry.SnapshotDigest});ArchiveDigest=$(if($evidence -and $evidence.PSObject.Properties['ArchiveDigest']){$evidence.ArchiveDigest}else{''})})
- if($evidence -and $evidence.PSObject.Properties['TemporaryParent']){Remove-Item -LiteralPath $evidence.TemporaryParent -Recurse -Force}
+ } finally {if($evidence -and $evidence.PSObject.Properties['TemporaryParent']){Remove-PortalOwnedTemporaryDirectory $evidence.TemporaryParent}}
 }
 $mainStatus='Unknown'
  if(-not $Preview -and (-not $MainSnapshotPath -or -not(Test-Path -LiteralPath $MainSnapshotPath -PathType Leaf))){throw '正式Pages需要本次完整報告。'}
