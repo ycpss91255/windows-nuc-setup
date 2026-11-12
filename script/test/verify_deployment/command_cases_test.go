@@ -217,7 +217,7 @@ func TestDeploymentCases(t *testing.T) {
 		l, q := len(label)*7+12, len(value)*7+12
 		pages[prefix+"go_coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d"><rect width="%d" fill="#555"/><rect width="%d" fill="#4c1"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, l+q, l, q, label, value))
 		pages[prefix+"index.html"] = append(pages[prefix+"index.html"], []byte(`<details><summary>分項量測明細</summary><p>Go 程式敘述覆蓋率：100.0% · 1/1 statements；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式，不等於整體覆蓋率。</p><a href="go_coverage.json">Go JSON</a><a href="go_coverage.out">Go profile</a></details>`)...)
-		pages[prefix+"index.html"] = append(pages[prefix+"index.html"], []byte(`<p>版本 `+tag+` · 提交 <code>`+sha+`</code></p><a href="`+runURL+`">GitHub Actions 執行紀錄</a>`)...)
+		pages[prefix+"index.html"] = append(pages[prefix+"index.html"], []byte(`<p>版本 `+tag+` · 提交 <code>`+sha+`</code><br>量測時間（UTC）：2026-01-01T00:00:00Z</p><p><a href="`+runURL+`">GitHub Actions 執行紀錄</a></p>`)...)
 		pages[prefix+"summary.md"] = append(pages[prefix+"summary.md"], []byte("\nGo 程式敘述覆蓋率（分項）：100.0%；1/1 statements；全部自有 Go 工具含 CLI，不含 PowerShell 或第三方程式，不等於整體覆蓋率。")...)
 		metadata := filepath.Join(t.TempDir(), "release.json")
 		writeRelease := func(d string) {
@@ -267,6 +267,26 @@ func TestDeploymentCases(t *testing.T) {
 				defer func() { pages[prefix+name] = old }()
 				if e := invoke(tagArgs...); e == nil {
 					t.Fatal("missing page or evidence accepted")
+				}
+			})
+		}
+		for _, kind := range []string{"version", "commit", "run"} {
+			t.Run("page_decoy_"+kind, func(t *testing.T) {
+				old := pages[prefix+"index.html"]
+				value := string(old)
+				switch kind {
+				case "version":
+					value = strings.Replace(value, "版本 "+tag, "版本 v9.9.9", 1)
+				case "commit":
+					value = strings.Replace(value, sha, strings.Repeat("b", 40), 1)
+				case "run":
+					value = strings.Replace(value, runURL, runURL+"0", 1)
+				}
+				value += `<p>版本 ` + tag + ` · 提交 <code>` + sha + `</code><br>量測時間（UTC）：2026-01-01T00:00:00Z</p><p><a href="` + runURL + `">GitHub Actions 執行紀錄</a></p>`
+				pages[prefix+"index.html"] = []byte(value)
+				defer func() { pages[prefix+"index.html"] = old }()
+				if e := invoke(tagArgs...); e == nil {
+					t.Fatal("conflicting identity with visible decoy accepted")
 				}
 			})
 		}
