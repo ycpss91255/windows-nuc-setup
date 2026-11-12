@@ -223,13 +223,13 @@ func TestDeploymentCases(t *testing.T) {
 		writeRelease := func(d string) {
 			t.Helper()
 			sum := sha256.Sum256(pages[prefix+"summary.json"])
-			b, _ := json.Marshal(map[string]any{"tag_name": tag, "draft": false, "immutable": true, "assets": []any{map[string]any{"name": "go_coverage.out", "digest": d, "size": len(profile)}, map[string]any{"name": "quality.json", "digest": fmt.Sprintf("sha256:%x", sum), "size": len(pages[prefix+"summary.json"])}}})
+			b, _ := json.Marshal(map[string]any{"tag_name": tag, "html_url": "https://github.com/example/windows_setup/releases/tag/" + tag, "draft": false, "immutable": true, "assets": []any{map[string]any{"name": "go_coverage.out", "digest": d, "size": len(profile)}, map[string]any{"name": "quality.json", "digest": fmt.Sprintf("sha256:%x", sum), "size": len(pages[prefix+"summary.json"])}}})
 			if e := os.WriteFile(metadata, b, 0600); e != nil {
 				t.Fatal(e)
 			}
 		}
 		writeRelease(digest)
-		pages["versions.json"] = []byte(`[{"Version":"v0.2.4","Status":"Verified","Path":"versions/v0.2.4/index.html"}]`)
+		pages["versions.json"], _ = json.Marshal([]map[string]any{{"Version": tag, "Status": "Verified", "Path": prefix + "index.html", "Commit": sha, "ReleaseUrl": "https://github.com/example/windows_setup/releases/tag/" + tag, "Digest": fmt.Sprintf("sha256:%x", sha256.Sum256(summary))}})
 		defer func() {
 			delete(pages, prefix+"index.html")
 			delete(pages, prefix+"summary.json")
@@ -239,6 +239,21 @@ func TestDeploymentCases(t *testing.T) {
 		tagArgs := append(args(), "--mode", "release", "--tag", tag, "--release-metadata", metadata)
 		if e := invoke(tagArgs...); e != nil {
 			t.Fatalf("valid tag publication rejected: %v", e)
+		}
+		for _, field := range []string{"Commit", "ReleaseUrl", "Digest"} {
+			t.Run("index_identity_"+field, func(t *testing.T) {
+				old := pages["versions.json"]
+				var rows []map[string]any
+				if e := json.Unmarshal(old, &rows); e != nil {
+					t.Fatal(e)
+				}
+				rows[0][field] = "incorrect"
+				pages["versions.json"], _ = json.Marshal(rows)
+				defer func() { pages["versions.json"] = old }()
+				if e := invoke(tagArgs...); e == nil {
+					t.Fatalf("incorrect index %s accepted", field)
+				}
+			})
 		}
 		for _, name := range []string{"index.html", "summary.json", "go_coverage.out"} {
 			t.Run("missing_"+name, func(t *testing.T) {
