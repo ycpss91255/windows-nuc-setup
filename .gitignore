@@ -1,4 +1,4 @@
-﻿# 工具與驅動二進位由既有下載/雜湊流程管理，不提交 Git。
+# 工具與驅動二進位由既有下載/雜湊流程管理，不提交 Git。
 /drivers/*/*
 !/drivers/*/profile.json
 !/drivers/*/manifest.json
@@ -119,3 +119,6 @@ NUC-Init/
 # Python verification tools never commit bytecode.
 __pycache__/
 *.py[cod]
+
+# 本機開發工作樹不進入交付來源。
+/worktree/
