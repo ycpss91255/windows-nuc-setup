@@ -68,6 +68,7 @@ if($route -eq 'DesktopReady'){
  Write-Host ('目前正式帳號：'+$user.Name+'；帳號已就緒，不重設密碼。請直接執行 windows.cmd，SSH 由第 4 階段安裝。') -ForegroundColor Green
  return
 }
+$null=Assert-InitProvisioningAsset -AssetRoot (Join-Path $sourceRoot 'modules/init/assets')
 # Eligibility for controlled OOBE preparation is not proof of an official Audit mode API.
 if(-not $desktopOwned){throw '請在稽核模式 Administrator 桌面執行，不接受遠端或非桌面工作階段。'}
 if(Get-Process sysprep -ErrorAction SilentlyContinue){throw 'Sysprep 對話框或程序仍開啟。請先按「取消」關閉，勿同時執行兩份，再重跑 init.cmd。'}
