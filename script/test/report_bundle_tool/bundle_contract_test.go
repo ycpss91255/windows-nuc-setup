@@ -234,6 +234,21 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 			t.Fatal("existing output accepted")
 		}
 	})
+	t.Run("reject_symlink_output_parent", func(t *testing.T) {
+		real := t.TempDir()
+		link := filepath.Join(t.TempDir(), "link")
+		if err := os.Symlink(real, link); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		target := filepath.Join(link, "verified")
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", target}
+		if err := verify(args); err == nil {
+			t.Fatal("symlink output parent accepted")
+		}
+		if _, err := os.Lstat(filepath.Join(real, "verified")); !os.IsNotExist(err) {
+			t.Fatal("output written through symlink")
+		}
+	})
 	t.Run("invalid_archive_leaves_no_output", func(t *testing.T) {
 		target := filepath.Join(t.TempDir(), "verified")
 		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "2", "--output-dir", target}
