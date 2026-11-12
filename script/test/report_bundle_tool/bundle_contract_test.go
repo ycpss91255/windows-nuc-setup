@@ -350,6 +350,44 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if len(seen) != len(files)-1 {
 		t.Fatal("manifest does not cover every non-manifest ZIP file")
 	}
+	for _, kind := range []string{"empty_assertions", "contradictory_status"} {
+		t.Run("container_execution_"+kind, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "docker-test-reports-1-1")
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			for name, data := range container {
+				if name == "summary.json" {
+					var raw map[string]any
+					if err := json.Unmarshal(data, &raw); err != nil {
+						t.Fatal(err)
+					}
+					checks := raw["Checks"].([]any)
+					for _, value := range checks {
+						check := value.(map[string]any)
+						if kind == "empty_assertions" {
+							check["Assertions"] = []any{}
+						} else {
+							check["Status"] = "Failed"
+						}
+					}
+					if kind == "empty_assertions" {
+						totals := raw["Totals"].(map[string]any)
+						totals["AssertionsExecuted"] = 0
+						totals["AssertionsPassed"] = 0
+					}
+					data, _ = json.Marshal(raw)
+				}
+				if err := os.WriteFile(filepath.Join(dir, name), data, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			output := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
+			if err := export(optionsFor(nativeDir, dir, output, 1)); err == nil {
+				t.Fatalf("invalid actual execution accepted: %s", kind)
+			}
+		})
+	}
 	t.Run("container_must_not_claim_unmeasured_go", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "docker-test-reports-1-1")
 		if err := os.MkdirAll(dir, 0700); err != nil {
