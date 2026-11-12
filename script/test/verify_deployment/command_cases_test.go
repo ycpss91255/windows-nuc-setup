@@ -217,6 +217,7 @@ func TestDeploymentCases(t *testing.T) {
 		l, q := len(label)*7+12, len(value)*7+12
 		pages[prefix+"go_coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d"><rect width="%d" fill="#555"/><rect width="%d" fill="#4c1"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, l+q, l, q, label, value))
 		pages[prefix+"index.html"] = append(pages[prefix+"index.html"], []byte(`<details><summary>分項量測明細</summary><p>Go 程式敘述覆蓋率：100.0% · 1/1 statements；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式，不等於整體覆蓋率。</p><a href="go_coverage.json">Go JSON</a><a href="go_coverage.out">Go profile</a></details>`)...)
+		pages[prefix+"index.html"] = append(pages[prefix+"index.html"], []byte(`<p>版本 `+tag+` · 提交 <code>`+sha+`</code></p><a href="`+runURL+`">GitHub Actions 執行紀錄</a>`)...)
 		pages[prefix+"summary.md"] = append(pages[prefix+"summary.md"], []byte("\nGo 程式敘述覆蓋率（分項）：100.0%；1/1 statements；全部自有 Go 工具含 CLI，不含 PowerShell 或第三方程式，不等於整體覆蓋率。")...)
 		metadata := filepath.Join(t.TempDir(), "release.json")
 		writeRelease := func(d string) {
@@ -246,6 +247,34 @@ func TestDeploymentCases(t *testing.T) {
 				defer func() { pages[prefix+name] = old }()
 				if e := invoke(tagArgs...); e == nil {
 					t.Fatal("missing page or evidence accepted")
+				}
+			})
+		}
+		for _, kind := range []string{"version", "commit", "run_link", "hidden_version", "hidden_commit", "hidden_run"} {
+			t.Run("page_identity_"+kind, func(t *testing.T) {
+				old := pages[prefix+"index.html"]
+				value := string(old)
+				switch kind {
+				case "version":
+					value = strings.Replace(value, "版本 "+tag, "版本 v9.9.9", 1)
+				case "commit":
+					value = strings.Replace(value, sha, strings.Repeat("b", 40), 1)
+				case "run_link":
+					value = strings.Replace(value, runURL, runURL+"0", 1)
+				case "hidden_version":
+					value = strings.Replace(value, "版本 "+tag, "<!-- 版本 "+tag+" -->", 1)
+				case "hidden_commit":
+					value = strings.Replace(value, "<code>"+sha+"</code>", "<!-- "+sha+" -->", 1)
+				case "hidden_run":
+					value = strings.Replace(value, `<a href="`+runURL+`">GitHub Actions 執行紀錄</a>`, `<!-- <a href="`+runURL+`">run</a> -->`, 1)
+				}
+				if value == string(old) {
+					t.Fatal("mutation did not change page")
+				}
+				pages[prefix+"index.html"] = []byte(value)
+				defer func() { pages[prefix+"index.html"] = old }()
+				if e := invoke(tagArgs...); e == nil {
+					t.Fatal("wrong or hidden page identity accepted")
 				}
 			})
 		}
