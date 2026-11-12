@@ -113,3 +113,16 @@ func TestSyntheticFixtureGitUnderLongTemp(t *testing.T) {
 		t.Fatalf("fixture must keep long path configuration local: %v", err)
 	}
 }
+
+func TestSyntheticFixtureGitUnderDeepRunnerTemp(t *testing.T) {
+	root := t.TempDir()
+	parent := filepath.Join(root, "go_coverage_b6468c74a82746598613f97017db49d9", "cache", "tmp")
+	if err := os.MkdirAll(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestSyntheticFixtureGitUnderLongTemp$", ".")
+	cmd.Env = append(os.Environ(), "TEMP="+parent, "TMP="+parent)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fixture must handle coverage runner TEMP: %v %s", err, out)
+	}
+}
