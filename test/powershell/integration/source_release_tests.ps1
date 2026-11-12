@@ -102,4 +102,20 @@ Refuse {Get-ReleaseNotes v1.2.3 ("## [v1.2.3]`n### Added`n- "+('x'*125001))} '�
 $current=([IO.File]::ReadAllText((Join-Path $root '.version'))).Trim()
 $currentNotes=Get-ReleaseNotes $current ([IO.File]::ReadAllText((Join-Path $root 'doc/changelog/changelog.md')))
 Assert ($currentNotes.Length -gt 0) '本儲存庫 .version 對應非空版本說明'
+function Test-DriverDownloadGuidance([string]$Text,[string]$Version,[string]$AssetName){
+ $section=[regex]::Match($Text,'(?ms)^### 準備獨立驅動包\s*$(.*?)(?=^### |\z)').Groups[1].Value
+ if(-not $section){return $false}
+ $fixed=@([regex]::Matches($section,'windows_driver_nuc8_v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?\.zip')|ForEach-Object {$_.Value})
+ if(@($fixed|Where-Object {$_ -cne $AssetName}).Count){return $false}
+ $releases=@([regex]::Matches($section,'v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?(?=\s+Release)')|ForEach-Object {$_.Value})
+ if(@($releases|Where-Object {$_ -cne $Version}).Count){return $false}
+ return $fixed.Count -gt 0 -or ($section.Contains('windows_driver_nuc8_<version>.zip') -and $section.Contains('version 包含 v'))
+}
+. (Join-Path $root 'script/release/driver_release_library.ps1')
+$currentAssets=@(Get-ReleaseDriverAssets -Path (Join-Path $root 'script/release/driver_release_assets.json') -Version $current)
+Assert ($currentAssets.Count -eq 1) '當前版本有唯一宣告的驅動資產'
+$readme=[IO.File]::ReadAllText((Join-Path $root 'readme.md'))
+Assert (Test-DriverDownloadGuidance $readme $current $currentAssets[0].Name) '驅動下載指引使用當前版或含 v 的版本模板'
+Assert (-not (Test-DriverDownloadGuidance "### 準備獨立驅動包`n下載 v0.0.1 Release 的 windows_driver_nuc8_v0.0.1.zip`n### 下一節`n" $current $currentAssets[0].Name)) '驅動下載區指向其他固定版本必須拒絕'
+Assert (Test-DriverDownloadGuidance "### 準備獨立驅動包`nwindows_driver_nuc8_<version>.zip，version 包含 v`n### 下一節`n" $current $currentAssets[0].Name) '含 v 的版本模板為有效下載指引'
 Write-Host ('ALL PASS: '+$script:count+' release assertions; only temporary fixture repository changed.')
