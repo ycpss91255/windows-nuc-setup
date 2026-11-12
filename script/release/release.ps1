@@ -4,6 +4,14 @@ function Get-ReleaseVersion([string]$Version) {
  if($Version -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$'){throw '版本必須是 vX.Y.Z 或 vX.Y.Z-rcN。'}
  [pscustomobject]@{Version=$Version;Base=($Version -replace '-rc[0-9]+$','');Prerelease=($Version -match '-rc[0-9]+$')}
 }
+function Get-ReleaseReportLink([string]$Version) {
+ $null=Get-ReleaseVersion $Version
+ return ('[此版本測試報表](https://ycpss91255.github.io/windows_setup/versions/'+$Version+'/index.html)')
+}
+function Assert-ReleaseReportLink([string]$Version,[string]$Notes) {
+ $expected=(Get-ReleaseReportLink $Version)+"`n`n"
+ if($Notes -isnot [string] -or -not $Notes.StartsWith($expected,[StringComparison]::Ordinal)){throw '版本說明缺少正確的該版報表入口。'}
+}
 function Get-ReleaseNotes([string]$Version,[string]$Changelog) {
  $info=Get-ReleaseVersion $Version
  $sections=@([regex]::Matches($Changelog,'(?ms)^## (?:\[(?<version>v[^\]\r\n]+)\]|(?<version>v\S+))[^\r\n]*\r?\n(?<body>.*?)(?=^## |\z)'))
