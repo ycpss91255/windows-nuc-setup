@@ -212,7 +212,7 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 			t.Fatal(e)
 		}
 	})
-	for _, kind := range []string{"version", "commit", "run", "attempt", "artifact_names", "output_name", "inside_source", "missing_source", "dirty_source", "missing_report", "extra_file", "container_as_native"} {
+	for _, kind := range []string{"version", "commit", "run", "attempt", "artifact_names", "output_name", "inside_source", "missing_source", "dirty_source", "missing_report", "extra_file", "container_as_native", "native_environment"} {
 		t.Run("invalid_export_"+kind, func(t *testing.T) {
 			output := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
 			o := optionsFor(nativeDir, containerDir, output, 1)
@@ -246,6 +246,19 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 					os.WriteFile(filepath.Join(dir, name), data, 0600)
 				}
 				os.WriteFile(filepath.Join(dir, "secret.txt"), []byte("fixture"), 0600)
+				o.native = dir
+			case "native_environment":
+				dir := filepath.Join(t.TempDir(), "windows-test-reports-1-1")
+				os.MkdirAll(dir, 0700)
+				for name, data := range native {
+					if name == "summary.json" {
+						var raw map[string]any
+						json.Unmarshal(data, &raw)
+						raw["Environment"] = "Linux synthetic"
+						data, _ = json.Marshal(raw)
+					}
+					os.WriteFile(filepath.Join(dir, name), data, 0600)
+				}
 				o.native = dir
 			case "container_as_native":
 				dir := filepath.Join(t.TempDir(), "windows-test-reports-1-1")
