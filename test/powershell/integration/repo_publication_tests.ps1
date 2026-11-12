@@ -53,10 +53,13 @@ function Test-FixtureBundleVerifier {
  $words=@($args)
  $valid=$words[0] -ceq 'verify' -and $words[[Array]::IndexOf($words,'--archive')+1] -ceq $archive -and $words[[Array]::IndexOf($words,'--version')+1] -ceq 'v1.0.0' -and $words[[Array]::IndexOf($words,'--commit')+1] -ceq $identity.Commit -and $words[[Array]::IndexOf($words,'--run-url')+1] -ceq $identity.RunUrl -and $words[[Array]::IndexOf($words,'--run-attempt')+1] -eq 1
  if($words -contains '--output-dir'){
-  $dest=$words[[Array]::IndexOf($words,'--output-dir')+1];New-Item -ItemType Directory (Join-Path $dest 'native'),(Join-Path $dest 'windows_container') -Force|Out-Null
+  $dest=$words[[Array]::IndexOf($words,'--output-dir')+1];$global:fixturePrivateParent=Split-Path -Parent $dest
+  Assert ((Test-Path -LiteralPath $global:fixturePrivateParent -PathType Container) -and @(Get-ChildItem -LiteralPath $global:fixturePrivateParent -Force).Count -eq 0 -and -not (Test-Path -LiteralPath $dest)) '驗證輸出使用自建空白 parent 與尚不存在的 child'
+  New-Item -ItemType Directory (Join-Path $dest 'native'),(Join-Path $dest 'windows_container') -Force|Out-Null
   foreach($name in @('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg','repo_coverage.json','coverage_inventory.json','coverage.xml','go_coverage.json','go_coverage.out','go_coverage.svg')){Copy-Item (Join-Path $public $name) -Destination (Join-Path $dest ('native/'+$name))}
   foreach($name in @('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')){Copy-Item (Join-Path $containerFixture $name) -Destination (Join-Path $dest ('windows_container/'+$name))}
   if($global:fixtureBundleMismatch){[IO.File]::AppendAllText((Join-Path $dest 'native/summary.md'),'different validated report')}
+  if($global:fixtureBundleReparse){New-Item -ItemType Junction -Path (Join-Path $dest 'foreign') -Target $global:fixtureProtectedDirectory -ErrorAction Stop|Out-Null}
  }
  $global:LASTEXITCODE=if($global:fixtureBundleFailure -or -not $valid){1}else{0}
 }
@@ -106,14 +109,17 @@ foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immu
  $global:repoPublicationMode=$mode;$global:repoPublicationPublished=0;$global:repoPublicationCreated=0;$global:repoPublicationNotesApplied=$false;$global:repoPublicationAssets=@()
  Assert ((Get-Command gh).CommandType -eq 'Function') '發布測試必須使用 mock gh'
  $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -ContainerDirectory $containerFixture -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool -ReportArchive $archive -BundleToolPath Test-FixtureBundleVerifier -RunAttempt 1 -RunUrl $identity.RunUrl|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publication error: '+$_.Exception.Message)}
+ Assert (-not (Test-Path -LiteralPath $global:fixturePrivateParent)) ('驗證完成只清理自建目錄 '+$mode)
  Assert ($accepted -eq ($mode -eq 'success')) ('Schema2只發布真完整不可變證據：'+$mode)
  Assert ($global:repoPublicationCreated -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('來源在建立草稿前核對：'+$mode)
  if($mode -ne 'wrong-sha'){Assert ($global:repoPublicationTitle -ceq 'v1.0.0' -and $global:repoPublicationDraft) ('版本標題及草稿先行：'+$mode)}
  Assert ($global:repoPublicationAssets.Count -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('新 Release 只含一個完整報表 ZIP：'+$mode)
  Assert ($global:repoPublicationPublished -eq $(if($mode -in @('bad-digest','wrong-sha')){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
 }
-foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt','verify-failed','different-input')){
- $global:repoPublicationMode='success';$global:repoPublicationCreated=0;$global:repoPublicationPublished=0;$global:fixtureBundleFailure=($invalid -eq 'verify-failed');$global:fixtureBundleMismatch=($invalid -eq 'different-input')
+$global:fixtureProtectedDirectory=Join-Path $fixture 'protected';New-Item -ItemType Directory -Path $global:fixtureProtectedDirectory|Out-Null
+[IO.File]::WriteAllText((Join-Path $global:fixtureProtectedDirectory 'sentinel.txt'),'preserve')
+foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt','verify-failed','different-input','reparse-output')){
+ $global:repoPublicationMode='success';$global:repoPublicationCreated=0;$global:repoPublicationPublished=0;$global:fixtureBundleFailure=($invalid -eq 'verify-failed');$global:fixtureBundleMismatch=($invalid -eq 'different-input');$global:fixtureBundleReparse=($invalid -eq 'reparse-output')
  $argsForPublisher=@{PublicDirectory=$public;ContainerDirectory=$containerFixture;Version='v1.0.0';Commit=$identity.Commit;NotesPath=(Join-Path $public 'summary.md');Repository='example/repo';CoverageToolPath=$tool;ReportArchive=$archive;BundleToolPath='Test-FixtureBundleVerifier';RunAttempt=1;RunUrl=$identity.RunUrl}
  if($invalid -eq 'missing-archive'){$argsForPublisher.ReportArchive=Join-Path $fixture 'missing/windows_setup_report_v1.0.0.zip'}
  if($invalid -eq 'bad-run'){$argsForPublisher.RunUrl='https://github.com/example/repo/actions/runs/2'}
@@ -122,8 +128,9 @@ foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt',
  Assert ((Get-Command gh).CommandType -eq 'Function') '失敗案例必須使用 mock gh'
  Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') @argsForPublisher} ('報表驗證失敗拒絕發布 '+$invalid)
  Assert ($global:repoPublicationCreated -eq 0 -and $global:repoPublicationPublished -eq 0) ('報表驗證失敗沒有建立或發布 '+$invalid)
+ if($invalid -eq 'reparse-output'){Assert ((Test-Path -LiteralPath (Join-Path $global:fixtureProtectedDirectory 'sentinel.txt') -PathType Leaf) -and (Test-Path -LiteralPath $global:fixturePrivateParent -PathType Container)) '清理遇重新解析點時保留自建目錄及外部內容'}
 }
-$global:fixtureBundleFailure=$false;$global:fixtureBundleMismatch=$false
+$global:fixtureBundleFailure=$false;$global:fixtureBundleMismatch=$false;$global:fixtureBundleReparse=$false
 Remove-Item Function:\gh
 function New-LocalEntry {
  $manifestPath=Join-Path $public 'quality-manifest.json'
