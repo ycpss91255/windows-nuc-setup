@@ -16,6 +16,7 @@ type releaseAsset struct {
 }
 type releaseMetadata struct {
 	Tag       string         `json:"tag_name"`
+	URL       string         `json:"html_url"`
 	Draft     *bool          `json:"draft"`
 	Immutable *bool          `json:"immutable"`
 	Assets    []releaseAsset `json:"assets"`
@@ -51,16 +52,18 @@ func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []str
 	if e != nil {
 		return e
 	}
-	var versions []struct{ Version, Status, Path string }
+	var versions []struct{ Version, Status, Path, Commit, ReleaseUrl, Digest, MeasuredAt string }
 	if e = json.Unmarshal(index, &versions); e != nil {
 		return e
 	}
 	count := 0
+	versionStamp := ""
 	prefix := "versions/" + tag + "/"
 	for _, v := range versions {
 		if v.Version == tag {
 			count++
-			if v.Status != "Verified" || v.Path != prefix+"index.html" {
+			versionStamp = v.MeasuredAt
+			if v.Status != "Verified" || v.Path != prefix+"index.html" || v.Commit != sha || release.URL == "" || v.ReleaseUrl != release.URL || v.Digest != assets["quality.json"].Digest {
 				return fmt.Errorf("release listing invalid")
 			}
 		}
@@ -91,7 +94,7 @@ func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []str
 	if e != nil {
 		return e
 	}
-	if report.SchemaVersion != 2 || report.RefType != "Release" || report.RefName != tag || report.Version != tag || !report.Success || report.Totals.UnexecutedSuites != 0 {
+	if report.MeasuredAt == "" || report.MeasuredAt != versionStamp || report.SchemaVersion != 2 || report.RefType != "Release" || report.RefName != tag || report.Version != tag || !report.Success || report.Totals.UnexecutedSuites != 0 {
 		return fmt.Errorf("published release report identity mismatch")
 	}
 	if _, e = a.ValidateRepoCoverageReport(reader, summary, sha, run, true); e != nil {

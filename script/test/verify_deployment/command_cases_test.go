@@ -227,6 +227,11 @@ func TestDeploymentCases(t *testing.T) {
 			if e := os.WriteFile(metadata, b, 0600); e != nil {
 				t.Fatal(e)
 			}
+			var rows []map[string]any
+			if json.Unmarshal(pages["versions.json"], &rows) == nil && len(rows) == 1 && rows[0]["Version"] == tag {
+				rows[0]["Digest"] = fmt.Sprintf("sha256:%x", sum)
+				pages["versions.json"], _ = json.Marshal(rows)
+			}
 		}
 		writeRelease(digest)
 		pages["versions.json"], _ = json.Marshal([]map[string]any{{"Version": tag, "Status": "Verified", "Path": prefix + "index.html", "Commit": sha, "ReleaseUrl": "https://github.com/example/windows_setup/releases/tag/" + tag, "MeasuredAt": "2026-01-01T00:00:00Z", "Digest": fmt.Sprintf("sha256:%x", sha256.Sum256(summary))}})
