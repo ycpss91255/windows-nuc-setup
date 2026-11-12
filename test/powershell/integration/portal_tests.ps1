@@ -74,7 +74,12 @@ $preserved=Get-Content (Join-Path $duplicatePortal 'versions/v1.0.2/summary.json
 Assert ($preserved.Checks[0].Assertions.Count -eq 2) 'both measured assertions remain in immutable evidence'
 $checks[0].Assertions=$savedAssertions
 # Immutable legacy artifacts remain readable, but the current publisher cannot downgrade.
+$script:portalPublisherRemoteCalled=$false
+function gh {$script:portalPublisherRemoteCalled=$true;throw 'unexpected remote call'}
+Assert ((Get-Command gh).CommandType -eq 'Function') '歷史降級測試必須使用 mock gh'
 Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $b.AssetDirectory -Version $b.Version -Commit $b.Commit -NotesPath (Join-Path $b.AssetDirectory 'summary.md') -Repository example/repo} 'legacy發布降級拒絕；完整Schema2發布正反案例見repo_publication_tests'
+Assert (-not $script:portalPublisherRemoteCalled) '歷史降級在任何遠端呼叫前拒絕'
+Remove-Item Function:\gh
 Write-Host ('ALL PASS: '+$count+' portal evidence and comparison assertions; local fixtures only.')
 
 # User-facing conclusions follow real main evidence; JSON keeps machine statuses.

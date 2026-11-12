@@ -103,6 +103,7 @@ Assert ($joined.GoCoverage.Covered -eq 8 -and $joined.RepoCoverage.Result.Covere
 $emptyDrivers=Join-Path $fixture 'no_driver_assets.json';[IO.File]::WriteAllText($emptyDrivers,'{"SchemaVersion":1,"Releases":[]}')
 $global:tagGoPublisherReached=$false
 function gh {$global:tagGoPublisherReached=$true;throw 'LOCAL_GH_BOUNDARY_ONLY'}
+Assert ((Get-Command gh).CommandType -eq 'Function') '本機發布邊界必須使用 mock gh'
 $boundary=$false
 try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $flow.Public -Version v1.2.3 -Commit ('a'*40) -NotesPath (Join-Path $flow.Public 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $emptyDrivers}catch{$boundary=$_.Exception.Message -ceq 'LOCAL_GH_BOUNDARY_ONLY'}finally{Remove-Item Function:\gh}
 Assert ($boundary -and $global:tagGoPublisherReached) 'actual publisher passes local repo and Go verification and stops at a fixture GitHub boundary'
@@ -144,6 +145,7 @@ try{$ErrorActionPreference='Continue';& $gateTool --artifact-dir $gatePublic --s
 Assert ($gateExit -eq 0) 'official requirements CLI accepts fresh schema2 Tag evidence after native Go and repo attachment'
 $global:tagGoPublisherReached=$false
 function gh {$global:tagGoPublisherReached=$true;throw 'LOCAL_TAG_GATE_GH_BOUNDARY_ONLY'}
+Assert ((Get-Command gh).CommandType -eq 'Function') 'Tag 發布邊界必須使用 mock gh'
 $boundary=$false
 try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $gatePublic -Version v1.2.3 -Commit ('a'*40) -NotesPath (Join-Path $gatePublic 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $emptyDrivers}catch{$boundary=$_.Exception.Message -ceq 'LOCAL_TAG_GATE_GH_BOUNDARY_ONLY'}finally{Remove-Item Function:\gh}
 Assert ($boundary -and $global:tagGoPublisherReached) 'fresh Tag report passes official Go gate and strict publisher up to the mocked external boundary'

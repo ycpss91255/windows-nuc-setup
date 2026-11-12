@@ -35,6 +35,7 @@ $legacyDirectory=Join-Path $fixture 'legacy_publish'
 Write-TestReports -Checks $checks -OutputDirectory $legacyDirectory @identity -SchemaVersion 1 -Version v1.0.0 -RefType Release -RefName v1.0.0 -Environment Fixture|Out-Null
 $global:repoPublicationRemoteCalled=$false
 function gh {$global:repoPublicationRemoteCalled=$true;$global:LASTEXITCODE=1;throw 'unexpected remote operation'}
+Assert ((Get-Command gh).CommandType -eq 'Function') '歷史發布負例必須使用 mock gh'
 Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $legacyDirectory -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $legacyDirectory 'summary.md') -Repository example/repo} '本輪publisher不得降級legacy契約'
 Assert (-not $global:repoPublicationRemoteCalled) 'legacy只能讀歷史，發布前禁止遠端操作'
 Remove-Item Function:\gh
@@ -45,6 +46,26 @@ $goProfileText="mode: set`nwindows_setup/script/test/example/value.go:1.1,1.2 8 
 $go=[pscustomobject]@{SchemaVersion=1;Scope='all-owned-go-including-cli';Metric='statements';Covered=8;TotalStatements=10;Percent=80.0;Threshold=80;Commit=$identity.Commit;RunUrl=$identity.RunUrl;MeasuredAt=$identity.MeasuredAt;SourceState='Clean';GoVersion='go1.27.3';Environment='windows/amd64';ProfileSHA256=(Get-FileHash (Join-Path $public 'go_coverage.out')).Hash.ToLowerInvariant();Packages=@('windows_setup/script/test/example')}
 $report|Add-Member -NotePropertyName GoCoverage -NotePropertyValue $go
 Write-SnapshotView $report $public
+$archive=Join-Path $fixture 'windows_setup_report_v1.0.0.zip'
+[IO.File]::WriteAllText($archive,'mock report archive')
+$containerFixture=Join-Path $fixture 'container';New-Item -ItemType Directory $containerFixture|Out-Null
+foreach($name in @('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')){Copy-Item (Join-Path $public $name) -Destination (Join-Path $containerFixture $name)}
+function Test-FixtureBundleVerifier {
+ $words=@($args)
+ $valid=$words[0] -ceq 'verify' -and $words[[Array]::IndexOf($words,'--archive')+1] -ceq $archive -and $words[[Array]::IndexOf($words,'--version')+1] -ceq 'v1.0.0' -and $words[[Array]::IndexOf($words,'--commit')+1] -ceq $identity.Commit -and $words[[Array]::IndexOf($words,'--run-url')+1] -ceq $identity.RunUrl -and $words[[Array]::IndexOf($words,'--run-attempt')+1] -eq 1
+ if($words -contains '--output-dir'){
+  $dest=$words[[Array]::IndexOf($words,'--output-dir')+1];$global:fixturePrivateParent=Split-Path -Parent $dest
+  Assert ((Test-Path -LiteralPath $global:fixturePrivateParent -PathType Container) -and @(Get-ChildItem -LiteralPath $global:fixturePrivateParent -Force).Count -eq 0 -and -not (Test-Path -LiteralPath $dest)) '驗證輸出使用自建空白 parent 與尚不存在的 child'
+  New-Item -ItemType Directory (Join-Path $dest 'native'),(Join-Path $dest 'windows_container') -Force|Out-Null
+  foreach($name in @('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg','repo_coverage.json','coverage_inventory.json','coverage.xml','go_coverage.json','go_coverage.out','go_coverage.svg')){Copy-Item (Join-Path $public $name) -Destination (Join-Path $dest ('native/'+$name))}
+  foreach($name in @('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')){Copy-Item (Join-Path $containerFixture $name) -Destination (Join-Path $dest ('windows_container/'+$name))}
+  if($global:fixtureBundleMismatch){[IO.File]::AppendAllText((Join-Path $dest 'native/summary.md'),'different validated report')}
+  if($global:fixtureBundleReparse){New-Item -ItemType Junction -Path (Join-Path $dest 'foreign') -Target $global:fixtureProtectedDirectory -ErrorAction Stop|Out-Null}
+  $digest=if($global:fixtureBundleReceiptMismatch){'f'*64}else{(Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant()}
+  @{archive_sha256=$digest;archive_size=(Get-Item -LiteralPath $archive).Length}|ConvertTo-Json -Compress|Set-Content -LiteralPath (Join-Path $dest 'verified.json') -Encoding UTF8
+ }
+ $global:LASTEXITCODE=if($global:fixtureBundleFailure -or -not $valid){1}else{0}
+}
 function gh {
  $words=@($args);$global:LASTEXITCODE=0
  if($words[0] -eq 'api' -and $words -contains '--paginate'){
@@ -56,7 +77,7 @@ function gh {
   $global:repoPublicationDraft=$words -contains '--draft'
   $global:repoPublicationCreated++
   $global:repoPublicationBody=[IO.File]::ReadAllText((Join-Path $public 'summary.md'))
-  $global:repoPublicationAssets=@($words|Where-Object {Test-Path -LiteralPath ([string]$_) -PathType Leaf}|Where-Object {[IO.Path]::GetExtension($_) -ne '.md' -or [IO.Path]::GetFileName($_) -eq 'summary.md'}|Select-Object -Unique|ForEach-Object {@{name=[IO.Path]::GetFileName($_);size=(Get-Item -LiteralPath $_).Length;digest=('sha256:'+(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant())}})
+  $global:repoPublicationAssets=@($words|Where-Object {Test-Path -LiteralPath ([string]$_) -PathType Leaf}|Where-Object {[IO.Path]::GetExtension($_) -eq '.zip'}|Select-Object -Unique|ForEach-Object {@{name=[IO.Path]::GetFileName($_);size=(Get-Item -LiteralPath $_).Length;digest=('sha256:'+(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant())}})
   return
  }
  if($words[0] -eq 'api' -and $words[1] -eq 'repos/example/repo/releases/42' -and $words -notcontains '--method'){
@@ -89,13 +110,30 @@ function gh {
 }
 foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immutable','wrong-sha')){
  $global:repoPublicationMode=$mode;$global:repoPublicationPublished=0;$global:repoPublicationCreated=0;$global:repoPublicationNotesApplied=$false;$global:repoPublicationAssets=@()
- $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publication error: '+$_.Exception.Message)}
+ Assert ((Get-Command gh).CommandType -eq 'Function') '發布測試必須使用 mock gh'
+ $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -ContainerDirectory $containerFixture -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool -ReportArchive $archive -BundleToolPath Test-FixtureBundleVerifier -RunAttempt 1 -RunUrl $identity.RunUrl|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publication error: '+$_.Exception.Message)}
+ Assert (-not (Test-Path -LiteralPath $global:fixturePrivateParent)) ('驗證完成只清理自建目錄 '+$mode)
  Assert ($accepted -eq ($mode -eq 'success')) ('Schema2只發布真完整不可變證據：'+$mode)
  Assert ($global:repoPublicationCreated -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('來源在建立草稿前核對：'+$mode)
  if($mode -ne 'wrong-sha'){Assert ($global:repoPublicationTitle -ceq 'v1.0.0' -and $global:repoPublicationDraft) ('版本標題及草稿先行：'+$mode)}
- Assert ($global:repoPublicationAssets.Count -eq $(if($mode -eq 'wrong-sha'){0}else{12})) ('含Go原始檔的新Release精確12附件：'+$mode)
+ Assert ($global:repoPublicationAssets.Count -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('新 Release 只含一個完整報表 ZIP：'+$mode)
  Assert ($global:repoPublicationPublished -eq $(if($mode -in @('bad-digest','wrong-sha')){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
 }
+$global:fixtureProtectedDirectory=Join-Path $fixture 'protected';New-Item -ItemType Directory -Path $global:fixtureProtectedDirectory|Out-Null
+[IO.File]::WriteAllText((Join-Path $global:fixtureProtectedDirectory 'sentinel.txt'),'preserve')
+foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt','verify-failed','different-input','reparse-output','different-archive')){
+ $global:repoPublicationMode='success';$global:repoPublicationCreated=0;$global:repoPublicationPublished=0;$global:fixtureBundleFailure=($invalid -eq 'verify-failed');$global:fixtureBundleMismatch=($invalid -eq 'different-input');$global:fixtureBundleReparse=($invalid -eq 'reparse-output');$global:fixtureBundleReceiptMismatch=($invalid -eq 'different-archive')
+ $argsForPublisher=@{PublicDirectory=$public;ContainerDirectory=$containerFixture;Version='v1.0.0';Commit=$identity.Commit;NotesPath=(Join-Path $public 'summary.md');Repository='example/repo';CoverageToolPath=$tool;ReportArchive=$archive;BundleToolPath='Test-FixtureBundleVerifier';RunAttempt=1;RunUrl=$identity.RunUrl}
+ if($invalid -eq 'missing-archive'){$argsForPublisher.ReportArchive=Join-Path $fixture 'missing/windows_setup_report_v1.0.0.zip'}
+ if($invalid -eq 'bad-run'){$argsForPublisher.RunUrl='https://github.com/example/repo/actions/runs/2'}
+ if($invalid -eq 'bad-attempt'){$argsForPublisher.RunAttempt=0}
+ if($invalid -eq 'wrong-attempt'){$argsForPublisher.RunAttempt=2}
+ Assert ((Get-Command gh).CommandType -eq 'Function') '失敗案例必須使用 mock gh'
+ Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') @argsForPublisher} ('報表驗證失敗拒絕發布 '+$invalid)
+ Assert ($global:repoPublicationCreated -eq 0 -and $global:repoPublicationPublished -eq 0) ('報表驗證失敗沒有建立或發布 '+$invalid)
+ if($invalid -eq 'reparse-output'){Assert ((Test-Path -LiteralPath (Join-Path $global:fixtureProtectedDirectory 'sentinel.txt') -PathType Leaf) -and (Test-Path -LiteralPath $global:fixturePrivateParent -PathType Container)) '清理遇重新解析點時保留自建目錄及外部內容'}
+}
+$global:fixtureBundleFailure=$false;$global:fixtureBundleMismatch=$false;$global:fixtureBundleReparse=$false;$global:fixtureBundleReceiptMismatch=$false
 Remove-Item Function:\gh
 function New-LocalEntry {
  $manifestPath=Join-Path $public 'quality-manifest.json'
@@ -148,6 +186,7 @@ Refuse {& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catal
 $lowReport.RefType='Release';$lowReport.RefName='v1.0.0';Write-SnapshotView $lowReport $lowDirectory
 $global:repoPublicationRemoteCalled=$false
 function gh {$global:repoPublicationRemoteCalled=$true;throw 'unexpected remote call'}
+Assert ((Get-Command gh).CommandType -eq 'Function') '覆蓋率負例必須使用 mock gh'
 Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $lowDirectory -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $lowDirectory 'summary.md') -Repository example/repo -CoverageToolPath $tool} '新版publisher拒絕完整但低於八成'
 Assert (-not $global:repoPublicationRemoteCalled) '八成門檻失敗在任何遠端操作前停止'
 Remove-Item Function:\gh
