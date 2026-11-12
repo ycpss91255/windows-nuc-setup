@@ -31,7 +31,8 @@ var containerNames = []string{"index.html", "summary.json", "summary.md", "junit
 
 const provenanceNote = "CI selects exact run and attempt artifacts; this manifest records supplied context and is not an independent provenance attestation."
 const maxFile = 64 << 20
-const maxArchive = 256 << 20
+
+var maxArchive = 256 << 20
 
 type fileRecord struct {
 	Path   string `json:"path"`
@@ -478,7 +479,7 @@ func verify(args []string) error {
 	if e != nil {
 		return e
 	}
-	if !st.Mode().IsRegular() || st.Size() > maxArchive {
+	if !st.Mode().IsRegular() || st.Size() > int64(maxArchive) {
 		return errors.New("invalid archive file")
 	}
 	z, e := zip.OpenReader(archive)
@@ -506,7 +507,7 @@ func verify(args []string) error {
 		}
 		seen[key] = true
 		total += entry.UncompressedSize64
-		if total > maxArchive {
+		if total > uint64(maxArchive) {
 			return errors.New("archive expanded size limit")
 		}
 		r, e := entry.Open()

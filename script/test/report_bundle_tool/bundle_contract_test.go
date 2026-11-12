@@ -179,6 +179,24 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	optionsFor := func(nativePath, containerPath, outputPath string, attempt int) options {
 		return options{native: nativePath, container: containerPath, source: source, version: version, commit: sha, run: runURL, attempt: attempt, output: outputPath}
 	}
+	t.Run("reject_expanded_archive_over_limit", func(t *testing.T) {
+		oldLimit := maxArchive
+		defer func() { maxArchive = oldLimit }()
+		total := 0
+		for _, report := range []map[string][]byte{native, container} {
+			for _, data := range report {
+				total += len(data)
+			}
+		}
+		maxArchive = total - 1
+		output := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
+		if err := export(optionsFor(nativeDir, containerDir, output, 1)); err == nil {
+			t.Fatal("export accepted validated reports whose expanded bytes exceed the verify limit")
+		}
+		if _, err := os.Stat(output); !os.IsNotExist(err) {
+			t.Fatal("failed export must not leave an archive")
+		}
+	})
 	inProcess := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
 	if err := export(optionsFor(nativeDir, containerDir, inProcess, 1)); err != nil {
 		t.Fatalf("in-process export: %v", err)
