@@ -31,6 +31,10 @@ $safeAccepted=$true;try{$safeOutput=@(Write-CIFailureDiagnostics -ReportDirector
 Assert ($safeAccepted -and $safeOutput.Contains('fixture_export:go_fixture_failed')) '原生 All 只呈現合成工件固定失敗代碼'
 Assert (-not $safeOutput.Contains('PRIVATE-CREDENTIAL-SENTINEL') -and -not $safeOutput.Contains('C:\Users') -and -not $safeOutput.Contains('unknown')) '原生 All 不公開原始私人日誌或未知代碼'
 Assert (([regex]::Matches($safeOutput,'fixture_export:go_fixture_failed')).Count -eq 1) '重複固定代碼輸出有界'
+foreach($alias in @('INTEGRATION.REPORT_BUNDLE_PUBLICATION','Integration.Report_Bundle_Publication')){
+ $caseOutput=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @($alias)) -join "`n"
+ Assert ($caseOutput.Contains('fixture_export:go_fixture_failed') -and -not $caseOutput.Contains('PRIVATE-CREDENTIAL-SENTINEL') -and -not $caseOutput.Contains('C:\Users') -and -not $caseOutput.Contains('unknown')) ('大小寫變體仍僅輸出固定安全代碼 '+$alias)
+}
 [IO.File]::WriteAllText((Join-Path $temp 'Integration.report_bundle_publication.log'),('x'*(4MB+1)))
 $oversized=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.report_bundle_publication')) -join "`n"
 Assert ($oversized.Contains('unavailable') -and $oversized.Length -lt 256) '大型私有日誌不讀取或公開'
