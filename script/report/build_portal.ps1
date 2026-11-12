@@ -37,7 +37,7 @@ foreach($entry in $catalog){
   [IO.File]::WriteAllText((Join-Path $dir 'index.html'),('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>'+ $safeVersion +' · 測試紀錄</title><h1>'+ $safeVersion +'</h1><p>'+ $safeReason +'</p><p>這個版本未保存可用的測試紀錄，無法判斷當時的測試結果。</p><a href="../../index.html">版本索引</a></html>'),$utf8)
  }
  $versions.Add([pscustomobject]@{Version=$entry.Version;Commit=$entry.Commit;Status=$state;Reason=$reason;Path=('versions/'+$entry.Version+'/index.html');ReleaseUrl=$entry.ReleaseUrl;MeasuredAt=$(if($evidence){$evidence.Snapshot.MeasuredAt}else{'Unknown'});Digest=$(if($evidence -and $evidence.PSObject.Properties['SnapshotDigest']){$evidence.SnapshotDigest}else{$entry.SnapshotDigest});ArchiveDigest=$(if($evidence -and $evidence.PSObject.Properties['ArchiveDigest']){$evidence.ArchiveDigest}else{''})})
- } finally {if($evidence -and $evidence.PSObject.Properties['TemporaryParent']){Remove-PortalOwnedTemporaryDirectory $evidence.TemporaryParent}}
+ } finally {if($evidence -and $evidence.PSObject.Properties['TemporaryOwner']){Remove-ReportOwnedTemp -Handle $evidence.TemporaryOwner}}
 }
 $mainStatus='Unknown'
  if(-not $Preview -and (-not $MainSnapshotPath -or -not(Test-Path -LiteralPath $MainSnapshotPath -PathType Leaf))){throw '正式Pages需要本次完整報告。'}
