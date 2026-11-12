@@ -78,6 +78,16 @@ try {
  & (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $mixedInputs.CatalogPath -OutputDirectory (Join-Path $parent 'mixed-pages')|Out-Null
  $mixed=Get-Content -LiteralPath (Join-Path $parent 'mixed-pages/versions.json') -Raw -Encoding UTF8|ConvertFrom-Json
  Assert ($mixed.Status -ceq 'Invalid') '下載時新舊附件混合必須 Invalid，不可回退'
+ $mockAssets=@(@{name=([IO.Path]::GetFileName($entry.ArchivePath)+'.bak');digest=$entry.ArchiveDigest;size=$entry.ArchiveSize},@{name='quality.json';digest=('sha256:'+('a'*64));size=10})
+ $badNameInputs=& (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository $env:GH_REPO -OutputDirectory (Join-Path $parent 'bad-name-inputs')
+ & (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $badNameInputs.CatalogPath -OutputDirectory (Join-Path $parent 'bad-name-pages')|Out-Null
+ $badName=Get-Content -LiteralPath (Join-Path $parent 'bad-name-pages/versions.json') -Raw -Encoding UTF8|ConvertFrom-Json
+ Assert ($badName.Status -ceq 'Invalid') '前綴相同但名稱錯誤不得退回 raw'
+ $mockAssets=@(@{name=[IO.Path]::GetFileName($entry.ArchivePath);digest=$entry.ArchiveDigest;size=$entry.ArchiveSize},@{name='summary.json';digest=('sha256:'+('a'*64));size=10})
+ $summaryInputs=& (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository $env:GH_REPO -OutputDirectory (Join-Path $parent 'summary-inputs')
+ & (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $summaryInputs.CatalogPath -OutputDirectory (Join-Path $parent 'summary-pages')|Out-Null
+ $summaryMixed=Get-Content -LiteralPath (Join-Path $parent 'summary-pages/versions.json') -Raw -Encoding UTF8|ConvertFrom-Json
+ Assert ($summaryMixed.Status -ceq 'Invalid') 'summary.json 與 ZIP 混合必須 Invalid'
  $mockAssets=@($mockAssets[0]);$mockCommit=('a'*40)
  Reject {& (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository $env:GH_REPO -OutputDirectory (Join-Path $parent 'wrong-tag-inputs')} 'Git 物件與可信 tag 提交不同必須拒絕'
 } finally {Set-Location $oldLocation;$env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR=$oldFixture;$env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL=$oldTool;$env:GH_REPO=$oldRepo}
