@@ -210,8 +210,13 @@ func TestConsumerFixtureBoundariesAndVerifier(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ps := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", `$ErrorActionPreference='Stop'; . $env:FIXTURE_REPORT_SCRIPT; foreach($name in @('windows-test-reports-1-1','docker-test-reports-1-1')) { $r=Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $env:FIXTURE_ROOT ($name+'/summary.json')) | ConvertFrom-Json; Assert-TestReportSnapshot -Report $r -Release }`)
-		ps.Env = append(os.Environ(), "FIXTURE_REPORT_SCRIPT="+reportScript, "FIXTURE_ROOT="+root)
+		coverageTool := filepath.Join(t.TempDir(), "coverage.exe")
+		buildCoverage := exec.Command("go", "build", "-o", coverageTool, "../repo_coverage_tool")
+		if out, err := buildCoverage.CombinedOutput(); err != nil {
+			t.Fatalf("build coverage tool: %v %s", err, out)
+		}
+		ps := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", `$ErrorActionPreference='Stop'; . $env:FIXTURE_REPORT_SCRIPT; foreach($name in @('windows-test-reports-1-1','docker-test-reports-1-1')) { $r=Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $env:FIXTURE_ROOT ($name+'/summary.json')) | ConvertFrom-Json; Assert-TestReportSnapshot -Report $r -Release }; $dir=Join-Path $env:FIXTURE_ROOT 'windows-test-reports-1-1'; $r=Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $dir 'summary.json') | ConvertFrom-Json; Assert-RepoCoverageArtifacts -Report $r -Directory $dir -CoverageToolPath $env:FIXTURE_COVERAGE_TOOL -SourceRoot (Join-Path $env:FIXTURE_ROOT 'source') -RequireComplete`)
+		ps.Env = append(os.Environ(), "FIXTURE_REPORT_SCRIPT="+reportScript, "FIXTURE_ROOT="+root, "FIXTURE_COVERAGE_TOOL="+coverageTool)
 		if out, err := ps.CombinedOutput(); err != nil {
 			t.Fatalf("PowerShell report contract: %v\n%s", err, out)
 		}
