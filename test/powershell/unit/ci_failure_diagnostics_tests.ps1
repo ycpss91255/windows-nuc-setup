@@ -31,5 +31,8 @@ $safeAccepted=$true;try{$safeOutput=@(Write-CIFailureDiagnostics -ReportDirector
 Assert ($safeAccepted -and $safeOutput.Contains('fixture_export:go_fixture_failed')) '原生 All 只呈現合成工件固定失敗代碼'
 Assert (-not $safeOutput.Contains('PRIVATE-CREDENTIAL-SENTINEL') -and -not $safeOutput.Contains('C:\Users') -and -not $safeOutput.Contains('unknown')) '原生 All 不公開原始私人日誌或未知代碼'
 Assert (([regex]::Matches($safeOutput,'fixture_export:go_fixture_failed')).Count -eq 1) '重複固定代碼輸出有界'
+[IO.File]::WriteAllText((Join-Path $temp 'Integration.report_bundle_publication.log'),('x'*(4MB+1)))
+$oversized=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.report_bundle_publication')) -join "`n"
+Assert ($oversized.Contains('unavailable') -and $oversized.Length -lt 256) '大型私有日誌不讀取或公開'
 $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
 Assert ($workflow.Contains("'Integration.report_bundle_publication'")) '原生 All 失敗流程接入安全合成工件診斷'
