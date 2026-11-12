@@ -56,6 +56,16 @@ $expected='[此版本測試報表](https://ycpss91255.github.io/windows_setup/ve
 $actual=[IO.File]::ReadAllText($result.NotesPath)
 Assert ($actual -ceq $expected) '正式版本必須連結自身版本報表並原樣保留說明'
 Assert ($actual -cne $expected.Replace('/versions/v1.2.3/','/versions/v1.2.4/') -and $actual -cne $expected.Replace('/versions/v1.2.3/index.html','/main/index.html')) '錯版及 main 連結不能通過完整內容契約'
+Assert-ReleaseReportLink -Version v1.2.3 -Notes $actual
+Assert $true '正確版本入口通過發布前驗證'
+Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes $original} '缺少版本入口不得發布'
+Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes ($expected.Replace('/versions/v1.2.3/','/versions/v1.2.4/'))} '錯版入口不得發布'
+Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes ($expected.Replace('/versions/v1.2.3/index.html','/main/index.html'))} 'main 入口不得代替該版報表'
+$workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
+$releaseJob=[regex]::Match($workflow,'(?ms)^  release:\s*$(.*?)(?=^  [a-z][a-z-]*:|\z)').Groups[1].Value
+$builderPos=$releaseJob.IndexOf('build_source_release.ps1');$guardPos=$releaseJob.IndexOf('Assert-ReleaseReportLink');$publishPos=$releaseJob.IndexOf('publish_quality_release.ps1')
+Assert ($builderPos -ge 0 -and $guardPos -gt $builderPos -and $publishPos -gt $guardPos -and $releaseJob.Contains('-Version $env:RELEASE_TAG')) 'CD 先產說明、按本次標籤核對入口後才發布'
+
 Assert (@(Get-ChildItem (Join-Path $fixture 'notes')).Count -eq 1) '只輸出說明，不複製 GitHub 來源 ZIP'
 Assert (-not $result.Prerelease) '正式版本分類正確'
 Assert ((Get-ReleaseVersion 'v1.2.3-rc2').Prerelease) 'RC 分類為預覽版本'
