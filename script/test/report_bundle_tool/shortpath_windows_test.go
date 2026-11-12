@@ -86,3 +86,16 @@ func TestOutputParentRejectsNonDirectory(t *testing.T) {
 		t.Fatal("non-directory parent changed")
 	}
 }
+func TestLongTemp(t *testing.T) {
+	root := t.TempDir()
+	long := filepath.Join(root, "windows_ci_temp_parent_with_long_account_name_0123456789")
+	if err := os.Mkdir(long, 0700); err != nil {
+		t.Fatal(err)
+	}
+	short := shortTestPath(t, long)
+	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestSyntheticFixtureAcceptsOrdinaryShortParent$", ".")
+	cmd.Env = append(os.Environ(), "TEMP="+short, "TMP="+short)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("8.3 fixture under longer TEMP must work: %v %s", err, out)
+	}
+}
