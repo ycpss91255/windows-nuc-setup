@@ -102,7 +102,29 @@ func TestLongTemp(t *testing.T) {
 
 func TestSyntheticFixtureGitUnderLongTemp(t *testing.T) {
 	root := t.TempDir()
-	source := filepath.Join(root, "fixture_long_path_segment_0123456789", "fixture_long_path_segment_0123456789", "fixture_long_path_segment_0123456789", "source")
+	// Keep Git's working directory below MAX_PATH while its object files exceed it.
+	const sourceLength = 215
+	input, err := syscall.UTF16PtrFromString(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buffer := make([]uint16, 32768)
+	n, _, callErr := syscall.NewLazyDLL("kernel32.dll").NewProc("GetLongPathNameW").Call(uintptr(unsafe.Pointer(input)), uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))
+	if n == 0 || n >= uintptr(len(buffer)) {
+		t.Fatalf("resolve fixture TEMP path: %v", callErr)
+	}
+	root = syscall.UTF16ToString(buffer[:n])
+	rootUnits := len(syscall.StringToUTF16(root)) - 1
+	padding := sourceLength - rootUnits - len(string(filepath.Separator)) - len(string(filepath.Separator)+"source")
+	if padding < 1 {
+		t.Fatalf("fixture TEMP parent too long for bounded Git working directory: %d", rootUnits)
+	}
+	source := filepath.Join(root, strings.Repeat("x", padding), "source")
+	objectPath := filepath.Join(source, ".git", "objects", "12", strings.Repeat("a", 38))
+	sourceUnits, objectUnits := len(syscall.StringToUTF16(source))-1, len(syscall.StringToUTF16(objectPath))-1
+	if sourceUnits >= 260 || objectUnits <= 260 {
+		t.Fatalf("fixture paths do not exercise bounded cwd and long object: %d, %d", sourceUnits, objectUnits)
+	}
 	if err := os.MkdirAll(source, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -111,5 +133,22 @@ func TestSyntheticFixtureGitUnderLongTemp(t *testing.T) {
 	out, err := cmd.Output()
 	if err != nil || strings.TrimSpace(string(out)) != "true" {
 		t.Fatalf("fixture must keep long path configuration local: %v", err)
+	}
+}
+
+func TestSyntheticFixtureGitUnderDeepRunnerTemp(t *testing.T) {
+	root, err := os.MkdirTemp("", "runner-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	parent := filepath.Join(root, "go_coverage_b6468c74a82746598613f97017db49d9", "cache", "tmp")
+	if err := os.MkdirAll(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestSyntheticFixtureGitUnderLongTemp$", ".")
+	cmd.Env = append(os.Environ(), "TEMP="+parent, "TMP="+parent)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fixture must handle coverage runner TEMP: %v %s", err, out)
 	}
 }
