@@ -283,9 +283,123 @@ func export(o options) error {
 	ok = true
 	return nil
 }
+func verify(args []string) error {
+	var o options
+	f := flag.NewFlagSet("verify", flag.ContinueOnError)
+	f.SetOutput(io.Discard)
+	var archive string
+	f.StringVar(&archive, "archive", "", "")
+	f.StringVar(&o.source, "source-root", "", "")
+	f.StringVar(&o.version, "version", "", "")
+	f.StringVar(&o.commit, "commit", "", "")
+	f.StringVar(&o.run, "run-url", "", "")
+	f.IntVar(&o.attempt, "run-attempt", 0, "")
+	if e := f.Parse(args); e != nil {
+		return e
+	}
+	if f.NArg() != 0 || archive == "" || o.source == "" {
+		return errors.New("missing verify input")
+	}
+	if _, e := validateIdentity(o); e != nil {
+		return e
+	}
+	if e := sourceClean(o); e != nil {
+		return e
+	}
+	st, e := os.Lstat(archive)
+	if e != nil {
+		return e
+	}
+	if !st.Mode().IsRegular() || st.Size() > maxArchive {
+		return errors.New("invalid archive file")
+	}
+	z, e := zip.OpenReader(archive)
+	if e != nil {
+		return e
+	}
+	defer z.Close()
+	allowed := map[string]bool{"index.html": true, "report_scope.md": true, "manifest.json": true}
+	for _, n := range nativeNames {
+		allowed["native/"+n] = true
+	}
+	for _, n := range containerNames {
+		allowed["windows_container/"+n] = true
+	}
+	if len(z.File) != len(allowed) {
+		return errors.New("archive entry count mismatch")
+	}
+	files := map[string][]byte{}
+	seen := map[string]bool{}
+	var total uint64
+	for _, entry := range z.File {
+		key := strings.ToLower(entry.Name)
+		if !allowed[entry.Name] || seen[key] || !entry.Mode().IsRegular() || entry.UncompressedSize64 > maxFile {
+			return errors.New("invalid archive entry")
+		}
+		seen[key] = true
+		total += entry.UncompressedSize64
+		if total > maxArchive {
+			return errors.New("archive expanded size limit")
+		}
+		r, e := entry.Open()
+		if e != nil {
+			return e
+		}
+		data, e := io.ReadAll(io.LimitReader(r, maxFile+1))
+		closeErr := r.Close()
+		if e != nil {
+			return e
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		if len(data) > maxFile || uint64(len(data)) != entry.UncompressedSize64 {
+			return errors.New("archive entry size mismatch")
+		}
+		files[entry.Name] = data
+	}
+	var m bundleManifest
+	dec := json.NewDecoder(strings.NewReader(string(files["manifest.json"])))
+	dec.DisallowUnknownFields()
+	if e = dec.Decode(&m); e != nil {
+		return e
+	}
+	if e = dec.Decode(new(any)); e != io.EOF {
+		return errors.New("trailing manifest data")
+	}
+	if m.SchemaVersion != 1 || m.Version != o.version || m.Commit != o.commit || m.RunURL != o.run || m.RunAttempt != o.attempt || m.Provenance != provenanceNote || len(m.Files) != len(allowed)-1 {
+		return errors.New("manifest identity mismatch")
+	}
+	manifestSeen := map[string]bool{}
+	for _, item := range m.Files {
+		data, ok := files[item.Path]
+		if !ok || item.Path == "manifest.json" || manifestSeen[item.Path] {
+			return errors.New("invalid manifest file entry")
+		}
+		manifestSeen[item.Path] = true
+		sum := sha256.Sum256(data)
+		if item.Size != int64(len(data)) || item.SHA256 != hex.EncodeToString(sum[:]) {
+			return errors.New("manifest digest or size mismatch")
+		}
+	}
+	native, container := map[string][]byte{}, map[string][]byte{}
+	for _, n := range nativeNames {
+		native[n] = files["native/"+n]
+	}
+	for _, n := range containerNames {
+		container[n] = files["windows_container/"+n]
+	}
+	return validateReports(o, native, container)
+}
 func run() error {
-	if len(os.Args) < 2 || os.Args[1] != "export" {
-		return errors.New("expected export command")
+	if len(os.Args) < 2 {
+		return errors.New("expected export or verify command")
+	}
+	if os.Args[1] == "verify" {
+		return verify(os.Args[2:])
+	}
+	if os.Args[1] != "export" {
+		return errors.New("expected export or verify command")
 	}
 	o, e := parseOptions(os.Args[2:])
 	if e != nil {
