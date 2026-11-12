@@ -20,6 +20,11 @@ function MakeEvidence([string]$Version,[string]$SHA,[string]$OldHtml){
 }
 $a=MakeEvidence 'v1.0.0' ('a'*40) '<!doctype html><meta charset="utf-8"><h1>old renderer evidence</h1>'
 $b=MakeEvidence 'v1.0.1' ('b'*40) ''
+$mixed=$a | Select-Object *
+$mixed | Add-Member -NotePropertyName ArchivePath -NotePropertyValue 'present.zip'
+$mixed | Add-Member -NotePropertyName ArchiveDigest -NotePropertyValue ('sha256:'+('a'*64))
+$mixed | Add-Member -NotePropertyName ArchiveSize -NotePropertyValue 42
+Refuse {Test-PortalReleaseEvidence $mixed} 'mixed ZIP and raw evidence must not fall back to raw'
 $valid=Test-PortalReleaseEvidence $a
 Assert ($valid.Snapshot.MeasuredAt -eq '2026-11-07T00:00:00Z') 'release measurement time remains original'
 $old=$a.Commit;$a.Commit='c'*40;Refuse {Test-PortalReleaseEvidence $a} 'wrong tag SHA rejects evidence';$a.Commit=$old
