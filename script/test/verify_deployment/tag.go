@@ -15,6 +15,12 @@ type releaseAsset struct {
 	Digest string `json:"digest"`
 	Size   int64  `json:"size"`
 }
+type verifiedBundle struct {
+	Summary       []byte
+	Profile       []byte
+	ArchiveDigest string
+}
+
 type releaseMetadata struct {
 	Tag       string         `json:"tag_name"`
 	URL       string         `json:"html_url"`
@@ -23,7 +29,7 @@ type releaseMetadata struct {
 	Assets    []releaseAsset `json:"assets"`
 }
 
-func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []string) error {
+func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []string, bundle *verifiedBundle) error {
 	if !regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$`).MatchString(tag) {
 		return fmt.Errorf("invalid release tag")
 	}
@@ -35,6 +41,13 @@ func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []str
 		return fmt.Errorf("release identity or immutable state mismatch")
 	}
 	assets := map[string]releaseAsset{}
+	format, err := classifyReleaseEvidence(release.Assets, tag)
+	if err != nil {
+		return err
+	}
+	if (format == "bundle") != (bundle != nil) {
+		return fmt.Errorf("release evidence format mismatch")
+	}
 	for _, v := range release.Assets {
 		if v.Name == "quality.json" || v.Name == "go_coverage.out" {
 			if _, ok := assets[v.Name]; ok {
@@ -42,6 +55,10 @@ func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []str
 			}
 			assets[v.Name] = v
 		}
+	}
+	if bundle != nil {
+		assets["quality.json"] = assetFromBytes("quality.json", bundle.Summary)
+		assets["go_coverage.out"] = assetFromBytes("go_coverage.out", bundle.Profile)
 	}
 	for _, n := range []string{"quality.json", "go_coverage.out"} {
 		v, ok := assets[n]
@@ -53,7 +70,7 @@ func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []str
 	if e != nil {
 		return e
 	}
-	var versions []struct{ Version, Status, Path, Commit, ReleaseUrl, Digest, MeasuredAt string }
+	var versions []struct{ Version, Status, Path, Commit, ReleaseUrl, Digest, ArchiveDigest, MeasuredAt string }
 	if e = json.Unmarshal(index, &versions); e != nil {
 		return e
 	}
@@ -64,6 +81,9 @@ func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []str
 		if v.Version == tag {
 			count++
 			versionStamp = v.MeasuredAt
+			if bundle != nil && v.ArchiveDigest != bundle.ArchiveDigest {
+				return fmt.Errorf("release archive digest mismatch")
+			}
 			if v.Status != "Verified" || v.Path != prefix+"index.html" || v.Commit != sha || release.URL == "" || v.ReleaseUrl != release.URL || v.Digest != assets["quality.json"].Digest {
 				return fmt.Errorf("release listing invalid")
 			}
