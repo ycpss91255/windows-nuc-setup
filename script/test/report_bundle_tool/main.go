@@ -210,6 +210,19 @@ func validateReports(o options, native, container map[string][]byte) error {
 			if check.Layer != "Static" && check.Layer != "Unit" && check.Layer != "Integration" {
 				return errors.New("unexpected report scope")
 			}
+			if check.Name == "" || !check.Executed || check.Passed == nil || !*check.Passed || check.Status != "Passed" {
+				return errors.New("report execution state mismatch")
+			}
+			if check.Layer == "Unit" || check.Layer == "Integration" {
+				if len(check.Assertions) == 0 {
+					return errors.New("executed test suite has no assertions")
+				}
+				for _, assertion := range check.Assertions {
+					if assertion.Name == "" || assertion.Passed == nil || !*assertion.Passed {
+						return errors.New("test assertion mismatch")
+					}
+				}
+			}
 		}
 		if i == 1 && (r.Coverage != "NotMeasured" || r.RepoCoverage != nil) {
 			return errors.New("container coverage must remain unmeasured")
