@@ -404,7 +404,7 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if err := verifyArchive(out, "1"); err != nil {
 		t.Fatalf("valid archive must verify: %v", err)
 	}
-	for _, kind := range []string{"tampered", "missing", "extra", "traversal", "duplicate", "wrong_attempt", "rehashed_scope", "rehashed_index", "rehashed_summary", "duplicate_manifest_key"} {
+	for _, kind := range []string{"tampered", "missing", "extra", "traversal", "duplicate", "wrong_attempt", "rehashed_scope", "rehashed_index", "rehashed_summary", "duplicate_manifest_key", "duplicate_manifest_case"} {
 		t.Run(kind, func(t *testing.T) {
 			if kind == "wrong_attempt" {
 				if err := verifyArchive(out, "2"); err == nil {
@@ -432,6 +432,8 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 				changed[changedPath], _ = json.Marshal(raw)
 			case "duplicate_manifest_key":
 				changed["manifest.json"] = bytes.Replace(changed["manifest.json"], []byte("{\n"), []byte("{\n  \"schema_version\": 1,\n"), 1)
+			case "duplicate_manifest_case":
+				changed["manifest.json"] = bytes.Replace(changed["manifest.json"], []byte("{\n"), []byte("{\n  \"SCHEMA_VERSION\": 1,\n"), 1)
 			}
 			if changedPath != "" {
 				var m map[string]any
