@@ -20,6 +20,11 @@ function MakeEvidence([string]$Version,[string]$SHA,[string]$OldHtml){
 }
 $a=MakeEvidence 'v1.0.0' ('a'*40) '<!doctype html><meta charset="utf-8"><h1>old renderer evidence</h1>'
 $b=MakeEvidence 'v1.0.1' ('b'*40) ''
+$mixed=$a | Select-Object *
+$mixed | Add-Member -NotePropertyName ArchivePath -NotePropertyValue 'present.zip'
+$mixed | Add-Member -NotePropertyName ArchiveDigest -NotePropertyValue ('sha256:'+('a'*64))
+$mixed | Add-Member -NotePropertyName ArchiveSize -NotePropertyValue 42
+Refuse {Test-PortalReleaseEvidence $mixed} 'mixed ZIP and raw evidence must not fall back to raw'
 $valid=Test-PortalReleaseEvidence $a
 Assert ($valid.Snapshot.MeasuredAt -eq '2026-11-07T00:00:00Z') 'release measurement time remains original'
 $old=$a.Commit;$a.Commit='c'*40;Refuse {Test-PortalReleaseEvidence $a} 'wrong tag SHA rejects evidence';$a.Commit=$old
@@ -69,7 +74,12 @@ $preserved=Get-Content (Join-Path $duplicatePortal 'versions/v1.0.2/summary.json
 Assert ($preserved.Checks[0].Assertions.Count -eq 2) 'both measured assertions remain in immutable evidence'
 $checks[0].Assertions=$savedAssertions
 # Immutable legacy artifacts remain readable, but the current publisher cannot downgrade.
+$script:portalPublisherRemoteCalled=$false
+function gh {$script:portalPublisherRemoteCalled=$true;throw 'unexpected remote call'}
+Assert ((Get-Command gh).CommandType -eq 'Function') '歷史降級測試必須使用 mock gh'
 Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $b.AssetDirectory -Version $b.Version -Commit $b.Commit -NotesPath (Join-Path $b.AssetDirectory 'summary.md') -Repository example/repo} 'legacy發布降級拒絕；完整Schema2發布正反案例見repo_publication_tests'
+Assert (-not $script:portalPublisherRemoteCalled) '歷史降級在任何遠端呼叫前拒絕'
+Remove-Item Function:\gh
 Write-Host ('ALL PASS: '+$count+' portal evidence and comparison assertions; local fixtures only.')
 
 # User-facing conclusions follow real main evidence; JSON keeps machine statuses.

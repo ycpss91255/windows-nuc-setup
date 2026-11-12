@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL,[string]$DriverAssetManifestPath)
+param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL,[string]$DriverAssetManifestPath,[string]$ReportArchive,[string]$BundleToolPath=$env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL,[int]$RunAttempt,[string]$RunUrl,[string]$SourceRoot,[string]$ContainerDirectory)
 $ErrorActionPreference='Stop'
 if(-not $DriverAssetManifestPath){$DriverAssetManifestPath=Join-Path $PSScriptRoot '../release/driver_release_assets.json'}
 . (Join-Path $PSScriptRoot '../test/test_report.ps1')
@@ -35,9 +35,46 @@ $tagCommit=& gh api ('repos/'+$Repository+'/commits/'+$Version) --jq '.sha'
 if($LASTEXITCODE -ne 0 -or $tagCommit -cne $Commit){throw '標籤來源 SHA 不符。'}
 $existing=& gh api --paginate ('repos/'+$Repository+'/releases?per_page=100') --jq '.[].tag_name'
 if($LASTEXITCODE -ne 0){throw '無法確認既有版本。'}
-$attachments=@($quality,$manifestPath)+@($files|Where-Object {$_ -ne 'summary.json'}|ForEach-Object {Join-Path $PublicDirectory $_})
+if(-not $SourceRoot){$SourceRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))}
+if(-not $ReportArchive -or [IO.Path]::GetFileName($ReportArchive) -cne ('windows_setup_report_'+$Version+'.zip') -or -not (Test-Path -LiteralPath $ReportArchive -PathType Leaf) -or (Get-Item -LiteralPath $ReportArchive).Attributes -band [IO.FileAttributes]::ReparsePoint){throw '缺少當版報表封裝。'}
+if(-not $BundleToolPath -or $RunAttempt -lt 1 -or $RunUrl -cne $snapshot.RunUrl){throw '缺少報表驗證工具或執行次數。'}
+function Assert-NoReparseAncestors([string]$Path) {
+ $current=[IO.Path]::GetFullPath($Path)
+ while($current){
+  $item=Get-Item -LiteralPath $current -Force -ErrorAction Stop
+  if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw '驗證目錄路徑包含重新解析點。'}
+  $next=[IO.Directory]::GetParent($current)
+  if($null -eq $next){break};$current=$next.FullName
+ }
+}
+$owner=New-ReportOwnedTemp -Purpose Release
+$parent=$owner.Path
+try {
+ $verified=Join-Path $parent 'verified'
+ & $BundleToolPath verify --archive $ReportArchive --source-root $SourceRoot --version $Version --commit $Commit --run-url $RunUrl --run-attempt $RunAttempt --output-dir $verified
+ if($LASTEXITCODE -ne 0){throw '報表封裝驗證失敗。'}
+ $receipt=Get-Content -LiteralPath (Join-Path $verified 'verified.json') -Raw -Encoding UTF8|ConvertFrom-Json
+ if($receipt.archive_sha256 -isnot [string] -or $receipt.archive_sha256 -cnotmatch '^[a-f0-9]{64}$' -or ($receipt.archive_size -isnot [int] -and $receipt.archive_size -isnot [long]) -or $receipt.archive_size -le 0){throw '報表驗證收據無效。'}
+ $nativeNames=@('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg','repo_coverage.json','coverage_inventory.json','coverage.xml','go_coverage.json','go_coverage.out','go_coverage.svg')
+ $containerNames=@('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')
+ foreach($pair in @(@{Input=$PublicDirectory;Verified='native';Names=$nativeNames},@{Input=$ContainerDirectory;Verified='windows_container';Names=$containerNames})){
+  if(-not $pair.Input){throw '缺少同次報表目錄。'}
+  $verifiedDirectory=Join-Path $verified $pair.Verified
+  Assert-NoReparseAncestors $pair.Input
+  Assert-NoReparseAncestors $verifiedDirectory
+  foreach($name in $pair.Names){
+   $inputFile=Join-Path $pair.Input $name;$verifiedFile=Join-Path $verifiedDirectory $name
+   $inputItem=Get-Item -LiteralPath $inputFile -Force -ErrorAction Stop;$verifiedItem=Get-Item -LiteralPath $verifiedFile -Force -ErrorAction Stop
+   if($inputItem.PSIsContainer -or $verifiedItem.PSIsContainer -or ($inputItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or ($verifiedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $inputItem.Length -ne $verifiedItem.Length -or (Get-FileHash -LiteralPath $inputFile).Hash -cne (Get-FileHash -LiteralPath $verifiedFile).Hash){throw '封裝與同次原始報表不一致。'}
+  }
+ }
+} finally {
+ Remove-ReportOwnedTemp -Handle $owner
+}
+$attachments=@($ReportArchive)
 $driverAssets=@(Get-ReleaseDriverAssets -Path $DriverAssetManifestPath -Version $Version)
 $qualityAssets=@($attachments|ForEach-Object {[pscustomobject]@{Name=[IO.Path]::GetFileName($_);SHA256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant();Size=(Get-Item -LiteralPath $_).Length}})
+if($qualityAssets.Count -ne 1 -or $qualityAssets[0].SHA256 -cne $receipt.archive_sha256 -or $qualityAssets[0].Size -ne $receipt.archive_size){throw '報表封裝與驗證收據不一致。'}
 $expectedAssets=@($driverAssets)+$qualityAssets
 $notes=[IO.File]::ReadAllText($NotesPath,[Text.UTF8Encoding]::new($false,$true))
 if($driverAssets.Count){

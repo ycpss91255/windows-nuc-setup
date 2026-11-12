@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	a "windows_setup/script/test/acceptance"
@@ -26,17 +27,17 @@ func syntheticNativeReport(t *testing.T, source string) (map[string][]byte, stri
 	if err := os.WriteFile(p, []byte("package example\nfunc Value() int { return 1 }\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{{"init", "-q"}, {"add", "--", name}} {
-		cmd := exec.Command("git", append([]string{"-C", source}, args...)...)
+	for _, args := range [][]string{{"init", "-q"}, {"config", "--local", "core.longpaths", "true"}, {"add", "--", name}} {
+		cmd := exec.Command("git", append([]string{"-c", "core.longpaths=true", "-C", source}, args...)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("synthetic tracked source: %v %s", err, out)
 		}
 	}
-	commitCmd := exec.Command("git", "-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
+	commitCmd := exec.Command("git", "-c", "core.longpaths=true", "-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		t.Fatalf("commit fixture: %v %s", err, out)
 	}
-	commitBytes, err := exec.Command("git", "-C", source, "rev-parse", "HEAD").Output()
+	commitBytes, err := exec.Command("git", "-c", "core.longpaths=true", "-C", source, "rev-parse", "HEAD").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,6 +202,139 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if err := export(optionsFor(nativeDir, containerDir, inProcess, 1)); err != nil {
 		t.Fatalf("in-process export: %v", err)
 	}
+	t.Run("historical_context", func(t *testing.T) {
+		archive, err := os.ReadFile(inProcess)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(archive)
+		base := []string{"--historical", "--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--archive-sha256", fmt.Sprintf("%x", sum), "--archive-size", fmt.Sprint(len(archive))}
+		output := filepath.Join(t.TempDir(), "verified")
+		if err := verify(append(append([]string{}, base...), "--output-dir", output)); err != nil {
+			t.Fatalf("historical: %v", err)
+		}
+		b, err := os.ReadFile(filepath.Join(output, "verified.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m struct {
+			Origin  string `json:"context_origin"`
+			Run     string `json:"run_url"`
+			Attempt int    `json:"run_attempt"`
+		}
+		if err := json.Unmarshal(b, &m); err != nil || m.Origin != "immutable_archive_manifest" || m.Run != runURL || m.Attempt != 1 {
+			t.Fatalf("incorrect context: %s %v", b, err)
+		}
+		for name, args := range map[string][]string{
+			"wrong digest":  append(append([]string{}, base...), "--archive-sha256", strings.Repeat("0", 64)),
+			"wrong size":    append(append([]string{}, base...), "--archive-size", "1"),
+			"mixed context": append(append([]string{}, base...), "--run-url", runURL),
+			"mixed attempt": append(append([]string{}, base...), "--run-attempt", "1"),
+			"wrong source":  append(append([]string{}, base...), "--commit", strings.Repeat("a", 40)),
+		} {
+			t.Run(name, func(t *testing.T) {
+				if err := verify(args); err == nil {
+					t.Fatal("invalid historical input accepted")
+				}
+			})
+		}
+	})
+	t.Run("verified_output_ordinary_short_name", func(t *testing.T) {
+		root := t.TempDir()
+		long := filepath.Join(root, "ordinary_report_output_directory_long_name")
+		if err := os.Mkdir(long, 0700); err != nil {
+			t.Fatal(err)
+		}
+		short := shortTestPath(t, long)
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", filepath.Join(short, "verified")}
+		if err := verify(args); err != nil {
+			t.Fatalf("ordinary 8.3 parent rejected: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(long, "verified", "native", "summary.json"))
+		if err != nil || !bytes.Equal(got, native["summary.json"]) {
+			t.Fatalf("verified bytes differ: %v", err)
+		}
+	})
+	t.Run("verified_output", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "verified")
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", target}
+		if err := verify(args); err != nil {
+			t.Fatalf("verified output: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(target, "native", "summary.json"))
+		if err != nil || !bytes.Equal(got, native["summary.json"]) {
+			t.Fatalf("summary differs: %v", err)
+		}
+		b, err := os.ReadFile(filepath.Join(target, "verified.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var meta struct {
+			ArchiveSHA256 string `json:"archive_sha256"`
+			ArchiveSize   int64  `json:"archive_size"`
+		}
+		if err := json.Unmarshal(b, &meta); err != nil {
+			t.Fatal(err)
+		}
+		archive, err := os.ReadFile(inProcess)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(archive)
+		if meta.ArchiveSHA256 != fmt.Sprintf("%x", sum) || meta.ArchiveSize != int64(len(archive)) {
+			t.Fatal("archive metadata differs from verified bytes")
+		}
+		if err := verify(args); err == nil {
+			t.Fatal("existing output accepted")
+		}
+	})
+	t.Run("reject_symlink_output_parent", func(t *testing.T) {
+		real := t.TempDir()
+		link := filepath.Join(t.TempDir(), "link")
+		if err := os.Symlink(real, link); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		target := filepath.Join(link, "verified")
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", target}
+		if err := verify(args); err == nil {
+			t.Fatal("symlink output parent accepted")
+		}
+		if _, err := os.Lstat(filepath.Join(real, "verified")); !os.IsNotExist(err) {
+			t.Fatal("output written through symlink")
+		}
+	})
+	t.Run("reject_case_distinct_symlink_parent", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("requires case-sensitive filesystem")
+		}
+		root := t.TempDir()
+		real := filepath.Join(root, "a")
+		if err := os.Mkdir(real, 0700); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(root, "A")
+		if err := os.Symlink(real, link); err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(link, "verified")
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", target}
+		if err := verify(args); err == nil {
+			t.Fatal("case-distinct symlink output parent accepted")
+		}
+		if _, err := os.Lstat(filepath.Join(real, "verified")); !os.IsNotExist(err) {
+			t.Fatal("output written through symlink")
+		}
+	})
+	t.Run("invalid_archive_leaves_no_output", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "verified")
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "2", "--output-dir", target}
+		if err := verify(args); err == nil {
+			t.Fatal("wrong attempt accepted")
+		}
+		if _, err := os.Lstat(target); !os.IsNotExist(err) {
+			t.Fatal("failed verification left output")
+		}
+	})
 	t.Run("scope_summarizes_executed_reports", func(t *testing.T) {
 		z, err := zip.OpenReader(out)
 		if err != nil {
@@ -577,6 +711,23 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 			if err := verifyArchive(p, "1"); err == nil {
 				t.Fatalf("invalid archive accepted: %s", kind)
 			}
+			archiveBytes, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sum := sha256.Sum256(archiveBytes)
+			historical := []string{"--historical", "--archive", p, "--source-root", source, "--version", version, "--commit", sha, "--archive-sha256", fmt.Sprintf("%x", sum), "--archive-size", fmt.Sprint(len(archiveBytes))}
+			if err := verify(historical); err == nil {
+				t.Fatalf("historical mode accepted invalid archive: %s", kind)
+			}
 		})
+	}
+}
+func TestOutputParentComparisonRespectsPlatform(t *testing.T) {
+	if sameOutputParent("/tmp/A", "/tmp/a", "linux") {
+		t.Fatal("case-distinct Linux paths accepted as identical")
+	}
+	if !sameOutputParent("C:/Temp/A", "c:/temp/a", "windows") {
+		t.Fatal("Windows paths should ignore case")
 	}
 }

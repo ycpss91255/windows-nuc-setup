@@ -14,7 +14,7 @@
 5. Downloads 的 windows_setup 是自包含的權威主版本，驅動位於獨立 windows_driver_packages/nuc8，主包不內嵌 payload，未選擇驅動包預設略過。依使用者最新指示，整包可複製到任意可寫入的非桌面路徑；不實作自動搬移到 Downloads，不綁定使用者或磁碟代號。
 6. 先前 USB 曾同步，但目前視為舊副本，預設不得再修改或同步。只有使用者明確要求同步特定副本時才進行；先保留目的地自訂內容與 Git 歷史，不得用 `reset --hard`、`clean -fd` 或強制 checkout 覆蓋工作樹。
 7. 交付前核對主版本 HEAD、未提交變更、套件雜湊及獨立驅動包完整性。若本輪明確要求同步副本，才另核對那些副本。既有二進位與各機紀錄維持原位，絕不為了讓 Git 乾淨而刪除。
-8. 開發及獨立審查用的 Git worktree 若放在 Downloads，統一置於主版本上層的 worktree/ 子目錄，不在 Downloads 根目錄平鋪。正式 windows_setup、獨立驅動包與每機紀錄保留原位；搬移已註冊工作樹使用 git worktree move，核對搬移前後 HEAD、分支、工作樹狀態與檔案完整性。
+8. 開發及獨立審查用的 Git worktree 統一置於主版本根目錄的 worktree/ 子目錄。正式 windows_setup、獨立驅動包與每機紀錄保留原位；搬移已註冊工作樹時先核對路徑及依賴，優先使用 git worktree move，並核對搬移前後 HEAD、分支、工作樹狀態與檔案完整性；跨磁碟時須先驗證可回復方案，不刪除原件。
 
 ## 排除與資料保護
 - 不提交密碼、SSH 私鑰、Token、個人登入資料、每機執行結果、診斷紀錄、快取或備份。

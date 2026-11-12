@@ -86,7 +86,7 @@ Git／GitHub 版本與目前本機完整包不同：驅動及 Autologon EXE 不�
 
 本工具依上方前提自動選用 Generic 或 NUC8 設定檔，Windows 模組亦提供獨立入口。初始設定先執行 Init，登入正式帳號後直接執行 Windows；已有正式帳號可直接執行 Windows；不需要 agent、SSH 遙控或預先手動安裝 OpenSSH。使用者名稱、家目錄與 SID 由腳本動態取得；工具包位置依目前檔案所在目錄解析，不綁定固定帳號或磁碟代號。
 
-本機維護的 `windows_setup` 可整份複製到 USB；腳本依自己所在位置解析主程式，不綁定 Downloads、USB 磁碟代號或使用者名稱。驅動獨立放在 `windows_driver_packages/nuc8`，主程式不含驅動封存檔。每次換機使用前要確認 USB 是最新完整副本；舊 USB 不會自動同步本機修改。
+本機維護的 `windows_setup` 主程式可複製到 USB；若根目錄有供開發使用的 `worktree`，複製時請排除該目錄，並保留主程式所需資產。Git 忽略規則不會自動排除檔案總管中的手動複製。也可由 Release 來源包開始準備。腳本依自己所在位置解析主程式，不綁定 Downloads、USB 磁碟代號或使用者名稱。驅動獨立放在 `windows_driver_packages/nuc8`，主程式不含驅動封存檔。每次換機使用前要確認 USB 是最新完整副本；舊 USB 不會自動同步本機修改。
 
 完整流程需要你允許管理員權限、輸入現有帳號密碼，以及依提示手動重新開機，並非完全無人值守。一般 Windows 設定不自行重新開機或關機；OOBE 套用設定包前會先明確詢問，Windows 可能在同意後重新啟動。
 
@@ -647,7 +647,7 @@ flowchart LR
 
 `native-stage-執行ID-attempt` 是不可發布的中介附件，只含明確白名單的原生報告及原始 Go 證據，並標示整體尚未完成；沒有 managed 編譯檔、私有路徑或原始日誌。聚合重新驗證完整 native 測試清單、全部 Go 範圍及每份原始位元組；錯誤來源、不同 attempt、少片或變造都會失敗。只有完整八成門檻通過後，聚合才上傳 `windows-test-reports`，Release 與 Pages 不讀取中介附件。
 
-維護者可用 `go run ./script/test/report_bundle_tool export` 封裝同次 Windows 原生及容器公開報表，並以 `verify` 驗證版本、來源、內容與逐檔雜湊；本工具尚未接入 Release 發布。輸入工件的 run 與 attempt 由 CI 精確選取並提供，manifest 記錄此脈絡，不將封裝本身視為獨立來源認證。原生報告保留實際覆蓋率證據，容器報告維持原本的未量測狀態。
+版本標籤通過門檻後，CD 以 `report_bundle_tool` 封裝並驗證同次 Windows 原生及容器公開報表，作為該版 Release 的單一報表 ZIP。`verify --output-dir` 可在完整驗證成功後輸出原始檔案及 `verified.json` 摘要；呼叫端須先建立專用、空白且無其他寫入者的私有父目錄，工具不驗證 ACL。消費者仍須對照不可變 Release 的 ZIP 大小與摘要。歷史不可變版本可用 `verify --historical --archive-sha256 <SHA256> --archive-size <位元組數>` 核對外部 Release 附件後驗證；此模式從封裝讀取 run 與 attempt，只代表不可變報表自述，並非獨立來源認證。版本、提交與乾淨精確來源仍為必要輸入。輸入工件的 run 與 attempt 由 CI 精確選取並提供，manifest 記錄此脈絡，不將封裝本身視為獨立來源認證。原生報告保留實際覆蓋率證據，容器報告維持原本的未量測狀態。
 
 main 部署後核對公開首頁及同次完整來源；Tag 部署後核對公開版本索引、版本頁、同次報告，以及摘要與 Go profile 對應不可變 Release 的位元組和雜湊。
 
@@ -665,7 +665,7 @@ README 只展示整體覆蓋率，語言分項放在報表與 Actions 摘要。�
 
 每次測試從實際斷言事件及程序退出碼產生 JSON、Markdown、自含 HTML、JUnit XML 與徽章。程序崩潰、缺少斷言事件或任何失敗均不能標成通過。新增 `test/powershell/unit` 或 `integration` 測試會自動列入執行清單。公開報表只包含靜態檢查、單元與隔離整合結果。
 
-PR 的去識別測試附件保留七天；main 通過全部必要門檻後更新 Pages，失敗時公開徽章仍保留上次成功部署的證據。Release 長期保存 `repo_coverage.json`、`coverage_inventory.json`、`coverage.xml` 與測試摘要，核對來源、計量、雜湊及計數。歷史版本依原始證據整理頁面並連回不可變原始附件；缺紀錄就如實說明，不以目前測試回填。
+PR 的去識別測試附件保留七天；main 通過全部必要門檻後更新 Pages，失敗時公開徽章仍保留上次成功部署的證據。新版 Release 的報表 ZIP 長期保存 `repo_coverage.json`、`coverage_inventory.json`、`coverage.xml` 與兩種環境的測試摘要，核對來源、計量、雜湊及計數。歷史版本依原始證據整理頁面並連回不可變原始附件；缺紀錄就如實說明，不以目前測試回填。
 
 維護者接線依序為：產生三份整體證據 → `script/test/attach_repo_coverage.ps1` 附加到測試報表 → `script/report/build_portal.ps1` 或 `publish_quality_release.ps1`。三個入口都使用已建置的 `repo_coverage_tool`，由 `-CoverageToolPath` 或 `WINDOWS_SETUP_COVERAGE_TOOL` 指定；缺工具、缺來源、未完整量測或未達精確 80% 都會停止。附加時以 `-SourceRoot` 核對真實 checkout。`build_portal.ps1 -Preview` 僅供本機合成樣本，不得用於正式 Pages 或 Release；本輪 publisher 不接受降級到歷史 schema1。
 

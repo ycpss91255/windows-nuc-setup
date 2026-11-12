@@ -60,6 +60,7 @@ foreach($schema in @(1,2)){
 $global:repoPublicationRemoteCalled=$false
 function gh {$global:repoPublicationRemoteCalled=$true;throw 'unexpected remote call'}
 $profile=Join-Path $public 'go_coverage.out';$savedProfile=[IO.File]::ReadAllText($profile);Remove-Item -LiteralPath $profile
+Assert ((Get-Command gh).CommandType -eq 'Function') '缺 profile 負例必須使用 mock gh'
 Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool} '現版publisher缺原始profile時不能採legacy路徑發布'
 Assert (-not $global:repoPublicationRemoteCalled) '缺profile在任何遠端操作前停止'
 [IO.File]::WriteAllText($profile,$savedProfile,$utf8)
@@ -69,6 +70,7 @@ foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml'
 $noGoReport=$report|ConvertTo-Json -Depth 20|ConvertFrom-Json;$noGoReport.PSObject.Properties.Remove('GoCoverage');Write-SnapshotView $noGoReport $noGo
 $global:repoPublicationRemoteCalled=$false
 function gh {$global:repoPublicationRemoteCalled=$true;throw 'unexpected remote call'}
+Assert ((Get-Command gh).CommandType -eq 'Function') '缺 Go 負例必須使用 mock gh'
 Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $noGo -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $noGo 'summary.md') -Repository example/repo -CoverageToolPath $tool} '現版publisher缺Go量測不得藉歷史相容降級'
 Assert (-not $global:repoPublicationRemoteCalled) '缺Go來源量測在任何遠端操作前停止'
 Remove-Item Function:\gh
@@ -83,6 +85,7 @@ Write-SnapshotView $lowGoReport $lowGoDirectory
 $global:repoPublicationRemoteCalled=$false
 function gh {$global:repoPublicationRemoteCalled=$true;throw 'unexpected remote call'}
 $lowRefused=$false
+Assert ((Get-Command gh).CommandType -eq 'Function') '低覆蓋率負例必須使用 mock gh'
 try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $lowGoDirectory -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $lowGoDirectory 'summary.md') -Repository example/repo -CoverageToolPath $tool}catch{$lowRefused=$_.Exception.Message -like '*Go 覆蓋率不得低於精確八成*'}
 Assert ($lowRefused -and -not $global:repoPublicationRemoteCalled) '整體八成仍不得代替Go獨立八成，發布前明確拒絕'
 Remove-Item Function:\gh

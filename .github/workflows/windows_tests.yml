@@ -458,18 +458,28 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-public
+          path: ${{ runner.temp }}/windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: 下載同一次執行的容器報告
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: docker-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/docker-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: 封裝並驗證當版完整報表
+        shell: powershell
+        run: |
+          .\script\report\build_release_bundle.ps1
       - name: 草稿附齊品質證據後發布不可變版本
         shell: powershell
         env:
           WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
+          WINDOWS_SETUP_REPORT_BUNDLE_TOOL: ${{ runner.temp }}/report_bundle_tool.exe
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
           SOURCE_COMMIT: ${{ github.sha }}
           IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
-          $arguments = @{PublicDirectory="$env:RUNNER_TEMP\release-public";Version=$env:RELEASE_TAG;Commit=$env:SOURCE_COMMIT;NotesPath="$env:RUNNER_TEMP\release-notes\release_notes.md";Repository=$env:GH_REPO;Prerelease=($env:IS_PRERELEASE -eq 'true')}
+          $arguments = @{PublicDirectory=(Join-Path $env:RUNNER_TEMP ("windows-test-reports-"+$env:GITHUB_RUN_ID+"-"+$env:GITHUB_RUN_ATTEMPT));ContainerDirectory=(Join-Path $env:RUNNER_TEMP ("docker-test-reports-"+$env:GITHUB_RUN_ID+"-"+$env:GITHUB_RUN_ATTEMPT));ReportArchive=(Join-Path $env:RUNNER_TEMP ("windows_setup_report_"+$env:RELEASE_TAG+".zip"));RunAttempt=[int]$env:GITHUB_RUN_ATTEMPT;RunUrl=("https://github.com/"+$env:GITHUB_REPOSITORY+"/actions/runs/"+$env:GITHUB_RUN_ID);Version=$env:RELEASE_TAG;Commit=$env:SOURCE_COMMIT;NotesPath="$env:RUNNER_TEMP\release-notes\release_notes.md";Repository=$env:GH_REPO;Prerelease=($env:IS_PRERELEASE -eq 'true')}
           .\script\report\publish_quality_release.ps1 @arguments
 
   build-portal:
@@ -500,12 +510,15 @@ jobs:
         shell: powershell
         env:
           WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
+          WINDOWS_SETUP_REPORT_BUNDLE_TOOL: ${{ runner.temp }}/report_bundle_tool.exe
         run: |
           go build -o $env:WINDOWS_SETUP_COVERAGE_TOOL ./script/test/repo_coverage_tool
+          go build -o $env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL ./script/test/report_bundle_tool
       - name: 核對版本品質附件並本地產生索引
         shell: powershell
         env:
           WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
+          WINDOWS_SETUP_REPORT_BUNDLE_TOOL: ${{ runner.temp }}/report_bundle_tool.exe
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           EVENT_REF: ${{ github.ref }}
@@ -589,4 +602,5 @@ jobs:
           RELEASE_REPO: ${{ github.repository }}
         run: |
           gh api "repos/$RELEASE_REPO/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release-metadata.json"
-          go run ./script/test/verify_deployment --mode release --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --tag "$RELEASE_TAG" --release-metadata "$RUNNER_TEMP/release-metadata.json"
+          go build -o "$RUNNER_TEMP/report-bundle-tool" ./script/test/report_bundle_tool
+          go run ./script/test/verify_deployment --mode release --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --tag "$RELEASE_TAG" --release-metadata "$RUNNER_TEMP/release-metadata.json" --report-bundle-tool "$RUNNER_TEMP/report-bundle-tool" --report-archive "$RUNNER_TEMP/tag-report-download/windows_setup_report_${RELEASE_TAG}.zip" --run-attempt "$GITHUB_RUN_ATTEMPT" --download-release-asset --release-repository "$RELEASE_REPO"

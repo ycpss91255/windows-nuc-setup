@@ -40,8 +40,39 @@ function Write-SnapshotView {
  param($Snapshot,[string]$OutputDirectory,[switch]$OmitGoProfileLink)
  Write-TestReports -OmitGoProfileLink:$OmitGoProfileLink -SchemaVersion $Snapshot.SchemaVersion -Checks @($Snapshot.Checks) -OutputDirectory $OutputDirectory -Layer $Snapshot.RequestedLayer -Commit $Snapshot.Commit -RunUrl $Snapshot.RunUrl -SourceState $Snapshot.SourceState -Version $Snapshot.Version -Environment $Snapshot.Environment -RefType $Snapshot.RefType -RefName $Snapshot.RefName -MeasuredAt $Snapshot.MeasuredAt -Changes $Snapshot.Changes -RepoCoverage $(if($Snapshot.PSObject.Properties['RepoCoverage']){$Snapshot.RepoCoverage}else{$null}) -GoCoverage $(if($Snapshot.PSObject.Properties['GoCoverage']){$Snapshot.GoCoverage}else{$null})|Out-Null
 }
+. (Join-Path $PSScriptRoot 'owned_temp.ps1')
+function Test-PortalZipEvidence {
+ param($Entry,[string]$BundleToolPath=$env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL,[string]$ExpectedRepository=$env:GH_REPO)
+ if($Entry.Immutable -isnot [bool] -or -not $Entry.Immutable){throw 'Release 未鎖定。'}
+ if($Entry.Version -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$' -or $Entry.Commit -cnotmatch '^[a-f0-9]{40}$'){throw '版本或提交不合法。'}
+ if($ExpectedRepository -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or $Entry.Repository -cne $ExpectedRepository -or $Entry.ArchiveDigest -cnotmatch '^sha256:[a-f0-9]{64}$' -or $Entry.ArchiveSize -le 0){throw '儲存庫或附件摘要不合法。'}
+ if($Entry.ReleaseUrl -cne ('https://github.com/'+$ExpectedRepository+'/releases/tag/'+$Entry.Version)){throw 'Release 網址與可信儲存庫或版本不符。'}
+ if(-not (Test-Path -LiteralPath $Entry.ArchivePath -PathType Leaf) -or -not (Test-Path -LiteralPath $Entry.SourcePath -PathType Container) -or -not (Test-Path -LiteralPath $BundleToolPath -PathType Leaf)){throw '缺少 ZIP、精確來源或驗證工具。'}
+ $owner=New-ReportOwnedTemp -Purpose Portal
+ $parent=$owner.Path
+ $output=Join-Path $parent 'verified'
+ $oldGlobal=$env:GIT_CONFIG_GLOBAL;$oldSystem=$env:GIT_CONFIG_NOSYSTEM
+ try {
+  $env:GIT_CONFIG_GLOBAL='NUL';$env:GIT_CONFIG_NOSYSTEM='1'
+  & $BundleToolPath verify --historical --archive $Entry.ArchivePath --archive-sha256 $Entry.ArchiveDigest.Substring(7) --archive-size ([string]$Entry.ArchiveSize) --source-root $Entry.SourcePath --version $Entry.Version --commit $Entry.Commit --output-dir $output | Out-Null
+  if($LASTEXITCODE -ne 0){throw 'ZIP 驗證失敗。'}
+  $metadata=Get-Content -LiteralPath (Join-Path $output 'verified.json') -Raw -Encoding UTF8|ConvertFrom-Json
+  if($metadata.context_origin -cne 'immutable_archive_manifest' -or $metadata.version -cne $Entry.Version -or $metadata.commit -cne $Entry.Commit -or ('sha256:'+$metadata.archive_sha256) -cne $Entry.ArchiveDigest -or $metadata.archive_size -ne $Entry.ArchiveSize){throw '驗證結果與 Release 不符。'}
+  if($metadata.run_url -cnotmatch ('^https://github\.com/'+[regex]::Escape($Entry.Repository)+'/actions/runs/[1-9][0-9]*$')){throw '執行紀錄不屬於可信儲存庫。'}
+  $native=Join-Path $output 'native';$summary=Join-Path $native 'summary.json'
+  if((Get-FileHash -LiteralPath $summary -Algorithm SHA256).Hash.ToLowerInvariant() -cne $metadata.summary_sha256 -or (Get-FileHash -LiteralPath (Join-Path $native 'go_coverage.out') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $metadata.profile_sha256){throw '驗證輸出摘要不符。'}
+  $snapshot=Get-Content -LiteralPath $summary -Raw -Encoding UTF8|ConvertFrom-Json
+  Assert-TestReportSnapshot -Report $snapshot -Release
+  $files=@(Get-TestReportArtifactNames $snapshot.SchemaVersion -IncludeGoProfile|ForEach-Object {[pscustomobject]@{Name=$_}})
+  return [pscustomobject]@{Snapshot=$snapshot;Manifest=[pscustomobject]@{Files=$files};HasGoProfile=$true;AssetDirectory=$native;SnapshotPath=$summary;SnapshotDigest=('sha256:'+$metadata.summary_sha256);ArchiveDigest=$Entry.ArchiveDigest;TemporaryOwner=$owner}
+ } catch {Remove-ReportOwnedTemp -Handle $owner;throw} finally {$env:GIT_CONFIG_GLOBAL=$oldGlobal;$env:GIT_CONFIG_NOSYSTEM=$oldSystem}
+}
 function Test-PortalReleaseEvidence {
  param($Entry,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL)
+ if($Entry.PSObject.Properties['ArchivePath'] -and $Entry.ArchivePath){
+  if($Entry.SnapshotPath -or $Entry.ManifestPath){throw 'ZIP 與舊品質附件不可混合。'}
+  return Test-PortalZipEvidence -Entry $Entry
+ }
  if($Entry.Version -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$'){throw '版本名稱不合法。'}
  if($Entry.Immutable -isnot [bool] -or $Entry.Immutable -cne $true){throw 'Release 未鎖定，不能作為不可變版本證據。'}
  if($Entry.Commit -notmatch '^[a-fA-F0-9]{40}$'){throw '缺少標籤來源提交。'}

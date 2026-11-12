@@ -35,7 +35,7 @@ try{
 }finally{$ErrorActionPreference=$priorPreference;Pop-Location}
 Assert ($builderExit -eq 0) 'PS5.1 原生 File 入口省略 PackageRoot 可產生所屬 Git 套件版本說明'
 $rcOriginal=Get-ReleaseNotes v9.8.7-rc1 ([IO.File]::ReadAllText((Join-Path $defaultRepo 'doc/changelog/changelog.md')))
-$rcExpected='[此版本測試報表](https://ycpss91255.github.io/windows_setup/versions/v9.8.7-rc1/index.html)' + "`n`n" + $rcOriginal
+$rcExpected='[此版本測試報表](https://github.com/ycpss91255/windows_setup/releases/download/v9.8.7-rc1/windows_setup_report_v9.8.7-rc1.zip)' + "`n`n" + $rcOriginal
 Assert (([IO.File]::ReadAllText((Join-Path $defaultNotes 'release_notes.md'))) -ceq $rcExpected) 'RC 報表連結位於頂端且保留完整原始說明'
 foreach($file in @('init.cmd','windows.cmd','readme.md')){WriteFile $file 'fixture'}
 $log="## [Unreleased]`n`n### Changed`n`n- 通用 Windows 設定。`n"
@@ -52,19 +52,27 @@ try{$result=& $builder -Version v1.2.3 -PackageRoot $repo -OutputDirectory '.\no
 Assert ($result.NotesPath -eq (Join-Path $fixture 'notes\release_notes.md')) '發布輸出相對路徑依 PowerShell 位置解析'
 Assert ((Get-Content $result.NotesPath -Raw -Encoding UTF8).Contains('通用 Windows 設定')) '說明來自精確版本章節'
 $original=Get-ReleaseNotes v1.2.3 ([IO.File]::ReadAllText((Join-Path $repo 'doc/changelog/changelog.md')))
-$expected='[此版本測試報表](https://ycpss91255.github.io/windows_setup/versions/v1.2.3/index.html)' + "`n`n" + $original
+$expected='[此版本測試報表](https://github.com/ycpss91255/windows_setup/releases/download/v1.2.3/windows_setup_report_v1.2.3.zip)' + "`n`n" + $original
 $actual=[IO.File]::ReadAllText($result.NotesPath)
 Assert ($actual -ceq $expected) '正式版本必須連結自身版本報表並原樣保留說明'
-Assert ($actual -cne $expected.Replace('/versions/v1.2.3/','/versions/v1.2.4/') -and $actual -cne $expected.Replace('/versions/v1.2.3/index.html','/main/index.html')) '錯版及 main 連結不能通過完整內容契約'
+Assert ($actual -cne $expected.Replace('/download/v1.2.3/','/download/v1.2.4/') -and $actual -cne $expected.Replace('/download/v1.2.3/windows_setup_report_v1.2.3.zip','/download/main/windows_setup_report_main.zip')) '錯版及 main 連結不能通過完整內容契約'
 Assert-ReleaseReportLink -Version v1.2.3 -Notes $actual
 Assert $true '正確版本入口通過發布前驗證'
 Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes $original} '缺少版本入口不得發布'
-Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes ($expected.Replace('/versions/v1.2.3/','/versions/v1.2.4/'))} '錯版入口不得發布'
-Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes ($expected.Replace('/versions/v1.2.3/index.html','/main/index.html'))} 'main 入口不得代替該版報表'
+Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes ($expected.Replace('/download/v1.2.3/','/download/v1.2.4/'))} '錯版入口不得發布'
+Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes ($expected.Replace('/download/v1.2.3/windows_setup_report_v1.2.3.zip','/download/main/windows_setup_report_main.zip'))} 'main 入口不得代替該版報表'
 $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
 $releaseJob=[regex]::Match($workflow,'(?ms)^  release:\s*$(.*?)(?=^  [a-z][a-z-]*:|\z)').Groups[1].Value
 $builderPos=$releaseJob.IndexOf('build_source_release.ps1');$guardPos=$releaseJob.IndexOf('Assert-ReleaseReportLink');$publishPos=$releaseJob.IndexOf('publish_quality_release.ps1')
 Assert ($builderPos -ge 0 -and $guardPos -gt $builderPos -and $publishPos -gt $guardPos -and $releaseJob.Contains('Assert-ReleaseReportLink -Version $env:RELEASE_TAG -Notes $notes')) 'CD 先產說明、按本次標籤核對入口後才發布'
+
+$nativeDownload=$releaseJob.IndexOf('windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}')
+$containerDownload=$releaseJob.IndexOf('docker-test-reports-${{ github.run_id }}-${{ github.run_attempt }}')
+$helperPath=Join-Path $root 'script/report/build_release_bundle.ps1'
+Assert (Test-Path -LiteralPath $helperPath -PathType Leaf) 'CD 報表封裝步驟放在可量測的維護工具'
+$bundleHelper=[IO.File]::ReadAllText($helperPath)
+$helperPos=$releaseJob.IndexOf('build_release_bundle.ps1');$exportPos=$bundleHelper.IndexOf(' export ');$verifyPos=$bundleHelper.IndexOf(' verify ')
+Assert ($nativeDownload -ge 0 -and $containerDownload -ge 0 -and $helperPos -gt $nativeDownload -and $helperPos -gt $containerDownload -and $publishPos -gt $helperPos -and $exportPos -ge 0 -and $verifyPos -gt $exportPos) 'CD 在同次兩工件封裝及驗證成功後才發布'
 
 Assert (@(Get-ChildItem (Join-Path $fixture 'notes')).Count -eq 1) '只輸出說明，不複製 GitHub 來源 ZIP'
 Assert (-not $result.Prerelease) '正式版本分類正確'

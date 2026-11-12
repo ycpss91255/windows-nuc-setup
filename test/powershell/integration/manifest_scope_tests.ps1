@@ -13,6 +13,7 @@ $checks=@(foreach($layer in @('Unit','Integration')){[pscustomobject]@{Name=$lay
 Write-TestReports -Checks $checks -OutputDirectory $fixture -Commit ('a'*40) -SourceState Clean -RefType Release -RefName v1.0.0 -Version v1.0.0 -Environment Test -RunUrl 'https://github.com/example/repo/actions/runs/123'|Out-Null
 $script:called=$false
 function gh {$script:called=$true;throw 'must never call remote'}
+Assert ((Get-Command gh).CommandType -eq 'Function') '發佈範圍負例必須使用 mock gh'
 $rejected=$false
 try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $fixture -Version v1.0.0 -Commit ('a'*40) -NotesPath (Join-Path $fixture 'summary.md') -Repository example/repo}catch{$rejected=$true}
 Assert ($rejected -and -not $script:called) '新Release缺完整總覆蓋率證據在任何遠端操作前拒絕'
