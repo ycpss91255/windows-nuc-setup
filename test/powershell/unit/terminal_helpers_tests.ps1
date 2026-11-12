@@ -15,14 +15,14 @@ $currentSession=1
 $script:callerSession=1
 function Get-SetupTerminalCallerSession {$script:callerSession}
 $registration='REGISTERED: PID=123 2026-11-13T00:00:00.0000000+08:00'
-$script:registered=0;$script:started=0;$script:saved=0;$script:taskState='Ready';$script:missingTerminal=$false;$script:processes=@();$script:writeRegistration=$true
+$script:registered=0;$script:started=0;$script:saved=0;$script:taskState='Ready';$script:taskNames=@();$script:missingTerminal=$false;$script:processes=@();$script:writeRegistration=$true
 function Get-Command {param($Name,$ErrorAction) if($Name -ne 'wt.exe'){throw 'unexpected command lookup'};if(-not $script:missingTerminal){[pscustomobject]@{Source='fixture wt.exe'}}}
 $script:link=[pscustomobject]@{TargetPath='';Arguments='';WorkingDirectory='';WindowStyle=0;Hotkey=''};$script:link|Add-Member ScriptMethod Save {$script:saved++;[IO.File]::WriteAllText($startup,'synthetic shortcut')}
 function New-SetupTerminalShell {$shell=[pscustomobject]@{};$shell|Add-Member ScriptMethod CreateShortcut {param($Path) if($Path -ne $startup){throw 'wrong startup path'};$script:link};return $shell}
 function New-ScheduledTaskAction {param($Execute,$Argument) Assert ($Execute -eq 'fixture powershell.exe' -and $Argument.Contains($listener)) 'terminal task retains dynamic listener path';[pscustomobject]@{Execute=$Execute}}
 function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel) Assert ($UserId -eq 'fixture-user' -and $LogonType -eq 'Interactive' -and $RunLevel -eq 'Limited') 'terminal task remains current interactive user with Limited rights';[pscustomobject]@{UserId=$UserId}}
-function Get-ScheduledTask {param($TaskName,$ErrorAction) if($script:taskState){[pscustomobject]@{State=$script:taskState}}}
-function Register-ScheduledTask {param($TaskName,$Action,$Principal,[switch]$Force) Assert ($TaskName -eq 'NUC8-TerminalHotkey-fixture-sid') 'terminal task identity is derived from current SID';$script:registered++}
+function Get-ScheduledTask {param($TaskName,$ErrorAction) $script:taskNames+= $TaskName;if($script:taskState){[pscustomobject]@{State=$script:taskState}}}
+function Register-ScheduledTask {param($TaskName,$Action,$Principal,[switch]$Force) Assert ($TaskName -eq 'NUC8-TerminalHotkey-fixture-sid-1') 'terminal task identity is derived from current SID';$script:registered++}
 function Start-ScheduledTask {param($TaskName) $script:started++;if($script:writeRegistration){[IO.File]::WriteAllText($fixtureLog,$registration)}}
 function Start-Sleep {param($Seconds,$Milliseconds)}
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) if($Filter -like '*explorer.exe*'){$script:explorers}else{$script:processes}}
@@ -36,7 +36,7 @@ Assert ($result.Success -and $result.User -eq 'fixture-user' -and $result.Proces
 foreach($name in @('terminal_hotkey_listener.ps1','terminal_hotkey_library.ps1','native/terminal_hotkey.cs')){Assert ((Get-FileHash (Join-Path $folder $name)).Hash -ceq (Get-FileHash (Join-Path $module $name)).Hash) ('terminal self-contained deployment includes exact '+$name)}
 Assert ($script:link.WorkingDirectory -eq (Join-Path $temp 'home') -and $script:link.Hotkey -eq '' -and $script:link.WindowStyle -eq 7) 'terminal shortcut uses dynamic home without legacy shell hotkey'
 $script:taskState='Running';Invoke-SetupTerminalHotkey -ModuleRoot $module
-Assert ($script:registered -eq 1 -and $script:started -eq 1) 'running terminal listener is not duplicated'
+Assert ($script:registered -eq 1 -and $script:started -eq 1 -and $script:taskNames[-1] -eq 'NUC8-TerminalHotkey-fixture-sid-1') 'running terminal listener is not duplicated and task is scoped to desktop'
 $before=$script:saved;Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly
 Assert ($script:saved -eq $before -and $script:registered -eq 1) 'VerifyOnly does not alter shortcut or tasks'
 $script:processes=@([pscustomobject]@{ProcessId=123;SessionId=($currentSession+100);CommandLine=$listener})
