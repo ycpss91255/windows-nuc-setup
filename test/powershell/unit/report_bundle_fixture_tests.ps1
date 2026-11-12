@@ -12,4 +12,13 @@ try {
  Assert ((Get-Location).Path -ceq $beforeLocation -and $env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR -ceq $beforeEnv) 'restores process environment and location'
  $rejected=$false;try{New-TestReportBundleFixture -RepositoryRoot $root -Destination $result.Root|Out-Null}catch{$rejected=$true}
  Assert $rejected 'rejects existing destination'
+ $meta=$result.Metadata
+ & $result.BundleTool verify --historical --archive $result.Archive --archive-sha256 $meta.sha256 --archive-size ([string]$meta.size) --source-root $result.Source --version $meta.version --commit $meta.commit | Out-Null
+ Assert ($LASTEXITCODE -eq 0) 'real verifier accepts generated archive'
+ $oldPreference=$ErrorActionPreference;try{$ErrorActionPreference='Continue'; & $result.BundleTool verify --historical --archive $result.Archive --archive-sha256 ('0'*64) --archive-size ([string]$meta.size) --source-root $result.Source --version $meta.version --commit $meta.commit 2>$null | Out-Null; $badExit=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference}
+ Assert ($badExit -ne 0) 'real verifier rejects invalid digest'
+ function go.exe { $global:LASTEXITCODE=1 }
+ $failed=$false;try{New-TestReportBundleFixture -RepositoryRoot $root -Destination (Join-Path $parent 'failed')|Out-Null}catch{$failed=$true}finally{Remove-Item Function:\go.exe}
+ Assert ($failed -and (Get-Location).Path -ceq $beforeLocation -and $env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR -ceq $beforeEnv) 'failure restores environment and location'
+
 }finally {Set-Location -LiteralPath $beforeLocation; $env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR=$beforeEnv}
