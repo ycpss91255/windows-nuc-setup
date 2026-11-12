@@ -125,6 +125,7 @@ $otherAsset=[pscustomobject]@{Name='windows_driver_other.zip';ProfileId='other_p
 $nucAsset=[pscustomobject]@{Name=('windows_driver_nuc8_'+$current+'.zip');ProfileId='nuc8i7hvk_hnk'}
 Assert (Test-CurrentDriverGuidance $readme $current @($nucAsset,$otherAsset)) '其他機型資產不影響 NUC 下載指引'
 Assert (Test-CurrentDriverGuidance $readme $current @($otherAsset)) '版本未宣告 NUC 資產時不要求 NUC 指引'
+Assert (Test-CurrentDriverGuidance $readme $current @()) '版本不宣告任何驅動資產時不要求 NUC 指引'
 Assert (Test-CurrentDriverGuidance $readme $current $currentAssets) '已宣告 NUC 驅動的下載指引使用當前版或含 v 的版本模板'
 Assert (-not (Test-DriverDownloadGuidance "### 準備獨立驅動包`n下載 v0.0.1 Release 的 windows_driver_nuc8_v0.0.1.zip`n### 下一節`n" $current $nucAsset.Name)) '驅動下載區指向其他固定版本必須拒絕'
 Assert (-not (Test-DriverDownloadGuidance "### 準備獨立驅動包`nwindows_driver_nuc8_<version>.zip，version 包含 v；https://github.com/ycpss91255/windows_setup/releases/tag/v0.0.1`n### 下一節`n" $current $nucAsset.Name)) '驅動下載區指向其他固定版本 URL 必須拒絕'
