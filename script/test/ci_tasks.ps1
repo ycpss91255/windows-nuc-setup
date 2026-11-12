@@ -51,7 +51,7 @@ function Get-CIPortalParameters {
 }
 
 function Write-CIFailureDiagnostics {
- param([Parameter(Mandatory=$true)][string]$ReportDirectory,[ValidateSet('Unit.uac_helpers','Integration.managed_catalog','Integration.collector_self_coverage','Integration.driver_source_coverage','Integration.network_helpers_coverage','Integration.powershell_coverage','Integration.powershell_engine','Integration.uac_updates_coverage','Integration.verification_coverage','Unit.terminal_helpers','Unit.driver_cache_cleanup','Integration.init_runtime','Integration.driver_full_source_coverage')][string[]]$SuiteNames=@('Unit.uac_helpers','Integration.managed_catalog'))
+ param([Parameter(Mandatory=$true)][string]$ReportDirectory,[ValidateSet('Unit.uac_helpers','Integration.managed_catalog','Integration.collector_self_coverage','Integration.driver_source_coverage','Integration.network_helpers_coverage','Integration.powershell_coverage','Integration.powershell_engine','Integration.uac_updates_coverage','Integration.verification_coverage','Unit.terminal_helpers','Unit.driver_cache_cleanup','Integration.init_runtime','Integration.driver_full_source_coverage','Integration.report_bundle_publication')][string[]]$SuiteNames=@('Unit.uac_helpers','Integration.managed_catalog'))
  $directory=[IO.Path]::GetFullPath($ReportDirectory)
  if((Test-Path -LiteralPath $directory) -and ((Get-Item -LiteralPath $directory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Diagnostic report directory cannot be a reparse point.'}
  foreach($suite in $SuiteNames){
@@ -59,6 +59,11 @@ function Write-CIFailureDiagnostics {
   Write-Output ('CI diagnostic: '+$name)
   if(-not(Test-Path -LiteralPath $path -PathType Leaf)){Write-Output '    unavailable';continue}
   if((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Diagnostic suite log cannot be a reparse point.'}
+  if($suite -eq 'Integration.report_bundle_publication'){
+   if((Get-Item -LiteralPath $path).Length -gt 4MB){Write-Output '    unavailable';continue}
+   if(@(Get-Content -LiteralPath $path -Encoding UTF8|Where-Object {$_ -ceq '@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed'}).Count){Write-Output '    fixture_export:go_fixture_failed'}
+   continue
+  }
   foreach($line in @(Get-Content -LiteralPath $path -Encoding UTF8 -Tail 80)){Write-Output ('    '+$line)}
  }
 }

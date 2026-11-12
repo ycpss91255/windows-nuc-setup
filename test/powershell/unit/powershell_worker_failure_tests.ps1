@@ -30,3 +30,14 @@ Assert ($rooted.TestFile -ceq 'unavailable.ps1') 'Unix形式絕對路徑亦不�
 $named=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $source -TestFile 'case.ps1' -WorkerIndex 0 -Engine powershell -NativeExitCode 1 -StandardOutputPath $stdout -StandardErrorPath (Join-Path $temp 'missing2')
 Assert (@($named.ExceptionTypes).Count -eq 0) '斷言Name中的例外字詞不能冒充實際例外型別'
 $global:LASTEXITCODE=0
+[IO.File]::WriteAllLines($stdout,[string[]]@('@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed','@@SAFE_FIXTURE_DIAG@@fixture_export:PRIVATE-CREDENTIAL-SENTINEL','@@SAFE_FIXTURE_DIAG@@C:\Users\private\secret'),[Text.UTF8Encoding]::new($false))
+$safe=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $source -TestFile 'test/powershell/integration/report_bundle_publication_tests.ps1' -WorkerIndex 1 -Engine powershell -NativeExitCode 1 -StandardOutputPath $stdout -StandardErrorPath (Join-Path $temp 'missing2')
+Assert ($safe.FixtureStage -ceq 'fixture_export' -and $safe.FixtureReason -ceq 'go_fixture_failed') '固定白名單保留合成工件失敗階段'
+$safeJson=$safe|ConvertTo-Json -Depth 6 -Compress
+Assert (-not $safeJson.Contains($secret) -and -not $safeJson.Contains('C:\Users')) '未知原因與私有路徑不得進診斷'
+[IO.File]::WriteAllText($stdout,'@@SAFE_FIXTURE_DIAG@@fixture_export:PRIVATE-CREDENTIAL-SENTINEL',[Text.UTF8Encoding]::new($false))
+$unknown=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $source -TestFile 'test/powershell/integration/report_bundle_publication_tests.ps1' -WorkerIndex 1 -Engine powershell -NativeExitCode 1 -StandardOutputPath $stdout -StandardErrorPath (Join-Path $temp 'missing2')
+Assert (-not $unknown.FixtureStage -and -not $unknown.FixtureReason) '未知診斷碼不得公開'
+[IO.File]::WriteAllText($stdout,'@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed',[Text.UTF8Encoding]::new($false))
+$wrongSuite=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $source -TestFile 'test/powershell/unit/unrelated_tests.ps1' -WorkerIndex 1 -Engine powershell -NativeExitCode 1 -StandardOutputPath $stdout -StandardErrorPath (Join-Path $temp 'missing2')
+Assert (-not $wrongSuite.FixtureStage -and -not $wrongSuite.FixtureReason) '非工件測試不得冒充固定診斷'

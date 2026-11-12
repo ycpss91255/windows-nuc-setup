@@ -4,11 +4,12 @@ function Get-PowerShellWorkerFailureDiagnostic {
  param([string]$SourceRoot,[string]$TestFile,[int]$WorkerIndex,[ValidateSet('powershell','pwsh')][string]$Engine,[int]$NativeExitCode,[string]$StandardOutputPath,[string]$StandardErrorPath,[string[]]$AllowedFiles=@(),[string]$FailureRecordPath)
  $source=[IO.Path]::GetFullPath($SourceRoot).TrimEnd('\','/')
  if([IO.Path]::IsPathRooted($TestFile) -or $TestFile.StartsWith('/') -or $TestFile -cnotmatch '^[A-Za-z0-9_./-]+\.ps1$' -or $TestFile -match '(^|/)\.\.(/|$)'){$TestFile='unavailable.ps1'}
- $assertions=0;$failed=[Collections.Generic.List[int]]::new();$locations=[Collections.Generic.List[object]]::new();$types=[Collections.Generic.List[string]]::new();$seen=@{}
+ $assertions=0;$failed=[Collections.Generic.List[int]]::new();$locations=[Collections.Generic.List[object]]::new();$types=[Collections.Generic.List[string]]::new();$seen=@{};$fixtureFailure=$false
  foreach($path in @($StandardOutputPath,$StandardErrorPath)){
   if(-not(Test-Path -LiteralPath $path -PathType Leaf)){continue}
   $reader=[IO.File]::OpenText($path)
   try{while($null -ne ($line=$reader.ReadLine())){
+  if($TestFile -cin @('test/powershell/integration/report_bundle_publication_tests.ps1','test/powershell/integration/portal_zip_tests.ps1','test/powershell/unit/report_bundle_fixture_tests.ps1') -and $line -ceq '@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed'){$fixtureFailure=$true}
   $offset=$line.IndexOf('@@ASSERT@@')
   if($offset -ge 0){try{$item=$line.Substring($offset+10)|ConvertFrom-Json;if($item.Passed -is [bool]){$assertions++;if(-not $item.Passed -and $failed.Count -lt 16){$failed.Add($assertions)}}}catch{}}
   if($offset -lt 0){foreach($match in [regex]::Matches($line,'(?<path>[A-Za-z]:[\\/][^\r\n]*?\.ps1)(?::(?:line\s*)?|,\s*line\s*)(?<line>[0-9]+)')){
@@ -22,6 +23,7 @@ function Get-PowerShellWorkerFailureDiagnostic {
   }}finally{$reader.Dispose()}
  }
  $diagnostic=[pscustomobject]@{SchemaVersion=1;TestFile=$TestFile;WorkerIndex=$WorkerIndex;Engine=$Engine;NativeExitCode=$NativeExitCode;CompletedAssertions=$assertions;FailedAssertionIndices=@($failed);Locations=@($locations);ExceptionTypes=@($types)}
+ if($fixtureFailure){$diagnostic|Add-Member FixtureStage 'fixture_export';$diagnostic|Add-Member FixtureReason 'go_fixture_failed'}
  if($FailureRecordPath -and (Test-Path -LiteralPath $FailureRecordPath -PathType Leaf)){$diagnostic|Add-Member PesterFailures @(Read-PesterWorkerFailureRecord -Path $FailureRecordPath -AllowedFiles $AllowedFiles)}
  return $diagnostic
 }
