@@ -1,6 +1,7 @@
 package main
 
 import (
+ "io"
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
@@ -182,6 +183,21 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if err := export(optionsFor(nativeDir, containerDir, inProcess, 1)); err != nil {
 		t.Fatalf("in-process export: %v", err)
 	}
+	t.Run("scope_summarizes_executed_reports", func(t *testing.T) {
+		z, err := zip.OpenReader(out)
+		if err != nil { t.Fatal(err) }
+		defer z.Close()
+		for _, f := range z.File {
+			if f.Name != "report_scope.md" { continue }
+			r, err := f.Open(); if err != nil { t.Fatal(err) }
+			data, err := io.ReadAll(r); r.Close(); if err != nil { t.Fatal(err) }
+			for _, want := range []string{version, sha, runURL, "2026-01-01", "Windows container / Windows synthetic fixture", "NotMeasured", "synthetic contract", "Unit", "Integration"} {
+				if !strings.Contains(string(data), want) { t.Errorf("scope missing verified report detail %q", want) }
+			}
+			return
+		}
+		t.Fatal("missing scope")
+	})
 	cliBytes, err := os.ReadFile(out)
 	if err != nil {
 		t.Fatal(err)
