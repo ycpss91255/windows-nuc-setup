@@ -93,7 +93,7 @@ foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immu
  Assert ($accepted -eq ($mode -eq 'success')) ('Schema2只發布真完整不可變證據：'+$mode)
  Assert ($global:repoPublicationCreated -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('來源在建立草稿前核對：'+$mode)
  if($mode -ne 'wrong-sha'){Assert ($global:repoPublicationTitle -ceq 'v1.0.0' -and $global:repoPublicationDraft) ('版本標題及草稿先行：'+$mode)}
- Assert ($global:repoPublicationAssets.Count -eq $(if($mode -eq 'wrong-sha'){0}else{12})) ('含Go原始檔的新Release精確12附件：'+$mode)
+ Assert ($global:repoPublicationAssets.Count -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('新 Release 只含一個完整報表 ZIP：'+$mode)
  Assert ($global:repoPublicationPublished -eq $(if($mode -in @('bad-digest','wrong-sha')){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
 }
 Remove-Item Function:\gh
