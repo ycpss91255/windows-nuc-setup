@@ -3,13 +3,13 @@
 [![Windows CI](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml/badge.svg)](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
 
 ![Language](https://img.shields.io/badge/Language-Go%20%2F%20PowerShell-blue?style=flat-square)
-![Testing](https://img.shields.io/badge/Testing-Go%20test%20%2F%20PS5.1-orange?style=flat-square)
 [![Coverage](https://ycpss91255.github.io/windows_setup/main/coverage.svg)](https://ycpss91255.github.io/windows_setup/main/index.html)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square)](license)
 
-[最新已發布 main 報表](https://ycpss91255.github.io/windows_setup/) · [Actions 與七天報告附件](https://github.com/ycpss91255/windows_setup/actions/workflows/windows_tests.yml)
+上方覆蓋率徽章顯示最近一次成功部署 main 的整體自有程式碼覆蓋率；點擊徽章可查閱該次靜態詳細報表與來源。若部署失敗，徽章保留上次成功結果，請以 Windows CI 與 Actions 的最新執行結果為準。PR 不更新公開報表。
 
-上方覆蓋率徽章顯示最近一次成功部署 main 的整體自有程式碼覆蓋率，量測範圍、分項及來源可在報表查閱。徽章與報表標示提交及時間；若部署失敗，以 Windows CI 與 Actions 最新執行結果為準。PR 不更新公開報表。
+完整版本報表規劃自 **v0.2.5 起**隨該版 [GitHub Release](https://github.com/ycpss91255/windows_setup/releases) 提供：在 Assets 下載 `windows_setup_report_<version>.zip`，解壓後開啟 `index.html`，即可查看原生與容器報表及各自的量測範圍（Scope）。v0.2.5 尚未發布；v0.2.4 仍使用該版既有的原始品質附件與歷史報表頁，不提供此 ZIP。
+
 Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、模組設定與後續驗收。本文以繁體中文提供完整操作說明；版本摘要見 [變更紀錄](doc/changelog/changelog.md)，實作與驗證細節以中文 Git 提交及 GitHub Release 為準。
 
 ## 快速開始
@@ -659,7 +659,7 @@ CI 工具下載參考 [PowerShell 官方安裝器](https://github.com/PowerShell
 
 ### 自動報表與徽章
 
-CI 使用與 base 相同的 GitHub Actions 原生徽章；整體覆蓋率使用儲存庫自行產生的 flat SVG。Pages 保留簡潔報表，提供測試結論、版本、提交、時間、整體覆蓋率、語言明細，以及 Release、README、Actions 與可下載證據。不依賴 Codecov、Coveralls 或外部報表平台。
+CI 使用與 base 相同的 GitHub Actions 原生徽章；整體覆蓋率使用儲存庫自行產生的 flat SVG。Pages 作為自行產生的靜態後端，提供 main 徽章與連結的詳細報表；完整版本報表的下載方式見上方說明。不依賴 Codecov、Coveralls 或外部報表平台。
 
 README 只展示整體覆蓋率，語言分項放在報表與 Actions 摘要。整體以自有正式程式碼的可執行行計算，從各語言量測結果換算相同計量後加總覆蓋行與總行數，不取各語言百分比平均。測試、第三方內容及非執行設定檔依來源清單明確分類；缺來源、未支援語言或缺量測時不公布假的總率。
 
@@ -777,7 +777,7 @@ git push origin "refs/tags/$version"
 
 - 來源不包含 `.git`、驅動 ZIP、Autologon EXE、實機 Reports 或密碼暫存；來源檢查會拒絕錯誤追蹤的敏感檔案。
 - 依 [來源包準備說明](#從原始碼準備完整工具包) 補齊所選功能需要的二進位，不能把來源 ZIP 當成完整離線安裝包。
-- CI 報告與 Actions 日誌短期保留 7 天，不提交進 Git；實機續跑紀錄仍留在原機。
+- Actions 的 CI 報告附件保留 7 天；Actions 日誌保留期由儲存庫設定決定。實機續跑紀錄仍留在原機，不提交進 Git。
 - Release 提供來源、品質證據與該版明確宣告的可選驅動資產，不會連線部署到任何電腦。
 - v0.1.x 已發布的舊來源 ZIP／SHA256 保持原樣，新流程不回寫舊版本。
 
