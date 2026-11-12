@@ -47,18 +47,20 @@ try {
  $v=Get-Content -LiteralPath (Join-Path $parent 'pages/versions.json') -Raw -Encoding UTF8|ConvertFrom-Json
  Assert ($v.Status -ceq 'Verified' -and $v.Digest -ceq $evidence.SnapshotDigest -and $v.ArchiveDigest -ceq $entry.ArchiveDigest) '版本頁保留不同的原摘要與 ZIP 摘要'
  # Mock only GitHub transport and fetch; the downloaded ZIP is still validated by the real binary.
+ $mockAssets=@(@{name=[IO.Path]::GetFileName($entry.ArchivePath);digest=$entry.ArchiveDigest;size=$entry.ArchiveSize})
+ $mockCommit=$f.commit
  function gh {
   $global:LASTEXITCODE=0
   if($args[0] -eq 'release'){$at=[array]::IndexOf($args,'--dir');Copy-Item -LiteralPath $entry.ArchivePath -Destination (Join-Path $args[$at+1] ([IO.Path]::GetFileName($entry.ArchivePath)));return}
   $request=($args|Where-Object {$_ -like 'repos/*'}|Select-Object -First 1)
   if($request -like '*/releases?*'){
-   return (@{draft=$false;tag_name=$f.version;html_url=$entry.ReleaseUrl;immutable=$true;assets=@(@{name=[IO.Path]::GetFileName($entry.ArchivePath);digest=$entry.ArchiveDigest;size=$entry.ArchiveSize})}|ConvertTo-Json -Depth 6 -Compress)
+   return (@{draft=$false;tag_name=$f.version;html_url=$entry.ReleaseUrl;immutable=$true;assets=$mockAssets}|ConvertTo-Json -Depth 6 -Compress)
   }
   if($request -like '*/commits/*'){return $f.commit}
  }
  function git {
   $global:LASTEXITCODE=0
-  if($args -contains 'rev-parse'){return $f.commit}
+  if($args -contains 'rev-parse'){return $mockCommit}
   if($args -contains 'checkout'){
    $target=$args[1]
    Copy-Item -Path (Join-Path $entry.SourcePath '*') -Destination $target -Recurse -Force
@@ -71,4 +73,11 @@ try {
   $downloadEvidence=Test-PortalReleaseEvidence $downloadEntry
   Assert ($downloadEvidence.SnapshotDigest -ceq $evidence.SnapshotDigest) '下載的封裝與精確來源通過真驗證器'
  }
+ $mockAssets+=@{name='quality.json';digest=('sha256:'+('a'*64));size=10}
+ $mixedInputs=& (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository $env:GH_REPO -OutputDirectory (Join-Path $parent 'mixed-inputs')
+ & (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $mixedInputs.CatalogPath -OutputDirectory (Join-Path $parent 'mixed-pages')|Out-Null
+ $mixed=Get-Content -LiteralPath (Join-Path $parent 'mixed-pages/versions.json') -Raw -Encoding UTF8|ConvertFrom-Json
+ Assert ($mixed.Status -ceq 'Invalid') '下載時新舊附件混合必須 Invalid，不可回退'
+ $mockAssets=@($mockAssets[0]);$mockCommit=('a'*40)
+ Reject {& (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository $env:GH_REPO -OutputDirectory (Join-Path $parent 'wrong-tag-inputs')} 'Git 物件與可信 tag 提交不同必須拒絕'
 } finally {Set-Location $oldLocation;$env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR=$oldFixture;$env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL=$oldTool;$env:GH_REPO=$oldRepo}
