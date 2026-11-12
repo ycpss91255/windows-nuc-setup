@@ -15,12 +15,19 @@ import (
 	c "windows_setup/script/test/repo_coverage"
 )
 
+var deploymentSleep = time.Sleep
+
 func run() error {
+	mode := flag.String("mode", "branch", "branch or release")
+	tag := flag.String("tag", "", "release tag")
+	metadata := flag.String("release-metadata", "", "immutable GitHub release metadata")
 	base := flag.String("base-url", "", "HTTPS Pages root")
 	doc := flag.String("readme", "", "README path")
 	sha := flag.String("expected-sha", "", "expected commit")
 	run := flag.String("expected-run-url", "", "expected run")
-	flag.Parse()
+	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
+		return err
+	}
 	provided := map[string]bool{}
 	flag.Visit(func(f *flag.Flag) { provided[f.Name] = true })
 	if *base == "" || *doc == "" || *sha == "" || !provided["expected-run-url"] {
@@ -39,10 +46,33 @@ func run() error {
 	if e != nil {
 		return e
 	}
+	if *mode == "release" {
+		if *tag == "" || *metadata == "" || *run == "" {
+			return fmt.Errorf("release mode requires tag, metadata and run")
+		}
+		data, err := os.ReadFile(*metadata)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < 12; i++ {
+			err = verifyTag(read, data, *tag, *sha, *run, files)
+			if err == nil {
+				fmt.Printf("公開版本驗收通過：%s %s\n", *tag, *sha)
+				return nil
+			}
+			if i < 11 {
+				deploymentSleep(10 * time.Second)
+			}
+		}
+		return err
+	}
+	if *mode != "branch" || *tag != "" || *metadata != "" {
+		return fmt.Errorf("invalid deployment mode")
+	}
 	var measured *c.Evidence
 	r, e := a.VerifyWithRetry(read, string(b), *sha, *run, *base, 12, func() {
 		fmt.Println("部署驗收尚未符合本次來源，有限等待 CDN 更新。")
-		time.Sleep(10 * time.Second)
+		deploymentSleep(10 * time.Second)
 	}, func() error {
 		reportReader := func(n string) ([]byte, error) { return read("main/" + n) }
 		summary, err := reportReader("summary.json")
