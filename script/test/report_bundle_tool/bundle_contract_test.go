@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -210,5 +211,39 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 		if len(files[name]) == 0 {
 			t.Fatalf("missing %s", name)
 		}
+	}
+	var manifest struct {
+		SchemaVersion int    `json:"schema_version"`
+		Version       string `json:"version"`
+		Commit        string `json:"commit"`
+		RunURL        string `json:"run_url"`
+		RunAttempt    int    `json:"run_attempt"`
+		Provenance    string `json:"provenance"`
+		Files         []struct {
+			Path   string `json:"path"`
+			Size   int64  `json:"size"`
+			SHA256 string `json:"sha256"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(files["manifest.json"], &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.SchemaVersion != 1 || manifest.Version != version || manifest.Commit != sha || manifest.RunURL != runURL || manifest.RunAttempt != 1 || !strings.Contains(manifest.Provenance, "not an independent provenance attestation") {
+		t.Fatal("manifest identity or trust boundary mismatch")
+	}
+	seen := map[string]bool{}
+	for _, entry := range manifest.Files {
+		data, ok := files[entry.Path]
+		if !ok || seen[entry.Path] || entry.Path == "manifest.json" {
+			t.Fatalf("invalid manifest entry %s", entry.Path)
+		}
+		seen[entry.Path] = true
+		sum := sha256.Sum256(data)
+		if entry.Size != int64(len(data)) || entry.SHA256 != fmt.Sprintf("%x", sum) {
+			t.Fatalf("digest mismatch %s", entry.Path)
+		}
+	}
+	if len(seen) != len(files)-1 {
+		t.Fatal("manifest does not cover every non-manifest ZIP file")
 	}
 }
