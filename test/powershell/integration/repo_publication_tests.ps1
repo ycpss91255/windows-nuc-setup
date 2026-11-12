@@ -61,6 +61,8 @@ function Test-FixtureBundleVerifier {
   foreach($name in @('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')){Copy-Item (Join-Path $containerFixture $name) -Destination (Join-Path $dest ('windows_container/'+$name))}
   if($global:fixtureBundleMismatch){[IO.File]::AppendAllText((Join-Path $dest 'native/summary.md'),'different validated report')}
   if($global:fixtureBundleReparse){New-Item -ItemType Junction -Path (Join-Path $dest 'foreign') -Target $global:fixtureProtectedDirectory -ErrorAction Stop|Out-Null}
+  $digest=if($global:fixtureBundleReceiptMismatch){'f'*64}else{(Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant()}
+  @{archive_sha256=$digest;archive_size=(Get-Item -LiteralPath $archive).Length}|ConvertTo-Json -Compress|Set-Content -LiteralPath (Join-Path $dest 'verified.json') -Encoding UTF8
  }
  $global:LASTEXITCODE=if($global:fixtureBundleFailure -or -not $valid){1}else{0}
 }
@@ -119,8 +121,8 @@ foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immu
 }
 $global:fixtureProtectedDirectory=Join-Path $fixture 'protected';New-Item -ItemType Directory -Path $global:fixtureProtectedDirectory|Out-Null
 [IO.File]::WriteAllText((Join-Path $global:fixtureProtectedDirectory 'sentinel.txt'),'preserve')
-foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt','verify-failed','different-input','reparse-output')){
- $global:repoPublicationMode='success';$global:repoPublicationCreated=0;$global:repoPublicationPublished=0;$global:fixtureBundleFailure=($invalid -eq 'verify-failed');$global:fixtureBundleMismatch=($invalid -eq 'different-input');$global:fixtureBundleReparse=($invalid -eq 'reparse-output')
+foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt','verify-failed','different-input','reparse-output','different-archive')){
+ $global:repoPublicationMode='success';$global:repoPublicationCreated=0;$global:repoPublicationPublished=0;$global:fixtureBundleFailure=($invalid -eq 'verify-failed');$global:fixtureBundleMismatch=($invalid -eq 'different-input');$global:fixtureBundleReparse=($invalid -eq 'reparse-output');$global:fixtureBundleReceiptMismatch=($invalid -eq 'different-archive')
  $argsForPublisher=@{PublicDirectory=$public;ContainerDirectory=$containerFixture;Version='v1.0.0';Commit=$identity.Commit;NotesPath=(Join-Path $public 'summary.md');Repository='example/repo';CoverageToolPath=$tool;ReportArchive=$archive;BundleToolPath='Test-FixtureBundleVerifier';RunAttempt=1;RunUrl=$identity.RunUrl}
  if($invalid -eq 'missing-archive'){$argsForPublisher.ReportArchive=Join-Path $fixture 'missing/windows_setup_report_v1.0.0.zip'}
  if($invalid -eq 'bad-run'){$argsForPublisher.RunUrl='https://github.com/example/repo/actions/runs/2'}
@@ -131,7 +133,7 @@ foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt',
  Assert ($global:repoPublicationCreated -eq 0 -and $global:repoPublicationPublished -eq 0) ('報表驗證失敗沒有建立或發布 '+$invalid)
  if($invalid -eq 'reparse-output'){Assert ((Test-Path -LiteralPath (Join-Path $global:fixtureProtectedDirectory 'sentinel.txt') -PathType Leaf) -and (Test-Path -LiteralPath $global:fixturePrivateParent -PathType Container)) '清理遇重新解析點時保留自建目錄及外部內容'}
 }
-$global:fixtureBundleFailure=$false;$global:fixtureBundleMismatch=$false;$global:fixtureBundleReparse=$false
+$global:fixtureBundleFailure=$false;$global:fixtureBundleMismatch=$false;$global:fixtureBundleReparse=$false;$global:fixtureBundleReceiptMismatch=$false
 Remove-Item Function:\gh
 function New-LocalEntry {
  $manifestPath=Join-Path $public 'quality-manifest.json'
