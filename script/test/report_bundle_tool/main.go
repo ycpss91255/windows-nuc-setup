@@ -613,7 +613,11 @@ func verify(args []string) error {
 }
 
 func sameOutputParent(parent, resolved, platform string) bool {
-	return strings.EqualFold(filepath.Clean(parent), filepath.Clean(resolved))
+	parent, resolved = filepath.Clean(parent), filepath.Clean(resolved)
+	if platform == "windows" {
+		return strings.EqualFold(parent, resolved)
+	}
+	return parent == resolved
 }
 
 // writeVerifiedOutput only publishes bytes after every archive and report check passes.
