@@ -68,8 +68,11 @@ Assert ($builderPos -ge 0 -and $guardPos -gt $builderPos -and $publishPos -gt $g
 
 $nativeDownload=$releaseJob.IndexOf('windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}')
 $containerDownload=$releaseJob.IndexOf('docker-test-reports-${{ github.run_id }}-${{ github.run_attempt }}')
-$exportPos=$releaseJob.IndexOf(' export ');$verifyPos=$releaseJob.IndexOf(' verify ')
-Assert ($nativeDownload -ge 0 -and $containerDownload -ge 0 -and $exportPos -gt $nativeDownload -and $exportPos -gt $containerDownload -and $verifyPos -gt $exportPos -and $publishPos -gt $verifyPos) 'CD 在同次兩工件封裝及驗證成功後才發布'
+$helperPath=Join-Path $root 'script/report/build_release_bundle.ps1'
+Assert (Test-Path -LiteralPath $helperPath -PathType Leaf) 'CD 報表封裝步驟放在可量測的維護工具'
+$bundleHelper=[IO.File]::ReadAllText($helperPath)
+$helperPos=$releaseJob.IndexOf('build_release_bundle.ps1');$exportPos=$bundleHelper.IndexOf(' export ');$verifyPos=$bundleHelper.IndexOf(' verify ')
+Assert ($nativeDownload -ge 0 -and $containerDownload -ge 0 -and $helperPos -gt $nativeDownload -and $helperPos -gt $containerDownload -and $publishPos -gt $helperPos -and $exportPos -ge 0 -and $verifyPos -gt $exportPos) 'CD 在同次兩工件封裝及驗證成功後才發布'
 
 Assert (@(Get-ChildItem (Join-Path $fixture 'notes')).Count -eq 1) '只輸出說明，不複製 GitHub 來源 ZIP'
 Assert (-not $result.Prerelease) '正式版本分類正確'
