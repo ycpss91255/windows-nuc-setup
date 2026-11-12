@@ -54,9 +54,9 @@ func TestOutputParentRejectsWindowsJunctions(t *testing.T) {
 		}
 	}
 }
-func TestSyntheticFixtureAcceptsOrdinaryShortParent(t *testing.T) {
+func TestShortFixture(t *testing.T) {
 	root := t.TempDir()
-	long := filepath.Join(root, "ordinary_fixture_output_directory_long_name")
+	long := filepath.Join(root, "ordinary_long_name")
 	if err := os.Mkdir(long, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestLongTemp(t *testing.T) {
 		t.Fatal(err)
 	}
 	short := shortTestPath(t, long)
-	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestSyntheticFixtureAcceptsOrdinaryShortParent$", ".")
+	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestShortFixture$", ".")
 	cmd.Env = append(os.Environ(), "TEMP="+short, "TMP="+short)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("8.3 fixture under longer TEMP must work: %v %s", err, out)
