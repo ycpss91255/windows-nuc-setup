@@ -589,4 +589,12 @@ jobs:
           RELEASE_REPO: ${{ github.repository }}
         run: |
           gh api "repos/$RELEASE_REPO/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release-metadata.json"
-          go run ./script/test/verify_deployment --mode release --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --tag "$RELEASE_TAG" --release-metadata "$RUNNER_TEMP/release-metadata.json"
+          go build -o "$RUNNER_TEMP/report-bundle-tool" ./script/test/report_bundle_tool
+          report_name="windows_setup_report_${RELEASE_TAG}.zip"
+          args=()
+          if jq -e --arg name "$report_name" '[.assets[] | select(.name == $name)] | length > 0' "$RUNNER_TEMP/release-metadata.json" > /dev/null; then
+            mkdir "$RUNNER_TEMP/tag-report-download"
+            gh release download "$RELEASE_TAG" --repo "$RELEASE_REPO" --pattern "$report_name" --dir "$RUNNER_TEMP/tag-report-download"
+            args=(--report-bundle-tool "$RUNNER_TEMP/report-bundle-tool" --report-archive "$RUNNER_TEMP/tag-report-download/$report_name" --run-attempt "$GITHUB_RUN_ATTEMPT")
+          fi
+          go run ./script/test/verify_deployment --mode release --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --tag "$RELEASE_TAG" --release-metadata "$RUNNER_TEMP/release-metadata.json" "${args[@]}"

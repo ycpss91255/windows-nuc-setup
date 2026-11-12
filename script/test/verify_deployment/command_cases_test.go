@@ -242,18 +242,82 @@ func TestDeploymentCases(t *testing.T) {
 			pages["versions.json"] = []byte(`[]`)
 		}()
 		tagArgs := append(args(), "--mode", "release", "--tag", tag, "--release-metadata", metadata)
-				t.Run("混合新舊附件必須拒絕", func(t *testing.T) {
-			original, err := os.ReadFile(metadata); if err != nil { t.Fatal(err) }
+		t.Run("混合新舊附件必須拒絕", func(t *testing.T) {
+			original, err := os.ReadFile(metadata)
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer os.WriteFile(metadata, original, 0600)
 			var value map[string]any
-			if err := json.Unmarshal(original, &value); err != nil { t.Fatal(err) }
-			value["assets"] = append(value["assets"].([]any), map[string]any{"name":"windows_setup_report_"+tag+".zip", "size":1, "digest":"sha256:"+strings.Repeat("a",64)})
-			changed, _ := json.Marshal(value); if err := os.WriteFile(metadata, changed, 0600); err != nil { t.Fatal(err) }
-			if err := invoke(tagArgs...); err == nil { t.Fatal("混合格式不可當作舊附件接受") }
+			if err := json.Unmarshal(original, &value); err != nil {
+				t.Fatal(err)
+			}
+			value["assets"] = append(value["assets"].([]any), map[string]any{"name": "windows_setup_report_" + tag + ".zip", "size": 1, "digest": "sha256:" + strings.Repeat("a", 64)})
+			changed, _ := json.Marshal(value)
+			if err := os.WriteFile(metadata, changed, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := invoke(tagArgs...); err == nil {
+				t.Fatal("混合格式不可當作舊附件接受")
+			}
 		})
 		if e := invoke(tagArgs...); e != nil {
 			t.Fatalf("valid tag publication rejected: %v", e)
 		}
+		t.Run("版本報表ZIP與頁面身分", func(t *testing.T) {
+			originalMetadata, _ := os.ReadFile(metadata)
+			originalIndex := append([]byte(nil), pages["versions.json"]...)
+			defer func() { os.WriteFile(metadata, originalMetadata, 0600); pages["versions.json"] = originalIndex }()
+			archive := filepath.Join(t.TempDir(), "report.zip")
+			payload := []byte("archive")
+			if err := os.WriteFile(archive, payload, 0600); err != nil {
+				t.Fatal(err)
+			}
+			outer := assetFromBytes("windows_setup_report_"+tag+".zip", payload)
+			b, _ := json.Marshal(map[string]any{"tag_name": tag, "html_url": "https://github.com/example/windows_setup/releases/tag/" + tag, "draft": false, "immutable": true, "assets": []releaseAsset{outer}})
+			if err := os.WriteFile(metadata, b, 0600); err != nil {
+				t.Fatal(err)
+			}
+			var rows []map[string]any
+			if err := json.Unmarshal(originalIndex, &rows); err != nil {
+				t.Fatal(err)
+			}
+			rows[0]["ArchiveDigest"] = outer.Digest
+			pages["versions.json"], _ = json.Marshal(rows)
+			oldVerifier := runReportVerifier
+			defer func() { runReportVerifier = oldVerifier }()
+			calls := 0
+			runReportVerifier = func(tool string, args ...string) error {
+				calls++
+				output := ""
+				for i := range args {
+					if args[i] == "--output-dir" {
+						output = args[i+1]
+					}
+				}
+				if err := os.MkdirAll(filepath.Join(output, "native"), 0700); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(output, "native", "summary.json"), summary, 0600); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(output, "native", "go_coverage.out"), profile, 0600); err != nil {
+					return err
+				}
+				receipt := map[string]any{"archive_sha256": strings.TrimPrefix(outer.Digest, "sha256:"), "archive_size": outer.Size, "version": tag, "commit": sha, "run_url": runURL, "run_attempt": 1, "summary_sha256": strings.TrimPrefix(assetFromBytes("", summary).Digest, "sha256:"), "profile_sha256": strings.TrimPrefix(assetFromBytes("", profile).Digest, "sha256:"), "context_origin": "explicit"}
+				data, _ := json.Marshal(receipt)
+				return os.WriteFile(filepath.Join(output, "verified.json"), data, 0600)
+			}
+			zipArgs := append(append([]string{}, tagArgs...), "--report-bundle-tool", "trusted", "--report-archive", archive, "--run-attempt", "1")
+			if err := invoke(zipArgs...); err != nil || calls != 1 {
+				t.Fatalf("驗證版本報表失敗: %v calls=%d", err, calls)
+			}
+			rows[0]["ArchiveDigest"] = rows[0]["Digest"]
+			pages["versions.json"], _ = json.Marshal(rows)
+			if err := invoke(zipArgs...); err == nil {
+				t.Fatal("不可混淆外層與摘要 digest")
+			}
+		})
 		for _, field := range []string{"Commit", "ReleaseUrl", "Digest", "MeasuredAt"} {
 			t.Run("index_identity_"+field, func(t *testing.T) {
 				old := pages["versions.json"]
