@@ -62,7 +62,8 @@ foreach($mode in @('success','missing-draft','published','foreign','wrong-commit
  $global:driverReleaseRemoteAssets=@(@{name=$driverAsset.Name;size=$driverAsset.Size;digest=('sha256:'+$driverAsset.SHA256)})
  if($mode -eq 'extra'){$global:driverReleaseRemoteAssets+=@{name='foreign.zip';size=1;digest='sha256:'+('f'*64)}}
  if($mode -eq 'bad-digest'){$global:driverReleaseRemoteAssets[0].digest='sha256:'+('f'*64)}
- $accepted=$true;try{& $publisher -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $driverMetadata -ReportArchive $archive -BundleToolPath Test-FixtureBundleVerifier -RunAttempt 1 -RunUrl $identity.RunUrl|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publisher error: '+$_.Exception.Message)}
+ Assert ((Get-Command gh).CommandType -eq 'Function') '驅動發布測試必須使用 mock gh'
+ $accepted=$true;try{& $publisher -PublicDirectory $public -ContainerDirectory $containerFixture -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $driverMetadata -ReportArchive $archive -BundleToolPath Test-FixtureBundleVerifier -RunAttempt 1 -RunUrl $identity.RunUrl|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publisher error: '+$_.Exception.Message)}
  Assert ($accepted -eq ($mode -eq 'success')) ('驅動品質全集發布結果 '+$mode)
  Assert ($global:driverReleasePublished -eq $(if($mode -in @('success','size-published')){1}else{0})) ('錯誤草稿不發布 '+$mode)
  if($mode -notin @('success','partial-upload','changed-after-upload','wrong-notes','size-upload','size-notes','size-published')){Assert ($global:driverReleaseUploaded -eq 0) ('核對失敗不改草稿 '+$mode)}

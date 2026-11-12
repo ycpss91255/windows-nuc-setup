@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL,[string]$DriverAssetManifestPath,[string]$ReportArchive,[string]$BundleToolPath=$env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL,[int]$RunAttempt,[string]$RunUrl,[string]$SourceRoot)
+param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL,[string]$DriverAssetManifestPath,[string]$ReportArchive,[string]$BundleToolPath=$env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL,[int]$RunAttempt,[string]$RunUrl,[string]$SourceRoot,[string]$ContainerDirectory)
 $ErrorActionPreference='Stop'
 if(-not $DriverAssetManifestPath){$DriverAssetManifestPath=Join-Path $PSScriptRoot '../release/driver_release_assets.json'}
 . (Join-Path $PSScriptRoot '../test/test_report.ps1')
@@ -38,8 +38,64 @@ if($LASTEXITCODE -ne 0){throw '無法確認既有版本。'}
 if(-not $SourceRoot){$SourceRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))}
 if(-not $ReportArchive -or [IO.Path]::GetFileName($ReportArchive) -cne ('windows_setup_report_'+$Version+'.zip') -or -not (Test-Path -LiteralPath $ReportArchive -PathType Leaf) -or (Get-Item -LiteralPath $ReportArchive).Attributes -band [IO.FileAttributes]::ReparsePoint){throw '缺少當版報表封裝。'}
 if(-not $BundleToolPath -or $RunAttempt -lt 1 -or $RunUrl -cne $snapshot.RunUrl){throw '缺少報表驗證工具或執行次數。'}
-& $BundleToolPath verify --archive $ReportArchive --source-root $SourceRoot --version $Version --commit $Commit --run-url $RunUrl --run-attempt $RunAttempt
-if($LASTEXITCODE -ne 0){throw '報表封裝驗證失敗。'}
+function Assert-NoReparseAncestors([string]$Path) {
+ $current=[IO.Path]::GetFullPath($Path)
+ while($current){
+  $item=Get-Item -LiteralPath $current -Force -ErrorAction Stop
+  if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw '驗證目錄路徑包含重新解析點。'}
+  $next=[IO.Directory]::GetParent($current)
+  if($null -eq $next){break};$current=$next.FullName
+ }
+}
+function Assert-OwnedVerificationDirectory([string]$Directory,[string]$TempRoot) {
+ $full=[IO.Path]::GetFullPath($Directory).TrimEnd('\','/')
+ $temp=[IO.Path]::GetFullPath($TempRoot).TrimEnd('\','/')
+ if(-not [string]::Equals([IO.Path]::GetDirectoryName($full),$temp,[StringComparison]::OrdinalIgnoreCase)){throw '驗證目錄不在暫存根目錄下。'}
+ Assert-NoReparseAncestors $full
+ $resolved=(Resolve-Path -LiteralPath $full -ErrorAction Stop).ProviderPath.TrimEnd('\','/')
+ if(-not [string]::Equals($resolved,$full,[StringComparison]::OrdinalIgnoreCase)){throw '驗證目錄解析結果不符。'}
+}
+$tempRoot=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')
+Assert-NoReparseAncestors $tempRoot
+if(-not [string]::Equals((Resolve-Path -LiteralPath $tempRoot).ProviderPath.TrimEnd('\','/'),$tempRoot,[StringComparison]::OrdinalIgnoreCase)){throw '暫存根目錄解析結果不符。'}
+$parent=Join-Path $tempRoot ('release_verified_'+[guid]::NewGuid().ToString('N'))
+$owned=$false
+try {
+ New-Item -ItemType Directory -Path $parent -ErrorAction Stop|Out-Null
+ Assert-OwnedVerificationDirectory $parent $tempRoot
+ if(@(Get-ChildItem -LiteralPath $parent -Force).Count -ne 0){throw '驗證目錄必須為空。'}
+ $owned=$true
+ $verified=Join-Path $parent 'verified'
+ & $BundleToolPath verify --archive $ReportArchive --source-root $SourceRoot --version $Version --commit $Commit --run-url $RunUrl --run-attempt $RunAttempt --output-dir $verified
+ if($LASTEXITCODE -ne 0){throw '報表封裝驗證失敗。'}
+ $nativeNames=@('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg','repo_coverage.json','coverage_inventory.json','coverage.xml','go_coverage.json','go_coverage.out','go_coverage.svg')
+ $containerNames=@('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')
+ foreach($pair in @(@{Input=$PublicDirectory;Verified='native';Names=$nativeNames},@{Input=$ContainerDirectory;Verified='windows_container';Names=$containerNames})){
+  if(-not $pair.Input){throw '缺少同次報表目錄。'}
+  $verifiedDirectory=Join-Path $verified $pair.Verified
+  Assert-NoReparseAncestors $pair.Input
+  Assert-NoReparseAncestors $verifiedDirectory
+  foreach($name in $pair.Names){
+   $inputFile=Join-Path $pair.Input $name;$verifiedFile=Join-Path $verifiedDirectory $name
+   $inputItem=Get-Item -LiteralPath $inputFile -Force -ErrorAction Stop;$verifiedItem=Get-Item -LiteralPath $verifiedFile -Force -ErrorAction Stop
+   if($inputItem.PSIsContainer -or $verifiedItem.PSIsContainer -or ($inputItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or ($verifiedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $inputItem.Length -ne $verifiedItem.Length -or (Get-FileHash -LiteralPath $inputFile).Hash -cne (Get-FileHash -LiteralPath $verifiedFile).Hash){throw '封裝與同次原始報表不一致。'}
+  }
+ }
+} finally {
+ if($owned){
+  Assert-OwnedVerificationDirectory $parent $tempRoot
+  $pending=New-Object 'System.Collections.Generic.Stack[string]';$pending.Push($parent)
+  while($pending.Count){
+   $directory=$pending.Pop()
+   foreach($item in @(Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop)){
+    if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw '驗證目錄內含重新解析點，保留供檢查。'}
+    if($item.PSIsContainer){$pending.Push($item.FullName)}
+   }
+  }
+  Assert-OwnedVerificationDirectory $parent $tempRoot
+  Remove-Item -LiteralPath $parent -Recurse -Force -ErrorAction Stop
+ }
+}
 $attachments=@($ReportArchive)
 $driverAssets=@(Get-ReleaseDriverAssets -Path $DriverAssetManifestPath -Version $Version)
 $qualityAssets=@($attachments|ForEach-Object {[pscustomobject]@{Name=[IO.Path]::GetFileName($_);SHA256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant();Size=(Get-Item -LiteralPath $_).Length}})

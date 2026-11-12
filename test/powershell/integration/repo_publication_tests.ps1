@@ -104,7 +104,8 @@ function gh {
 }
 foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immutable','wrong-sha')){
  $global:repoPublicationMode=$mode;$global:repoPublicationPublished=0;$global:repoPublicationCreated=0;$global:repoPublicationNotesApplied=$false;$global:repoPublicationAssets=@()
- $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool -ReportArchive $archive -BundleToolPath Test-FixtureBundleVerifier -RunAttempt 1 -RunUrl $identity.RunUrl|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publication error: '+$_.Exception.Message)}
+ Assert ((Get-Command gh).CommandType -eq 'Function') '發布測試必須使用 mock gh'
+ $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -ContainerDirectory $containerFixture -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool -ReportArchive $archive -BundleToolPath Test-FixtureBundleVerifier -RunAttempt 1 -RunUrl $identity.RunUrl|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publication error: '+$_.Exception.Message)}
  Assert ($accepted -eq ($mode -eq 'success')) ('Schema2只發布真完整不可變證據：'+$mode)
  Assert ($global:repoPublicationCreated -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('來源在建立草稿前核對：'+$mode)
  if($mode -ne 'wrong-sha'){Assert ($global:repoPublicationTitle -ceq 'v1.0.0' -and $global:repoPublicationDraft) ('版本標題及草稿先行：'+$mode)}
@@ -113,11 +114,12 @@ foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immu
 }
 foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt','verify-failed','different-input')){
  $global:repoPublicationMode='success';$global:repoPublicationCreated=0;$global:repoPublicationPublished=0;$global:fixtureBundleFailure=($invalid -eq 'verify-failed');$global:fixtureBundleMismatch=($invalid -eq 'different-input')
- $argsForPublisher=@{PublicDirectory=$public;Version='v1.0.0';Commit=$identity.Commit;NotesPath=(Join-Path $public 'summary.md');Repository='example/repo';CoverageToolPath=$tool;ReportArchive=$archive;BundleToolPath='Test-FixtureBundleVerifier';RunAttempt=1;RunUrl=$identity.RunUrl}
+ $argsForPublisher=@{PublicDirectory=$public;ContainerDirectory=$containerFixture;Version='v1.0.0';Commit=$identity.Commit;NotesPath=(Join-Path $public 'summary.md');Repository='example/repo';CoverageToolPath=$tool;ReportArchive=$archive;BundleToolPath='Test-FixtureBundleVerifier';RunAttempt=1;RunUrl=$identity.RunUrl}
  if($invalid -eq 'missing-archive'){$argsForPublisher.ReportArchive=Join-Path $fixture 'missing/windows_setup_report_v1.0.0.zip'}
  if($invalid -eq 'bad-run'){$argsForPublisher.RunUrl='https://github.com/example/repo/actions/runs/2'}
  if($invalid -eq 'bad-attempt'){$argsForPublisher.RunAttempt=0}
  if($invalid -eq 'wrong-attempt'){$argsForPublisher.RunAttempt=2}
+ Assert ((Get-Command gh).CommandType -eq 'Function') '失敗案例必須使用 mock gh'
  Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') @argsForPublisher} ('報表驗證失敗拒絕發布 '+$invalid)
  Assert ($global:repoPublicationCreated -eq 0 -and $global:repoPublicationPublished -eq 0) ('報表驗證失敗沒有建立或發布 '+$invalid)
 }

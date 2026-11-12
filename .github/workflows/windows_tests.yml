@@ -489,7 +489,7 @@ jobs:
           SOURCE_COMMIT: ${{ github.sha }}
           IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
-          $arguments = @{PublicDirectory=(Join-Path $env:RUNNER_TEMP ("windows-test-reports-"+$env:GITHUB_RUN_ID+"-"+$env:GITHUB_RUN_ATTEMPT));ReportArchive=(Join-Path $env:RUNNER_TEMP ("windows_setup_report_"+$env:RELEASE_TAG+".zip"));RunAttempt=[int]$env:GITHUB_RUN_ATTEMPT;RunUrl=("https://github.com/"+$env:GITHUB_REPOSITORY+"/actions/runs/"+$env:GITHUB_RUN_ID);Version=$env:RELEASE_TAG;Commit=$env:SOURCE_COMMIT;NotesPath="$env:RUNNER_TEMP\release-notes\release_notes.md";Repository=$env:GH_REPO;Prerelease=($env:IS_PRERELEASE -eq 'true')}
+          $arguments = @{PublicDirectory=(Join-Path $env:RUNNER_TEMP ("windows-test-reports-"+$env:GITHUB_RUN_ID+"-"+$env:GITHUB_RUN_ATTEMPT));ContainerDirectory=(Join-Path $env:RUNNER_TEMP ("docker-test-reports-"+$env:GITHUB_RUN_ID+"-"+$env:GITHUB_RUN_ATTEMPT));ReportArchive=(Join-Path $env:RUNNER_TEMP ("windows_setup_report_"+$env:RELEASE_TAG+".zip"));RunAttempt=[int]$env:GITHUB_RUN_ATTEMPT;RunUrl=("https://github.com/"+$env:GITHUB_REPOSITORY+"/actions/runs/"+$env:GITHUB_RUN_ID);Version=$env:RELEASE_TAG;Commit=$env:SOURCE_COMMIT;NotesPath="$env:RUNNER_TEMP\release-notes\release_notes.md";Repository=$env:GH_REPO;Prerelease=($env:IS_PRERELEASE -eq 'true')}
           .\script\report\publish_quality_release.ps1 @arguments
 
   build-portal:
