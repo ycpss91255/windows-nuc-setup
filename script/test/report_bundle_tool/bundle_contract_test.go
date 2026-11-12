@@ -258,7 +258,7 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if err := verify(out, "1"); err != nil {
 		t.Fatalf("valid archive must verify: %v", err)
 	}
-	for _, kind := range []string{"tampered", "missing", "extra", "traversal", "duplicate", "wrong_attempt"} {
+	for _, kind := range []string{"tampered", "missing", "extra", "traversal", "duplicate", "wrong_attempt", "rehashed_scope", "rehashed_index", "rehashed_summary", "duplicate_manifest_key"} {
 		t.Run(kind, func(t *testing.T) {
 			if kind == "wrong_attempt" {
 				if err := verify(out, "2"); err == nil {
@@ -266,13 +266,49 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 				}
 				return
 			}
+			changed := map[string][]byte{}
+			for name, data := range files {
+				changed[name] = append([]byte(nil), data...)
+			}
+			var changedPath string
+			switch kind {
+			case "rehashed_scope":
+				changedPath = "report_scope.md"
+				changed[changedPath] = []byte("System was executed and passed")
+			case "rehashed_index":
+				changedPath = "index.html"
+				changed[changedPath] = []byte("<html><a href=\"https://untrusted.invalid\">wrong report</a></html>")
+			case "rehashed_summary":
+				changedPath = "native/summary.json"
+				var raw map[string]any
+				json.Unmarshal(changed[changedPath], &raw)
+				raw["Commit"] = strings.Repeat("b", 40)
+				changed[changedPath], _ = json.Marshal(raw)
+			case "duplicate_manifest_key":
+				changed["manifest.json"] = bytes.Replace(changed["manifest.json"], []byte("{\n"), []byte("{\n  \"schema_version\": 1,\n"), 1)
+			}
+			if changedPath != "" {
+				var m map[string]any
+				if e := json.Unmarshal(changed["manifest.json"], &m); e != nil {
+					t.Fatal(e)
+				}
+				for _, entry := range m["files"].([]any) {
+					item := entry.(map[string]any)
+					if item["path"] == changedPath {
+						sum := sha256.Sum256(changed[changedPath])
+						item["size"] = len(changed[changedPath])
+						item["sha256"] = fmt.Sprintf("%x", sum)
+					}
+				}
+				changed["manifest.json"], _ = json.Marshal(m)
+			}
 			p := filepath.Join(t.TempDir(), "candidate.zip")
 			f, e := os.Create(p)
 			if e != nil {
 				t.Fatal(e)
 			}
 			w := zip.NewWriter(f)
-			for name, data := range files {
+			for name, data := range changed {
 				if kind == "missing" && name == "native/summary.json" {
 					continue
 				}
