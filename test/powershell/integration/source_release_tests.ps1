@@ -109,6 +109,8 @@ function Test-DriverDownloadGuidance([string]$Text,[string]$Version,[string]$Ass
  if(@($fixed|Where-Object {$_ -cne $AssetName}).Count){return $false}
  $releases=@([regex]::Matches($section,'v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?(?=\s+Release)')|ForEach-Object {$_.Value})
  if(@($releases|Where-Object {$_ -cne $Version}).Count){return $false}
+ $urls=@([regex]::Matches($section,'/releases/(?:tag|download)/(v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?)')|ForEach-Object {$_.Groups[1].Value})
+ if(@($urls|Where-Object {$_ -cne $Version}).Count){return $false}
  return $fixed.Count -gt 0 -or ($section.Contains('windows_driver_nuc8_<version>.zip') -and $section.Contains('version 包含 v'))
 }
 . (Join-Path $root 'script/release/driver_release_library.ps1')
