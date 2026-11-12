@@ -7,7 +7,10 @@ function Assert([bool]$Condition,[string]$Message){Write-Host ('@@ASSERT@@'+(@{N
 . (Join-Path $PackageRoot 'core\paths.ps1')
 $root=[IO.Path]::GetFullPath($PackageRoot).TrimEnd('\')+'\'
 # Windows resolves case-insensitively; verify the portable Git names explicitly.
-$tracked=if(Test-Path -LiteralPath (Join-Path $PackageRoot '.git')){@(& git -C $PackageRoot -c core.quotePath=false ls-files)}else{@(Get-ChildItem -LiteralPath $PackageRoot -Recurse -File|ForEach-Object {$_.FullName.Substring($PackageRoot.TrimEnd('\').Length+1).Replace('\','/')})}
+$hasGit=Test-Path -LiteralPath (Join-Path $PackageRoot '.git')
+$tracked=if($hasGit){@(& git -C $PackageRoot -c core.quotePath=false ls-files)}else{@(Get-ChildItem -LiteralPath $PackageRoot -Recurse -File|ForEach-Object {$_.FullName.Substring($PackageRoot.TrimEnd('\').Length+1).Replace('\','/')})}
+$rootWorktree=if($hasGit){@(& git -C $PackageRoot ls-files -- 'worktree/');if($LASTEXITCODE -ne 0){throw '無法確認已追蹤的根工作樹。'}}else{@($tracked|Where-Object {$_ -cmatch '^worktree/'})}
+Assert ($rootWorktree.Count -eq 0) 'tracked root worktree is excluded from source distribution'
 foreach($license in @('vendor/golang.org/x/net/LICENSE','vendor/golang.org/x/net/PATENTS')){Assert ($tracked -ccontains $license) ('official HTML parser license retains upstream spelling: '+$license)}
 foreach($path in $tracked){
  if($path -cmatch '^(modules/debloat/win11debloat/|vendor/golang.org/x/net/)'){continue}
