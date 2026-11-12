@@ -33,3 +33,17 @@ Assert ((Test-Path -LiteralPath $owner.Path) -and (Test-Path -LiteralPath $senti
 Remove-TestOwner $owner
 Remove-TestOwner $other
 Assert (-not (Test-Path -LiteralPath $owner.Path) -and -not (Test-Path -LiteralPath $other.Path)) '移除連結後已簽發目錄可清理'
+$owner=New-TestOwner
+$other=New-TestOwner
+$sentinel=Join-Path $other.Path 'sentinel';[IO.File]::WriteAllText($sentinel,'keep')
+$held=$owner.Path+'_held'
+if([IO.Path]::GetDirectoryName($held) -cne $owner.Root -or (Test-Path -LiteralPath $held)){throw 'fixture move target is not a new direct TEMP child'}
+[IO.Directory]::Move($owner.Path,$held)
+New-Item -ItemType Junction -Path $owner.Path -Target $other.Path|Out-Null
+Refuse {Remove-TestOwner $owner} '替換 owner 本身為 junction 必須拒絕'
+Assert ((Test-Path -LiteralPath $sentinel) -and (Test-Path -LiteralPath $held)) '替換連結後不得刪除目標或原始目錄'
+[IO.Directory]::Delete($owner.Path)
+[IO.Directory]::Move($held,$owner.Path)
+Remove-TestOwner $owner
+Remove-TestOwner $other
+Assert (-not (Test-Path -LiteralPath $owner.Path)) '恢復原目錄後合法清理'

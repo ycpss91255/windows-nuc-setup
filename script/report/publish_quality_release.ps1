@@ -47,24 +47,9 @@ function Assert-NoReparseAncestors([string]$Path) {
   if($null -eq $next){break};$current=$next.FullName
  }
 }
-function Assert-OwnedVerificationDirectory([string]$Directory,[string]$TempRoot) {
- $full=[IO.Path]::GetFullPath($Directory).TrimEnd('\','/')
- $temp=[IO.Path]::GetFullPath($TempRoot).TrimEnd('\','/')
- if(-not [string]::Equals([IO.Path]::GetDirectoryName($full),$temp,[StringComparison]::OrdinalIgnoreCase)){throw '驗證目錄不在暫存根目錄下。'}
- Assert-NoReparseAncestors $full
- $resolved=(Resolve-Path -LiteralPath $full -ErrorAction Stop).ProviderPath.TrimEnd('\','/')
- if(-not [string]::Equals($resolved,$full,[StringComparison]::OrdinalIgnoreCase)){throw '驗證目錄解析結果不符。'}
-}
-$tempRoot=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')
-Assert-NoReparseAncestors $tempRoot
-if(-not [string]::Equals((Resolve-Path -LiteralPath $tempRoot).ProviderPath.TrimEnd('\','/'),$tempRoot,[StringComparison]::OrdinalIgnoreCase)){throw '暫存根目錄解析結果不符。'}
-$parent=Join-Path $tempRoot ('release_verified_'+[guid]::NewGuid().ToString('N'))
-$owned=$false
+$owner=New-ReportOwnedTemp -Purpose Release
+$parent=$owner.Path
 try {
- New-Item -ItemType Directory -Path $parent -ErrorAction Stop|Out-Null
- Assert-OwnedVerificationDirectory $parent $tempRoot
- if(@(Get-ChildItem -LiteralPath $parent -Force).Count -ne 0){throw '驗證目錄必須為空。'}
- $owned=$true
  $verified=Join-Path $parent 'verified'
  & $BundleToolPath verify --archive $ReportArchive --source-root $SourceRoot --version $Version --commit $Commit --run-url $RunUrl --run-attempt $RunAttempt --output-dir $verified
  if($LASTEXITCODE -ne 0){throw '報表封裝驗證失敗。'}
@@ -84,19 +69,7 @@ try {
   }
  }
 } finally {
- if($owned){
-  Assert-OwnedVerificationDirectory $parent $tempRoot
-  $pending=New-Object 'System.Collections.Generic.Stack[string]';$pending.Push($parent)
-  while($pending.Count){
-   $directory=$pending.Pop()
-   foreach($item in @(Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop)){
-    if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){throw '驗證目錄內含重新解析點，保留供檢查。'}
-    if($item.PSIsContainer){$pending.Push($item.FullName)}
-   }
-  }
-  Assert-OwnedVerificationDirectory $parent $tempRoot
-  Remove-Item -LiteralPath $parent -Recurse -Force -ErrorAction Stop
- }
+ Remove-ReportOwnedTemp -Handle $owner
 }
 $attachments=@($ReportArchive)
 $driverAssets=@(Get-ReleaseDriverAssets -Path $DriverAssetManifestPath -Version $Version)

@@ -52,17 +52,17 @@ try {
  finally {Remove-Item Function:\Copy-Item}
  $leaked=@(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'portal_zip_*'|Where-Object {$before -cnotcontains $_.FullName})
  Assert ($leaked.Count -eq 0) '頁面複製失敗仍清除自建驗證目錄'
- Reject {Remove-PortalOwnedTemporaryDirectory $parent} '非本次登記的目錄不得清理'
- $safe=New-PortalOwnedTemporaryDirectory
+ Reject {Remove-ReportOwnedTemp -Handle $parent} '非本次登記的目錄不得清理'
+ $safe=New-ReportOwnedTemp -Purpose Portal
  $target=Join-Path $parent 'link-target';New-Item -ItemType Directory $target|Out-Null
  $sentinel=Join-Path $target 'sentinel';[IO.File]::WriteAllText($sentinel,'keep')
- $junction=Join-Path $safe 'junction'
+ $junction=Join-Path $safe.Path 'junction'
  New-Item -ItemType Junction -Path $junction -Target $target|Out-Null
- Reject {Remove-PortalOwnedTemporaryDirectory $safe} '自建目錄中有連結不得遞迴清理'
+ Reject {Remove-ReportOwnedTemp -Handle $safe} '自建目錄中有連結不得遞迴清理'
  Assert (Test-Path -LiteralPath $sentinel -PathType Leaf) '拒絕清理時連結目標仍存在'
  [IO.Directory]::Delete($junction)
- Remove-PortalOwnedTemporaryDirectory $safe
- Assert (-not (Test-Path -LiteralPath $safe)) '移除連結後僅清理登記目錄'
+ Remove-ReportOwnedTemp -Handle $safe
+ Assert (-not (Test-Path -LiteralPath $safe.Path)) '移除連結後僅清理登記目錄'
  # Mock only GitHub transport and fetch; the downloaded ZIP is still validated by the real binary.
  $mockAssets=@(@{name=[IO.Path]::GetFileName($entry.ArchivePath);digest=$entry.ArchiveDigest;size=$entry.ArchiveSize})
  $mockCommit=$f.commit
