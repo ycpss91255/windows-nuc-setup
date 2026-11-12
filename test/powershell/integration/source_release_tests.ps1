@@ -66,6 +66,11 @@ $releaseJob=[regex]::Match($workflow,'(?ms)^  release:\s*$(.*?)(?=^  [a-z][a-z-]
 $builderPos=$releaseJob.IndexOf('build_source_release.ps1');$guardPos=$releaseJob.IndexOf('Assert-ReleaseReportLink');$publishPos=$releaseJob.IndexOf('publish_quality_release.ps1')
 Assert ($builderPos -ge 0 -and $guardPos -gt $builderPos -and $publishPos -gt $guardPos -and $releaseJob.Contains('Assert-ReleaseReportLink -Version $env:RELEASE_TAG -Notes $notes')) 'CD 先產說明、按本次標籤核對入口後才發布'
 
+$nativeDownload=$releaseJob.IndexOf('windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}')
+$containerDownload=$releaseJob.IndexOf('docker-test-reports-${{ github.run_id }}-${{ github.run_attempt }}')
+$exportPos=$releaseJob.IndexOf(' export ');$verifyPos=$releaseJob.IndexOf(' verify ')
+Assert ($nativeDownload -ge 0 -and $containerDownload -ge 0 -and $exportPos -gt $nativeDownload -and $exportPos -gt $containerDownload -and $verifyPos -gt $exportPos -and $publishPos -gt $verifyPos) 'CD 在同次兩工件封裝及驗證成功後才發布'
+
 Assert (@(Get-ChildItem (Join-Path $fixture 'notes')).Count -eq 1) '只輸出說明，不複製 GitHub 來源 ZIP'
 Assert (-not $result.Prerelease) '正式版本分類正確'
 Assert ((Get-ReleaseVersion 'v1.2.3-rc2').Prerelease) 'RC 分類為預覽版本'
