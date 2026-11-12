@@ -8,7 +8,7 @@
 
 上方覆蓋率徽章顯示最近一次成功部署 main 的整體自有程式碼覆蓋率；點擊徽章可查閱該次靜態詳細報表與來源。若部署失敗，徽章保留上次成功結果，請以 Windows CI 與 Actions 的最新執行結果為準。PR 不更新公開報表。
 
-完整版本報表規劃自 **v0.2.5 起**隨該版 [GitHub Release](https://github.com/ycpss91255/windows_setup/releases) 提供：在 Assets 下載 `windows_setup_report_<version>.zip`，解壓後開啟 `index.html`，即可查看原生與容器報表及各自的量測範圍（Scope）。v0.2.5 尚未發布；v0.2.4 仍使用該版既有的原始品質附件與歷史報表頁，不提供此 ZIP。
+使用 **v0.2.5 或更新版本**時，在對應的 [GitHub Release](https://github.com/ycpss91255/windows_setup/releases) Assets 下載 `windows_setup_report_<version>.zip`，解壓後開啟 `index.html`，即可查看原生與容器報表及各自的量測範圍（Scope）。v0.2.4 仍使用該版既有的原始品質附件與歷史報表頁，不提供此 ZIP。
 
 Windows 設定工具：以 Init 與 Windows 兩個入口完成帳號初始化、模組設定與後續驗收。本文以繁體中文提供完整操作說明；版本摘要見 [變更紀錄](doc/changelog/changelog.md)，實作與驗證細節以中文 Git 提交及 GitHub Release 為準。
 
