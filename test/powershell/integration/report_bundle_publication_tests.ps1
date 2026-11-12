@@ -59,4 +59,19 @@ Assert ((Get-Command gh).CommandType -eq 'Function') '正例同樣使用 mock gh
 $caught='';try{& (Join-Path $root 'script/report/publish_quality_release.ps1') @arguments}catch{$caught=$_.Exception.Message}
 Assert ($caught -ceq 'MOCK_CREATE_AFTER_VERIFICATION' -and $global:mockCreate -eq 1) '原始 bytes 一致才到達受控建立草稿邊界'
 Remove-Item Function:\gh
+$helperRoot=Join-Path $work 'helper';New-Item -ItemType Directory -Path $helperRoot|Out-Null
+Copy-Item -LiteralPath $fixtureNative -Destination (Join-Path $helperRoot 'windows-test-reports-1-1') -Recurse
+Copy-Item -LiteralPath $container -Destination (Join-Path $helperRoot 'docker-test-reports-1-1') -Recurse
+$saved=@{};foreach($name in @('RUNNER_TEMP','GITHUB_REF_NAME','GITHUB_SHA','GITHUB_REPOSITORY','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT')){$saved[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
+try{
+ $env:RUNNER_TEMP=$helperRoot;$env:GITHUB_REF_NAME=$data.version;$env:GITHUB_SHA=$data.commit;$env:GITHUB_REPOSITORY='example/windows_setup';$env:GITHUB_RUN_ID='1';$env:GITHUB_RUN_ATTEMPT='1'
+ $helperPassed=$true
+ Push-Location $root
+ try{& (Join-Path $root 'script/report/build_release_bundle.ps1') -SourceRoot $source}catch{$helperPassed=$false}finally{Pop-Location}
+ Assert ($helperPassed -and (Test-Path -LiteralPath (Join-Path $helperRoot $data.archive) -PathType Leaf)) 'CD 工具實際封裝及驗證同次工件'
+ $env:GITHUB_RUN_ATTEMPT='2';$wrongAttemptRejected=$false
+ Push-Location $root
+ try{& (Join-Path $root 'script/report/build_release_bundle.ps1') -SourceRoot $source}catch{$wrongAttemptRejected=$true}finally{Pop-Location}
+ Assert $wrongAttemptRejected 'CD 工具拒絕不同 attempt 或缺少同次工件'
+}finally{foreach($name in $saved.Keys){[Environment]::SetEnvironmentVariable($name,$saved[$name],'Process')}}
 Write-Host 'ALL PASS: synthetic bundle publication boundary; mocked gh'
