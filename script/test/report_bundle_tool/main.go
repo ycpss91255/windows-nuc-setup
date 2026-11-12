@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -611,6 +612,10 @@ func verify(args []string) error {
 	return nil
 }
 
+func sameOutputParent(parent, resolved, platform string) bool {
+	return strings.EqualFold(filepath.Clean(parent), filepath.Clean(resolved))
+}
+
 // writeVerifiedOutput only publishes bytes after every archive and report check passes.
 func writeVerifiedOutput(output string, archive []byte, files map[string][]byte, o options) error {
 	if _, err := os.Lstat(output); err == nil || !os.IsNotExist(err) {
@@ -624,7 +629,7 @@ func writeVerifiedOutput(output string, archive []byte, files map[string][]byte,
 	if err != nil {
 		return err
 	}
-	if !strings.EqualFold(filepath.Clean(parent), filepath.Clean(resolved)) {
+	if !sameOutputParent(parent, resolved, runtime.GOOS) {
 		return errors.New("output parent must not contain symlinks")
 	}
 	entries, err := os.ReadDir(parent)
