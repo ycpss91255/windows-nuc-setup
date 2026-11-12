@@ -45,4 +45,5 @@ $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tes
 $deployment=[regex]::Match($workflow,'(?ms)^  verify-deployment:\s*$(.*?)(?=^  [a-z][a-z-]*:|\z)').Groups[1].Value
 $condition=[regex]::Match($deployment,'(?m)^    if: (.+)$').Groups[1].Value
 Assert ($condition -match 'always\(\)' -and $condition.Contains("github.ref == 'refs/heads/main'") -and $condition.Contains("needs.publish-reports.result == 'success'")) 'main 公開驗收明確處理略過的祖先工作，且只在發布成功後執行'
+Assert ($condition.Contains("startsWith(github.ref, 'refs/tags/v')") -and $deployment.Contains('--mode release') -and $deployment.Contains('--release-metadata')) 'Tag 部署成功後必須執行版本證據驗收'
 Write-Host ('ALL PASS: '+$count+' architecture assertions; source inspection and temporary fixture only.')
