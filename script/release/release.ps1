@@ -6,7 +6,7 @@ function Get-ReleaseVersion([string]$Version) {
 }
 function Get-ReleaseReportLink([string]$Version) {
  $null=Get-ReleaseVersion $Version
- return ('[此版本測試報表](https://ycpss91255.github.io/windows_setup/versions/'+$Version+'/index.html)')
+ return ('[此版本測試報表](https://github.com/ycpss91255/windows_setup/releases/download/'+$Version+'/windows_setup_report_'+$Version+'.zip)')
 }
 function Assert-ReleaseReportLink([string]$Version,[string]$Notes) {
  $expected=(Get-ReleaseReportLink $Version)+"`n`n"
