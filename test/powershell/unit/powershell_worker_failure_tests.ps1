@@ -38,3 +38,6 @@ Assert (-not $safeJson.Contains($secret) -and -not $safeJson.Contains('C:\Users'
 [IO.File]::WriteAllText($stdout,'@@SAFE_FIXTURE_DIAG@@fixture_export:PRIVATE-CREDENTIAL-SENTINEL',[Text.UTF8Encoding]::new($false))
 $unknown=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $source -TestFile 'test/powershell/integration/report_bundle_publication_tests.ps1' -WorkerIndex 1 -Engine powershell -NativeExitCode 1 -StandardOutputPath $stdout -StandardErrorPath (Join-Path $temp 'missing2')
 Assert (-not $unknown.FixtureStage -and -not $unknown.FixtureReason) '未知診斷碼不得公開'
+[IO.File]::WriteAllText($stdout,'@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed',[Text.UTF8Encoding]::new($false))
+$wrongSuite=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $source -TestFile 'test/powershell/unit/unrelated_tests.ps1' -WorkerIndex 1 -Engine powershell -NativeExitCode 1 -StandardOutputPath $stdout -StandardErrorPath (Join-Path $temp 'missing2')
+Assert (-not $wrongSuite.FixtureStage -and -not $wrongSuite.FixtureReason) '非工件測試不得冒充固定診斷'
