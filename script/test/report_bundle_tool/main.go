@@ -416,6 +416,16 @@ func export(o options) error {
 		return e
 	}
 	files["manifest.json"] = append(manifest, '\n')
+	var expanded int64
+	for _, data := range files {
+		if len(data) > maxFile {
+			return errors.New("archive entry size limit")
+		}
+		expanded += int64(len(data))
+	}
+	if expanded > int64(maxArchive) {
+		return errors.New("archive expanded size limit")
+	}
 	names = append(names, "manifest.json")
 	sort.Strings(names)
 	f, e := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -445,6 +455,13 @@ func export(o options) error {
 	}
 	if e = z.Close(); e != nil {
 		return e
+	}
+	info, e := f.Stat()
+	if e != nil {
+		return e
+	}
+	if info.Size() > int64(maxArchive) {
+		return errors.New("archive size limit")
 	}
 	if e = f.Close(); e != nil {
 		return e
