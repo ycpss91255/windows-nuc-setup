@@ -26,3 +26,10 @@ $fixed=@('Unit.driver_cache_cleanup','Integration.init_runtime','Integration.dri
 foreach($suite in $fixed){[IO.File]::WriteAllText((Join-Path $temp ($suite+'.log')),('safe fixture details '+$suite))}
 $accepted=$true;try{$details=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames $fixed) -join "`n"}catch{$accepted=$false}
 Assert ($accepted -and $details.Contains('safe fixture details Unit.driver_cache_cleanup') -and $details.Contains('safe fixture details Integration.init_runtime') -and $details.Contains('safe fixture details Integration.driver_full_source_coverage')) '固定安全驅動與Init診斷可讀回實值，不擴張任意log白名單'
+[IO.File]::WriteAllLines((Join-Path $temp 'Integration.report_bundle_publication.log'),[string[]]@('PRIVATE-CREDENTIAL-SENTINEL C:\Users\private','@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed','@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed','@@SAFE_FIXTURE_DIAG@@fixture_export:unknown'))
+$safeAccepted=$true;try{$safeOutput=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.report_bundle_publication')) -join "`n"}catch{$safeAccepted=$false;$safeOutput=''}
+Assert ($safeAccepted -and $safeOutput.Contains('fixture_export:go_fixture_failed')) '原生 All 只呈現合成工件固定失敗代碼'
+Assert (-not $safeOutput.Contains('PRIVATE-CREDENTIAL-SENTINEL') -and -not $safeOutput.Contains('C:\Users') -and -not $safeOutput.Contains('unknown')) '原生 All 不公開原始私人日誌或未知代碼'
+Assert (([regex]::Matches($safeOutput,'fixture_export:go_fixture_failed')).Count -eq 1) '重複固定代碼輸出有界'
+$workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
+Assert ($workflow.Contains("'Integration.report_bundle_publication'")) '原生 All 失敗流程接入安全合成工件診斷'
