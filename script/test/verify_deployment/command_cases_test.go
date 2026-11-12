@@ -242,6 +242,15 @@ func TestDeploymentCases(t *testing.T) {
 			pages["versions.json"] = []byte(`[]`)
 		}()
 		tagArgs := append(args(), "--mode", "release", "--tag", tag, "--release-metadata", metadata)
+				t.Run("混合新舊附件必須拒絕", func(t *testing.T) {
+			original, err := os.ReadFile(metadata); if err != nil { t.Fatal(err) }
+			defer os.WriteFile(metadata, original, 0600)
+			var value map[string]any
+			if err := json.Unmarshal(original, &value); err != nil { t.Fatal(err) }
+			value["assets"] = append(value["assets"].([]any), map[string]any{"name":"windows_setup_report_"+tag+".zip", "size":1, "digest":"sha256:"+strings.Repeat("a",64)})
+			changed, _ := json.Marshal(value); if err := os.WriteFile(metadata, changed, 0600); err != nil { t.Fatal(err) }
+			if err := invoke(tagArgs...); err == nil { t.Fatal("混合格式不可當作舊附件接受") }
+		})
 		if e := invoke(tagArgs...); e != nil {
 			t.Fatalf("valid tag publication rejected: %v", e)
 		}
