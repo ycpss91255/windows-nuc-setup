@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 	a "windows_setup/script/test/acceptance"
 	c "windows_setup/script/test/repo_coverage"
 )
@@ -118,19 +119,31 @@ func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []str
 	if e != nil {
 		return e
 	}
-	versionText := regexp.MustCompile(`版本\s+` + regexp.QuoteMeta(tag) + `(?:\s|·|$)`)
-	commitText := regexp.MustCompile(`(?:^|[^a-f0-9])` + regexp.QuoteMeta(sha) + `(?:[^a-f0-9]|$)`)
-	if !versionText.MatchString(page.Visible) || !commitText.MatchString(page.Visible) {
-		return fmt.Errorf("visible release version or commit mismatch")
-	}
-	runLink := false
-	for _, link := range page.VisibleLinks {
-		if link == run {
-			runLink = true
+	expectedIdentity := "版本 " + tag + " · 提交 " + sha + " 量測時間（UTC）：" + report.MeasuredAt
+	identityCount := 0
+	for _, paragraph := range page.VisibleParagraphs {
+		text := strings.Join(strings.Fields(paragraph), " ")
+		if strings.HasPrefix(text, "版本 ") {
+			identityCount++
+			if text != expectedIdentity {
+				return fmt.Errorf("visible release identity paragraph mismatch")
+			}
 		}
 	}
-	if !runLink {
-		return fmt.Errorf("visible release run link mismatch")
+	if identityCount != 1 {
+		return fmt.Errorf("visible release identity paragraph missing or duplicated")
+	}
+	runCount := 0
+	for _, anchor := range page.VisibleAnchors {
+		if strings.Join(strings.Fields(anchor.Text), " ") == "GitHub Actions 執行紀錄" {
+			runCount++
+			if anchor.Href != run {
+				return fmt.Errorf("visible release run link mismatch")
+			}
+		}
+	}
+	if runCount != 1 {
+		return fmt.Errorf("visible release run link missing or duplicated")
 	}
 	return nil
 }
