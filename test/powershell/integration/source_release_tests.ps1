@@ -64,7 +64,7 @@ Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes ($expected.Replace('/ver
 $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
 $releaseJob=[regex]::Match($workflow,'(?ms)^  release:\s*$(.*?)(?=^  [a-z][a-z-]*:|\z)').Groups[1].Value
 $builderPos=$releaseJob.IndexOf('build_source_release.ps1');$guardPos=$releaseJob.IndexOf('Assert-ReleaseReportLink');$publishPos=$releaseJob.IndexOf('publish_quality_release.ps1')
-Assert ($builderPos -ge 0 -and $guardPos -gt $builderPos -and $publishPos -gt $guardPos -and $releaseJob.Contains('-Version $env:RELEASE_TAG')) 'CD 先產說明、按本次標籤核對入口後才發布'
+Assert ($builderPos -ge 0 -and $guardPos -gt $builderPos -and $publishPos -gt $guardPos -and $releaseJob.Contains('Assert-ReleaseReportLink -Version $env:RELEASE_TAG -Notes $notes')) 'CD 先產說明、按本次標籤核對入口後才發布'
 
 Assert (@(Get-ChildItem (Join-Path $fixture 'notes')).Count -eq 1) '只輸出說明，不複製 GitHub 來源 ZIP'
 Assert (-not $result.Prerelease) '正式版本分類正確'
