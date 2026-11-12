@@ -3,6 +3,7 @@ $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 . (Join-Path $root 'script/test/test_report.ps1')
 . (Join-Path $root 'script/report/portal.ps1')
+. (Join-Path $root 'test/powershell/helpers/report_bundle_fixture.ps1')
 function Assert([bool]$condition,[string]$message){Write-Host ('@@ASSERT@@'+(@{Name=$message;Passed=$condition}|ConvertTo-Json -Compress));if(-not $condition){throw $message}}
 function Reject([scriptblock]$action,[string]$message){$caught=$false;try{& $action|Out-Null}catch{$caught=$true};Assert $caught $message}
 $parent=Join-Path ([IO.Path]::GetTempPath()) ('portal_synthetic_'+[guid]::NewGuid().ToString('N'))
@@ -11,16 +12,12 @@ $oldLocation=Get-Location
 $oldFixture=$env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR;$oldTool=$env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL;$oldRepo=$env:GH_REPO
 try {
  Set-Location $root
- $env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR=Join-Path $parent 'fixture'
- & go.exe test -count=1 -run '^TestExportSyntheticConsumerFixture$' ./script/test/report_bundle_tool
- if($LASTEXITCODE -ne 0){throw 'synthetic report fixture generation failed'}
- $env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL=Join-Path $parent 'report_bundle_tool.exe'
- & go.exe build -o $env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL ./script/test/report_bundle_tool
- if($LASTEXITCODE -ne 0){throw 'report verifier build failed'}
- $f=Get-Content -LiteralPath (Join-Path $env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR 'fixture.json') -Raw -Encoding UTF8|ConvertFrom-Json
+ $fixture=New-TestReportBundleFixture -RepositoryRoot $root -Destination (Join-Path $parent 'fixture')
+ $env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL=$fixture.BundleTool
+ $f=$fixture.Metadata
  Assert ($f.kind -ceq 'Synthetic') '明確標示合成測試資料'
  $env:GH_REPO='example/windows_setup'
- $entry=[pscustomobject]@{Version=$f.version;Commit=$f.commit;Immutable=$true;Repository=$env:GH_REPO;ArchivePath=(Join-Path $env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR $f.archive);ArchiveDigest=('sha256:'+$f.sha256);ArchiveSize=$f.size;SourcePath=(Join-Path $env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR $f.source);SnapshotPath='';ManifestPath='';ReleaseUrl=('https://github.com/'+$env:GH_REPO+'/releases/tag/'+$f.version)}
+ $entry=[pscustomobject]@{Version=$f.version;Commit=$f.commit;Immutable=$true;Repository=$env:GH_REPO;ArchivePath=$fixture.Archive;ArchiveDigest=('sha256:'+$f.sha256);ArchiveSize=$f.size;SourcePath=$fixture.Source;SnapshotPath='';ManifestPath='';ReleaseUrl=('https://github.com/'+$env:GH_REPO+'/releases/tag/'+$f.version)}
  $evidence=Test-PortalReleaseEvidence $entry
  Assert ($evidence.Snapshot.Commit -ceq $f.commit -and $evidence.ArchiveDigest -ceq $entry.ArchiveDigest) '真驗證器接受合成 ZIP 並保留來源與外摘要'
  $wrong=$entry|Select-Object *;$wrong.ArchiveDigest='sha256:'+('0'*64)

@@ -2,30 +2,21 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
-$fixture=$env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR
-if(-not $fixture){
- $fixture=Join-Path $env:TEMP ('publisher_bundle_fixture_'+[guid]::NewGuid().ToString('N'))
- $env:WINDOWS_SETUP_BUNDLE_FIXTURE_DIR=$fixture
- Push-Location $root
- try{& go.exe test -count=1 -run '^TestExportSyntheticConsumerFixture$' ./script/test/report_bundle_tool;if($LASTEXITCODE -ne 0){throw '無法建立合成工件。'}}finally{Pop-Location}
-}
-$data=Get-Content -LiteralPath (Join-Path $fixture 'fixture.json') -Raw -Encoding UTF8|ConvertFrom-Json
+. (Join-Path $root 'test/powershell/helpers/report_bundle_fixture.ps1')
+$fixturePath=Join-Path ([IO.Path]::GetTempPath()) ('publisher_bundle_fixture_'+[guid]::NewGuid().ToString('N'))
+$bundleFixture=New-TestReportBundleFixture -RepositoryRoot $root -Destination $fixturePath
+$data=$bundleFixture.Metadata
 Assert ($data.kind -ceq 'Synthetic') '僅使用標明 Synthetic 的受控工件'
-$source=Join-Path $fixture $data.source
-$fixtureNative=Join-Path $fixture 'windows-test-reports-1-1'
-$container=Join-Path $fixture 'docker-test-reports-1-1'
-$work=Join-Path $env:TEMP ('publisher_bundle_replay_'+[guid]::NewGuid().ToString('N'))
+$source=$bundleFixture.Source
+$fixtureNative=Join-Path $bundleFixture.Root 'windows-test-reports-1-1'
+$container=Join-Path $bundleFixture.Root 'docker-test-reports-1-1'
+$work=Join-Path ([IO.Path]::GetTempPath()) ('publisher_bundle_replay_'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work -ErrorAction Stop|Out-Null
 $baselineRoot=Join-Path $work 'baseline';New-Item -ItemType Directory -Path $baselineRoot|Out-Null
 $native=Join-Path $baselineRoot 'windows-test-reports-1-1'
 Copy-Item -LiteralPath $fixtureNative -Destination $native -Recurse
 $archive=Join-Path $baselineRoot $data.archive
-$bundleTool=Join-Path $work 'report_bundle_tool.exe';$coverageTool=Join-Path $work 'repo_coverage_tool.exe'
-Push-Location $root
-try{
- & go.exe build -o $bundleTool ./script/test/report_bundle_tool;if($LASTEXITCODE -ne 0){throw '建立封裝驗證工具失敗。'}
- & go.exe build -o $coverageTool ./script/test/repo_coverage_tool;if($LASTEXITCODE -ne 0){throw '建立覆蓋率工具失敗。'}
-}finally{Pop-Location}
+$bundleTool=$bundleFixture.BundleTool;$coverageTool=$bundleFixture.CoverageTool
 $identity=@('--source-root',$source,'--version',$data.version,'--commit',$data.commit,'--run-url',$data.run_url,'--run-attempt',[string]$data.run_attempt)
 & $bundleTool export --native-dir $native --container-dir $container @identity --output $archive
 Assert ($LASTEXITCODE -eq 0) 'PS5 可比較摘要與附件的第一份報告可真實封裝'
