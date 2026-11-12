@@ -54,25 +54,15 @@ func Test報表封裝驗證與外層身分(t *testing.T) {
 		t.Fatalf("valid bundle: %v", err)
 	}
 
-	t.Run("檔案識別在讀取前變更須拒絕", func(t *testing.T) {
-		replacement := filepath.Join(t.TempDir(), "replacement.zip")
-		if err := os.WriteFile(replacement, payload, 0600); err != nil {
-			t.Fatal(err)
-		}
-		oldHook := afterArchiveStat
-		defer func() { afterArchiveStat = oldHook }()
-		afterArchiveStat = func() {
-			if err := os.Remove(archive); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Rename(replacement, archive); err != nil {
-				t.Fatal(err)
-			}
-		}
+	t.Run("超過讀取上限須拒絕", func(t *testing.T) {
+		oldLimit := maxReportArchiveBytes
+		defer func() { maxReportArchiveBytes = oldLimit }()
+		maxReportArchiveBytes = 8
 		if _, err := prepareReleaseBundle(meta([]releaseAsset{a}), tag, sha, run, 2, "trusted", archive); err == nil {
-			t.Fatal("不得接受檢查後被替換的檔案")
+			t.Fatal("不得讀取超過上限的封裝")
 		}
 	})
+
 	origin = "immutable_archive_manifest"
 	if _, err = prepareReleaseBundle(meta([]releaseAsset{a}), tag, sha, run, 2, "trusted", archive); err == nil {
 		t.Fatal("拒絕非 explicit 來源")

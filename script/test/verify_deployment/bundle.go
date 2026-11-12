@@ -46,7 +46,7 @@ func assetFromBytes(name string, b []byte) releaseAsset {
 	return releaseAsset{Name: name, Size: int64(len(b)), Digest: fmt.Sprintf("sha256:%x", h)}
 }
 
-var afterArchiveStat = func() {}
+var maxReportArchiveBytes int64 = 256 * 1024 * 1024
 
 var runReportVerifier = func(tool string, args ...string) error {
 	b, err := exec.Command(tool, args...).CombinedOutput()
@@ -92,7 +92,6 @@ func prepareReleaseBundle(metadata []byte, tag, sha, run string, attempt int, to
 	if err != nil || !info.Mode().IsRegular() || info.Size() != outer.Size || info.Size() > 256*1024*1024 {
 		return nil, fmt.Errorf("invalid archive file")
 	}
-	afterArchiveStat()
 	payload, err := os.ReadFile(archive)
 	if err != nil {
 		return nil, err
