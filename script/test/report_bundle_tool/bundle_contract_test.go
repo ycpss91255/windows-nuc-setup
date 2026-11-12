@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	a "windows_setup/script/test/acceptance"
@@ -244,6 +245,28 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", target}
 		if err := verify(args); err == nil {
 			t.Fatal("symlink output parent accepted")
+		}
+		if _, err := os.Lstat(filepath.Join(real, "verified")); !os.IsNotExist(err) {
+			t.Fatal("output written through symlink")
+		}
+	})
+	t.Run("reject_case_distinct_symlink_parent", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("requires case-sensitive filesystem")
+		}
+		root := t.TempDir()
+		real := filepath.Join(root, "a")
+		if err := os.Mkdir(real, 0700); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(root, "A")
+		if err := os.Symlink(real, link); err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(link, "verified")
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", target}
+		if err := verify(args); err == nil {
+			t.Fatal("case-distinct symlink output parent accepted")
 		}
 		if _, err := os.Lstat(filepath.Join(real, "verified")); !os.IsNotExist(err) {
 			t.Fatal("output written through symlink")
@@ -636,5 +659,13 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 				t.Fatalf("invalid archive accepted: %s", kind)
 			}
 		})
+	}
+}
+func TestOutputParentComparisonRespectsPlatform(t *testing.T) {
+	if sameOutputParent("/tmp/A", "/tmp/a", "linux") {
+		t.Fatal("case-distinct Linux paths accepted as identical")
+	}
+	if !sameOutputParent("C:/Temp/A", "c:/temp/a", "windows") {
+		t.Fatal("Windows paths should ignore case")
 	}
 }
