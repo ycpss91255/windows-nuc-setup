@@ -45,6 +45,7 @@ function Test-PortalZipEvidence {
  if($Entry.Immutable -isnot [bool] -or -not $Entry.Immutable){throw 'Release 未鎖定。'}
  if($Entry.Version -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$' -or $Entry.Commit -cnotmatch '^[a-f0-9]{40}$'){throw '版本或提交不合法。'}
  if($ExpectedRepository -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or $Entry.Repository -cne $ExpectedRepository -or $Entry.ArchiveDigest -cnotmatch '^sha256:[a-f0-9]{64}$' -or $Entry.ArchiveSize -le 0){throw '儲存庫或附件摘要不合法。'}
+ if($Entry.ReleaseUrl -cne ('https://github.com/'+$ExpectedRepository+'/releases/tag/'+$Entry.Version)){throw 'Release 網址與可信儲存庫或版本不符。'}
  if(-not (Test-Path -LiteralPath $Entry.ArchivePath -PathType Leaf) -or -not (Test-Path -LiteralPath $Entry.SourcePath -PathType Container) -or -not (Test-Path -LiteralPath $BundleToolPath -PathType Leaf)){throw '缺少 ZIP、精確來源或驗證工具。'}
  $parent=Join-Path ([IO.Path]::GetTempPath()) ('portal_zip_'+[guid]::NewGuid().ToString('N'))
  New-Item -ItemType Directory -Path $parent | Out-Null
