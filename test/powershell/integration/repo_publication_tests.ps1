@@ -35,6 +35,7 @@ $legacyDirectory=Join-Path $fixture 'legacy_publish'
 Write-TestReports -Checks $checks -OutputDirectory $legacyDirectory @identity -SchemaVersion 1 -Version v1.0.0 -RefType Release -RefName v1.0.0 -Environment Fixture|Out-Null
 $global:repoPublicationRemoteCalled=$false
 function gh {$global:repoPublicationRemoteCalled=$true;$global:LASTEXITCODE=1;throw 'unexpected remote operation'}
+Assert ((Get-Command gh).CommandType -eq 'Function') '歷史發布負例必須使用 mock gh'
 Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $legacyDirectory -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $legacyDirectory 'summary.md') -Repository example/repo} '本輪publisher不得降級legacy契約'
 Assert (-not $global:repoPublicationRemoteCalled) 'legacy只能讀歷史，發布前禁止遠端操作'
 Remove-Item Function:\gh
@@ -183,6 +184,7 @@ Refuse {& (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catal
 $lowReport.RefType='Release';$lowReport.RefName='v1.0.0';Write-SnapshotView $lowReport $lowDirectory
 $global:repoPublicationRemoteCalled=$false
 function gh {$global:repoPublicationRemoteCalled=$true;throw 'unexpected remote call'}
+Assert ((Get-Command gh).CommandType -eq 'Function') '覆蓋率負例必須使用 mock gh'
 Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $lowDirectory -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $lowDirectory 'summary.md') -Repository example/repo -CoverageToolPath $tool} '新版publisher拒絕完整但低於八成'
 Assert (-not $global:repoPublicationRemoteCalled) '八成門檻失敗在任何遠端操作前停止'
 Remove-Item Function:\gh
