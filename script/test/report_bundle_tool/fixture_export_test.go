@@ -76,6 +76,7 @@ func TestExportSyntheticConsumerFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	summary["RepoCoverage"] = json.RawMessage(native["repo_coverage.json"])
 	summary["GoCoverage"] = goEvidence
 	native["summary.json"], _ = json.Marshal(summary)
 	native["go_coverage.json"], _ = json.Marshal(goEvidence)
