@@ -229,7 +229,7 @@ func TestDeploymentCases(t *testing.T) {
 			}
 		}
 		writeRelease(digest)
-		pages["versions.json"], _ = json.Marshal([]map[string]any{{"Version": tag, "Status": "Verified", "Path": prefix + "index.html", "Commit": sha, "ReleaseUrl": "https://github.com/example/windows_setup/releases/tag/" + tag, "Digest": fmt.Sprintf("sha256:%x", sha256.Sum256(summary))}})
+		pages["versions.json"], _ = json.Marshal([]map[string]any{{"Version": tag, "Status": "Verified", "Path": prefix + "index.html", "Commit": sha, "ReleaseUrl": "https://github.com/example/windows_setup/releases/tag/" + tag, "MeasuredAt": "2026-01-01T00:00:00Z", "Digest": fmt.Sprintf("sha256:%x", sha256.Sum256(summary))}})
 		defer func() {
 			delete(pages, prefix+"index.html")
 			delete(pages, prefix+"summary.json")
@@ -240,7 +240,7 @@ func TestDeploymentCases(t *testing.T) {
 		if e := invoke(tagArgs...); e != nil {
 			t.Fatalf("valid tag publication rejected: %v", e)
 		}
-		for _, field := range []string{"Commit", "ReleaseUrl", "Digest"} {
+		for _, field := range []string{"Commit", "ReleaseUrl", "Digest", "MeasuredAt"} {
 			t.Run("index_identity_"+field, func(t *testing.T) {
 				old := pages["versions.json"]
 				var rows []map[string]any
