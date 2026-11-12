@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	a "windows_setup/script/test/acceptance"
 	c "windows_setup/script/test/repo_coverage"
@@ -170,6 +172,312 @@ func TestDeploymentCases(t *testing.T) {
 		return []string{"--base-url", server.URL, "--readme", doc, "--expected-sha", sha, "--expected-run-url", runURL}
 	}
 	t.Setenv("GITHUB_STEP_SUMMARY", "")
+	t.Run("tag_public_evidence", func(t *testing.T) {
+		oldSleep := deploymentSleep
+		deploymentSleep = func(time.Duration) {}
+		defer func() { deploymentSleep = oldSleep }()
+		tag := "v0.2.4"
+		owned := []string{"windows_setup/script/test/example/value.go"}
+		goEvidence, profile, err := a.CreateCoverageEvidence([][]byte{[]byte("mode: set\n" + owned[0] + ":2.1,2.27 1 1\n")}, owned, a.CoverageProvenance{Commit: sha, RunUrl: runURL, MeasuredAt: "2026-01-01T00:00:00Z", SourceState: "Clean", GoVersion: "go1.27.3", Environment: "Synthetic tag fixture"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest := fmt.Sprintf("sha256:%x", sha256.Sum256(profile))
+		prefix := "versions/" + tag + "/"
+		for n, b := range pages {
+			if strings.HasPrefix(n, "main/") {
+				pages[prefix+strings.TrimPrefix(n, "main/")] = append([]byte(nil), b...)
+			}
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(pages[prefix+"summary.json"], &raw); err != nil {
+			t.Fatal(err)
+		}
+		raw["RefType"] = "Release"
+		raw["RefName"] = tag
+		raw["Version"] = tag
+		raw["GoCoverage"] = goEvidence
+		summary, _ := json.Marshal(raw)
+		pages[prefix+"summary.json"] = summary
+		pages[prefix+"go_coverage.json"], _ = json.Marshal(goEvidence)
+		pages[prefix+"go_coverage.out"] = profile
+		for _, n := range []string{"unit", "integration", "coverage"} {
+			pages[prefix+n+".svg"] = []byte(strings.ReplaceAll(string(pages[prefix+n+".svg"]), n+" branch", n+" release"))
+			label := n + " release"
+			value := "passed"
+			color := "#4c1"
+			if n == "coverage" {
+				value = "100.0%"
+				color = "#007ec6"
+			}
+			l, q := len(label)*7+12, len(value)*7+12
+			pages[prefix+n+".svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d"><rect width="%d" fill="#555"/><rect width="%d" fill="%s"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, l+q, l, q, color, label, value))
+		}
+		label, value := "go coverage release", "100.0%"
+		l, q := len(label)*7+12, len(value)*7+12
+		pages[prefix+"go_coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d"><rect width="%d" fill="#555"/><rect width="%d" fill="#4c1"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, l+q, l, q, label, value))
+		pages[prefix+"index.html"] = append(pages[prefix+"index.html"], []byte(`<details><summary>分項量測明細</summary><p>Go 程式敘述覆蓋率：100.0% · 1/1 statements；全部自有 Go 工具（含 CLI），不含 PowerShell 或第三方程式，不等於整體覆蓋率。</p><a href="go_coverage.json">Go JSON</a><a href="go_coverage.out">Go profile</a></details>`)...)
+		pages[prefix+"index.html"] = append(pages[prefix+"index.html"], []byte(`<p>版本 `+tag+` · 提交 <code>`+sha+`</code><br>量測時間（UTC）：2026-01-01T00:00:00Z</p><p><a href="`+runURL+`">GitHub Actions 執行紀錄</a></p>`)...)
+		pages[prefix+"summary.md"] = append(pages[prefix+"summary.md"], []byte("\nGo 程式敘述覆蓋率（分項）：100.0%；1/1 statements；全部自有 Go 工具含 CLI，不含 PowerShell 或第三方程式，不等於整體覆蓋率。")...)
+		metadata := filepath.Join(t.TempDir(), "release.json")
+		writeRelease := func(d string) {
+			t.Helper()
+			sum := sha256.Sum256(pages[prefix+"summary.json"])
+			b, _ := json.Marshal(map[string]any{"tag_name": tag, "html_url": "https://github.com/example/windows_setup/releases/tag/" + tag, "draft": false, "immutable": true, "assets": []any{map[string]any{"name": "go_coverage.out", "digest": d, "size": len(profile)}, map[string]any{"name": "quality.json", "digest": fmt.Sprintf("sha256:%x", sum), "size": len(pages[prefix+"summary.json"])}}})
+			if e := os.WriteFile(metadata, b, 0600); e != nil {
+				t.Fatal(e)
+			}
+			var rows []map[string]any
+			if json.Unmarshal(pages["versions.json"], &rows) == nil && len(rows) == 1 && rows[0]["Version"] == tag {
+				rows[0]["Digest"] = fmt.Sprintf("sha256:%x", sum)
+				pages["versions.json"], _ = json.Marshal(rows)
+			}
+		}
+		writeRelease(digest)
+		pages["versions.json"], _ = json.Marshal([]map[string]any{{"Version": tag, "Status": "Verified", "Path": prefix + "index.html", "Commit": sha, "ReleaseUrl": "https://github.com/example/windows_setup/releases/tag/" + tag, "MeasuredAt": "2026-01-01T00:00:00Z", "Digest": fmt.Sprintf("sha256:%x", sha256.Sum256(summary))}})
+		defer func() {
+			delete(pages, prefix+"index.html")
+			delete(pages, prefix+"summary.json")
+			delete(pages, prefix+"go_coverage.out")
+			pages["versions.json"] = []byte(`[]`)
+		}()
+		tagArgs := append(args(), "--mode", "release", "--tag", tag, "--release-metadata", metadata)
+		if e := invoke(tagArgs...); e != nil {
+			t.Fatalf("valid tag publication rejected: %v", e)
+		}
+		for _, field := range []string{"Commit", "ReleaseUrl", "Digest", "MeasuredAt"} {
+			t.Run("index_identity_"+field, func(t *testing.T) {
+				old := pages["versions.json"]
+				var rows []map[string]any
+				if e := json.Unmarshal(old, &rows); e != nil {
+					t.Fatal(e)
+				}
+				rows[0][field] = "incorrect"
+				pages["versions.json"], _ = json.Marshal(rows)
+				defer func() { pages["versions.json"] = old }()
+				if e := invoke(tagArgs...); e == nil {
+					t.Fatalf("incorrect index %s accepted", field)
+				}
+			})
+		}
+		for _, name := range []string{"index.html", "summary.json", "go_coverage.out"} {
+			t.Run("missing_"+name, func(t *testing.T) {
+				old := pages[prefix+name]
+				delete(pages, prefix+name)
+				defer func() { pages[prefix+name] = old }()
+				if e := invoke(tagArgs...); e == nil {
+					t.Fatal("missing page or evidence accepted")
+				}
+			})
+		}
+		for _, kind := range []string{"version", "commit", "run"} {
+			t.Run("page_decoy_"+kind, func(t *testing.T) {
+				old := pages[prefix+"index.html"]
+				value := string(old)
+				switch kind {
+				case "version":
+					value = strings.Replace(value, "版本 "+tag, "版本 v9.9.9", 1)
+				case "commit":
+					value = strings.Replace(value, sha, strings.Repeat("b", 40), 1)
+				case "run":
+					value = strings.Replace(value, runURL, runURL+"0", 1)
+				}
+				value += `<p>版本 ` + tag + ` · 提交 <code>` + sha + `</code><br>量測時間（UTC）：2026-01-01T00:00:00Z</p><p><a href="` + runURL + `">GitHub Actions 執行紀錄</a></p>`
+				pages[prefix+"index.html"] = []byte(value)
+				defer func() { pages[prefix+"index.html"] = old }()
+				if e := invoke(tagArgs...); e == nil {
+					t.Fatal("conflicting identity with visible decoy accepted")
+				}
+			})
+		}
+		for _, kind := range []string{"version", "commit", "run_link", "hidden_version", "hidden_commit", "hidden_run"} {
+			t.Run("page_identity_"+kind, func(t *testing.T) {
+				old := pages[prefix+"index.html"]
+				value := string(old)
+				switch kind {
+				case "version":
+					value = strings.Replace(value, "版本 "+tag, "版本 v9.9.9", 1)
+				case "commit":
+					value = strings.Replace(value, sha, strings.Repeat("b", 40), 1)
+				case "run_link":
+					value = strings.Replace(value, runURL, runURL+"0", 1)
+				case "hidden_version":
+					value = strings.Replace(value, "版本 "+tag, "<!-- 版本 "+tag+" -->", 1)
+				case "hidden_commit":
+					value = strings.Replace(value, "<code>"+sha+"</code>", "<!-- "+sha+" -->", 1)
+				case "hidden_run":
+					value = strings.Replace(value, `<a href="`+runURL+`">GitHub Actions 執行紀錄</a>`, `<!-- <a href="`+runURL+`">run</a> -->`, 1)
+				}
+				if value == string(old) {
+					t.Fatal("mutation did not change page")
+				}
+				pages[prefix+"index.html"] = []byte(value)
+				defer func() { pages[prefix+"index.html"] = old }()
+				if e := invoke(tagArgs...); e == nil {
+					t.Fatal("wrong or hidden page identity accepted")
+				}
+			})
+		}
+		t.Run("wrong_source", func(t *testing.T) {
+			var changed map[string]any
+			json.Unmarshal(summary, &changed)
+			changed["Commit"] = strings.Repeat("b", 40)
+			pages[prefix+"summary.json"], _ = json.Marshal(changed)
+			writeRelease(digest)
+			defer func() { pages[prefix+"summary.json"] = summary; writeRelease(digest) }()
+			if e := invoke(tagArgs...); e == nil {
+				t.Fatal("wrong source accepted")
+			}
+		})
+		t.Run("wrong_run", func(t *testing.T) {
+			var changed map[string]any
+			json.Unmarshal(summary, &changed)
+			changed["RunUrl"] = runURL + "0"
+			pages[prefix+"summary.json"], _ = json.Marshal(changed)
+			writeRelease(digest)
+			defer func() { pages[prefix+"summary.json"] = summary; writeRelease(digest) }()
+			if e := invoke(tagArgs...); e == nil {
+				t.Fatal("wrong run accepted")
+			}
+		})
+		t.Run("wrong_digest", func(t *testing.T) {
+			writeRelease("sha256:" + strings.Repeat("0", 64))
+			defer writeRelease(digest)
+			if e := invoke(tagArgs...); e == nil {
+				t.Fatal("wrong release digest accepted")
+			}
+		})
+		for _, kind := range []string{"draft", "string_immutable", "wrong_tag", "duplicate_asset", "missing_quality"} {
+			t.Run("release_"+kind, func(t *testing.T) {
+				b, _ := os.ReadFile(metadata)
+				var r map[string]any
+				json.Unmarshal(b, &r)
+				switch kind {
+				case "draft":
+					r["draft"] = true
+				case "string_immutable":
+					r["immutable"] = "true"
+				case "wrong_tag":
+					r["tag_name"] = "v9.9.9"
+				case "duplicate_asset":
+					a := r["assets"].([]any)
+					r["assets"] = append(a, a[0])
+				case "missing_quality":
+					a := r["assets"].([]any)
+					r["assets"] = a[:1]
+				}
+				v, _ := json.Marshal(r)
+				os.WriteFile(metadata, v, 0600)
+				defer writeRelease(digest)
+				if e := invoke(tagArgs...); e == nil {
+					t.Fatal("invalid release metadata accepted")
+				}
+			})
+		}
+		t.Run("mutable_release", func(t *testing.T) {
+			b, _ := os.ReadFile(metadata)
+			var r map[string]any
+			json.Unmarshal(b, &r)
+			r["immutable"] = false
+			v, _ := json.Marshal(r)
+			os.WriteFile(metadata, v, 0600)
+			defer writeRelease(digest)
+			if e := invoke(tagArgs...); e == nil {
+				t.Fatal("mutable release accepted")
+			}
+		})
+		t.Run("bounded_retry", func(t *testing.T) {
+			old := pages[prefix+"go_coverage.out"]
+			delete(pages, prefix+"go_coverage.out")
+			defer func() { pages[prefix+"go_coverage.out"] = old }()
+			waits := 0
+			deploymentSleep = func(time.Duration) { waits++ }
+			defer func() { deploymentSleep = func(time.Duration) {} }()
+			if e := invoke(tagArgs...); e == nil || waits != 11 {
+				t.Fatalf("expected bounded retry: %d %v", waits, e)
+			}
+		})
+		t.Run("below_whole_threshold", func(t *testing.T) {
+			inv, e := c.ScanInventory(source)
+			if e != nil {
+				t.Fatal(e)
+			}
+			inv.Sources[0].ExpectedLines = []int{2}
+			art, e := c.CreateEvidence(inv, []c.Report{{SchemaVersion: 1, Metric: c.Metric, Files: map[string]map[int]bool{"script/test/example/value.go": {2: false}}}}, c.Identity{Commit: sha, RunUrl: runURL, MeasuredAt: "2026-01-01T00:00:00Z", SourceState: "Clean"})
+			if e != nil {
+				t.Fatal(e)
+			}
+			keys := []string{"summary.json", "repo_coverage.json", "coverage_inventory.json", "coverage.xml", "coverage.svg"}
+			saved := map[string][]byte{}
+			for _, k := range keys {
+				saved[k] = pages[prefix+k]
+			}
+			defer func() {
+				for k, v := range saved {
+					pages[prefix+k] = v
+				}
+				writeRelease(digest)
+			}()
+			var x map[string]any
+			json.Unmarshal(summary, &x)
+			var evidence any
+			json.Unmarshal(art.Summary, &evidence)
+			x["RepoCoverage"] = evidence
+			pages[prefix+"summary.json"], _ = json.Marshal(x)
+			pages[prefix+"repo_coverage.json"] = art.Summary
+			pages[prefix+"coverage_inventory.json"] = art.Inventory
+			pages[prefix+"coverage.xml"] = art.XML
+			label, value := "coverage release", "0.0%"
+			l, q := len(label)*7+12, len(value)*7+12
+			pages[prefix+"coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d"><rect width="%d" fill="#555"/><rect width="%d" fill="#007ec6"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, l+q, l, q, label, value))
+			writeRelease(digest)
+			if e = invoke(tagArgs...); e == nil || !strings.Contains(e.Error(), "精確80%") {
+				t.Fatalf("low whole coverage accepted or failed for wrong reason: %v", e)
+			}
+		})
+		t.Run("below_go_threshold", func(t *testing.T) {
+			low, lowProfile, e := a.CreateCoverageEvidence([][]byte{[]byte("mode: set\n" + owned[0] + ":2.1,2.27 2 0\n")}, owned, a.CoverageProvenance{Commit: sha, RunUrl: runURL, MeasuredAt: "2026-01-01T00:00:00Z", SourceState: "Clean", GoVersion: "go1.27.3", Environment: "Synthetic tag fixture"})
+			if e == nil {
+				t.Fatal("fixture must be below threshold")
+			}
+			oldSummary, oldJSON, oldProfile := pages[prefix+"summary.json"], pages[prefix+"go_coverage.json"], pages[prefix+"go_coverage.out"]
+			defer func() {
+				pages[prefix+"summary.json"] = oldSummary
+				pages[prefix+"go_coverage.json"] = oldJSON
+				pages[prefix+"go_coverage.out"] = oldProfile
+				writeRelease(digest)
+			}()
+			var x map[string]any
+			json.Unmarshal(summary, &x)
+			x["GoCoverage"] = low
+			pages[prefix+"summary.json"], _ = json.Marshal(x)
+			pages[prefix+"go_coverage.json"], _ = json.Marshal(low)
+			pages[prefix+"go_coverage.out"] = lowProfile
+			// Keep immutable outer digests consistent so the failure reaches the real threshold validator.
+			oldProfileBytes := profile
+			profile = lowProfile
+			writeRelease(fmt.Sprintf("sha256:%x", sha256.Sum256(lowProfile)))
+			profile = oldProfileBytes
+			if e = invoke(tagArgs...); e == nil || !strings.Contains(e.Error(), "below exact threshold") {
+				t.Fatalf("low Go coverage accepted or failed for wrong reason: %v", e)
+			}
+		})
+		t.Run("changed_profile", func(t *testing.T) {
+			pages[prefix+"go_coverage.out"] = append(append([]byte(nil), profile...), 'x')
+			defer func() { pages[prefix+"go_coverage.out"] = profile }()
+			if e := invoke(tagArgs...); e == nil {
+				t.Fatal("changed profile accepted")
+			}
+		})
+	})
+	t.Run("release_parameters_required", func(t *testing.T) {
+		if e := invoke(append(args(), "--mode", "release")...); e == nil {
+			t.Fatal("missing release inputs accepted")
+		}
+		if e := invoke(append(args(), "--mode", "unknown")...); e == nil {
+			t.Fatal("unknown mode accepted")
+		}
+	})
 	t.Run("required_parameters", func(t *testing.T) {
 		if err := invoke(); err == nil || !strings.Contains(err.Error(), "必要") {
 			t.Fatalf("missing flags: %v", err)
