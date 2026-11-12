@@ -23,22 +23,24 @@ function New-ScheduledTaskAction {param($Execute,$Argument) Assert ($Execute -eq
 function New-ScheduledTaskPrincipal {param($UserId,$LogonType,$RunLevel) Assert ($UserId -eq 'fixture-user' -and $LogonType -eq 'Interactive' -and $RunLevel -eq 'Limited') 'terminal task remains current interactive user with Limited rights';[pscustomobject]@{UserId=$UserId}}
 function Get-ScheduledTask {param($TaskName,$ErrorAction) $script:taskNames+= $TaskName;if($script:taskState){[pscustomobject]@{State=$script:taskState}}}
 function Register-ScheduledTask {param($TaskName,$Action,$Principal,[switch]$Force) Assert ($TaskName -eq 'NUC8-TerminalHotkey-fixture-sid-1') 'terminal task identity is derived from current SID';$script:registered++}
-function Start-ScheduledTask {param($TaskName) $script:started++;if($script:writeRegistration){[IO.File]::WriteAllText($fixtureLog,$registration)}}
+function Start-ScheduledTask {param($TaskName) $script:started++;$script:processes=@([pscustomobject]@{ProcessId=123;SessionId=$currentSession;CommandLine='powershell '+$listener},[pscustomobject]@{ProcessId=999;SessionId=0;CommandLine=$listener},[pscustomobject]@{ProcessId=456;SessionId=$currentSession;CommandLine='unrelated'});if($script:writeRegistration){[IO.File]::WriteAllText($fixtureLog,$registration)}}
 function Start-Sleep {param($Seconds,$Milliseconds)}
 function Get-CimInstance {param($ClassName,$Filter,$ErrorAction) if($Filter -like '*explorer.exe*'){$script:explorers}else{$script:processes}}
 function Invoke-CimMethod {param($InputObject,$MethodName,$ErrorAction) [pscustomobject]@{ReturnValue=$InputObject.OwnerResult;Sid=$InputObject.OwnerSid}}
 $script:explorers=@()
 $script:missingTerminal=$true;Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module} '找不到 Windows Terminal' 'missing Terminal fails before deployment';$script:missingTerminal=$false
-$script:processes=@([pscustomobject]@{ProcessId=123;SessionId=$currentSession;CommandLine='powershell '+$listener},[pscustomobject]@{ProcessId=999;SessionId=0;CommandLine='powershell '+$listener},[pscustomobject]@{ProcessId=456;SessionId=$currentSession;CommandLine='unrelated'})
+$script:processes=@()
 Invoke-SetupTerminalHotkey -ModuleRoot $module
 $result=[IO.File]::ReadAllText($report)|ConvertFrom-Json
 Assert ($result.Success -and $result.User -eq 'fixture-user' -and $result.ProcessIDs.Count -eq 1 -and $result.ProcessIDs[0] -eq 123 -and $script:registered -eq 1 -and $script:started -eq 1) 'terminal succeeds only with current desktop process shortcut and registration'
 foreach($name in @('terminal_hotkey_listener.ps1','terminal_hotkey_library.ps1','native/terminal_hotkey.cs')){Assert ((Get-FileHash (Join-Path $folder $name)).Hash -ceq (Get-FileHash (Join-Path $module $name)).Hash) ('terminal self-contained deployment includes exact '+$name)}
 Assert ($script:link.WorkingDirectory -eq (Join-Path $temp 'home') -and $script:link.Hotkey -eq '' -and $script:link.WindowStyle -eq 7) 'terminal shortcut uses dynamic home without legacy shell hotkey'
+$script:taskState=$null;Invoke-SetupTerminalHotkey -ModuleRoot $module
+Assert ($script:registered -eq 2 -and $script:started -eq 1) 'existing desktop listener prevents duplicate start when creating per-session task'
 $script:taskState='Running';Invoke-SetupTerminalHotkey -ModuleRoot $module
-Assert ($script:registered -eq 1 -and $script:started -eq 1 -and $script:taskNames[-1] -eq 'NUC8-TerminalHotkey-fixture-sid-1') 'running terminal listener is not duplicated and task is scoped to desktop'
+Assert ($script:registered -eq 2 -and $script:started -eq 1 -and $script:taskNames[-1] -eq 'NUC8-TerminalHotkey-fixture-sid-1') 'running terminal listener is not duplicated and task is scoped to desktop'
 $before=$script:saved;Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly
-Assert ($script:saved -eq $before -and $script:registered -eq 1) 'VerifyOnly does not alter shortcut or tasks'
+Assert ($script:saved -eq $before -and $script:registered -eq 2) 'VerifyOnly does not alter shortcut or tasks'
 $script:processes=@([pscustomobject]@{ProcessId=123;SessionId=($currentSession+100);CommandLine=$listener})
 Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly} '未成功註冊' 'foreign session cannot satisfy current session registration'
 $script:processes=@([pscustomobject]@{ProcessId=222;SessionId=$currentSession;CommandLine=$listener})
@@ -58,13 +60,19 @@ Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly} '互動桌�
 $script:explorers=@([pscustomobject]@{SessionId=1;OwnerResult=5;OwnerSid='fixture-sid'})
 Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly} '互動桌面' 'session zero rejects unverified owner'
 $script:callerSession=1
+[IO.File]::WriteAllText((Join-Path $folder 'status.log'),$registration)
 [IO.File]::WriteAllText($fixtureLog,$registration+[Environment]::NewLine+'MESSAGE LOOP FAILED: 5');Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly} '未成功註冊' 'native listener failure cannot pass verification'
 [IO.File]::WriteAllText($fixtureLog,$registration);$script:processes=@();Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly} '未成功註冊' 'registration log alone cannot pass without desktop process'
-$script:processes=@([pscustomobject]@{ProcessId=123;SessionId=$currentSession;CommandLine=$listener});Remove-Item -LiteralPath $startup -Force
+$script:processes=@([pscustomobject]@{ProcessId=123;SessionId=$currentSession;CommandLine=$listener});Remove-Item -LiteralPath $fixtureLog -Force
+Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly
+Assert (([IO.File]::ReadAllText($report)|ConvertFrom-Json).Success) 'matching legacy record supports an existing listener'
+[IO.File]::WriteAllText($fixtureLog,$registration)
+Remove-Item -LiteralPath (Join-Path $folder 'status.log') -Force
+Remove-Item -LiteralPath $startup -Force
 Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module -VerifyOnly} '未成功註冊' 'missing startup shortcut fails verification'
-$script:taskState=$null;$script:writeRegistration=$false;Remove-Item -LiteralPath $fixtureLog -Force
+$script:taskState=$null;$script:writeRegistration=$false;$script:processes=@();Remove-Item -LiteralPath $fixtureLog -Force
 Reject {Invoke-SetupTerminalHotkey -ModuleRoot $module} '未成功註冊' 'new listener without status never reports successful registration'
-Assert ($script:registered -eq 2 -and $script:started -eq 2) 'missing task is created once even when listener verification fails'
+Assert ($script:registered -eq 3 -and $script:started -eq 2) 'missing task is created once even when listener verification fails'
 $script:ownsMutex=$false;$script:released=0;$script:disposed=0;$script:nativeRuns=0;$script:nativeFailure=$false;$script:nativeLog=$null
 function New-SetupTerminalMutex {$m=[pscustomobject]@{};$m|Add-Member ScriptMethod WaitOne {param($Timeout) $script:ownsMutex};$m|Add-Member ScriptMethod ReleaseMutex {$script:released++};$m|Add-Member ScriptMethod Dispose {$script:disposed++};return $m}
 function Invoke-SetupTerminalNative {param($ModuleRoot,$Terminal,$LogPath,$UserHome) $script:nativeRuns++;$script:nativeLog=$LogPath;if($script:nativeFailure){throw 'native fixture failure'}}
