@@ -6,7 +6,7 @@ function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name
 $fixturePath=Join-Path ([IO.Path]::GetTempPath()) ('publisher_bundle_fixture_'+[guid]::NewGuid().ToString('N'))
 $bundleFixture=New-TestReportBundleFixture -RepositoryRoot $root -Destination $fixturePath
 $data=$bundleFixture.Metadata
-Assert ($data.kind -ceq 'Synthetic') 'Only controlled Synthetic evidence is used'
+Assert ($data.kind -ceq 'Synthetic') '僅使用標明 Synthetic 的受控工件'
 $source=$bundleFixture.Source
 $fixtureNative=Join-Path $bundleFixture.Root 'windows-test-reports-1-1'
 $container=Join-Path $bundleFixture.Root 'docker-test-reports-1-1'
