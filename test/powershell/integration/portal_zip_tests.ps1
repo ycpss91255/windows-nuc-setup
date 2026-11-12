@@ -46,6 +46,12 @@ try {
  & (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $catalog -OutputDirectory (Join-Path $parent 'pages')|Out-Null
  $v=Get-Content -LiteralPath (Join-Path $parent 'pages/versions.json') -Raw -Encoding UTF8|ConvertFrom-Json
  Assert ($v.Status -ceq 'Verified' -and $v.Digest -ceq $evidence.SnapshotDigest -and $v.ArchiveDigest -ceq $entry.ArchiveDigest) '版本頁保留不同的原摘要與 ZIP 摘要'
+ $before=@(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'portal_zip_*'|ForEach-Object FullName)
+ function Copy-Item {throw 'synthetic copy failure'}
+ try {Reject {& (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $catalog -OutputDirectory (Join-Path $parent 'failed-pages')} '頁面複製失敗應回報'}
+ finally {Remove-Item Function:\Copy-Item}
+ $leaked=@(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'portal_zip_*'|Where-Object {$before -cnotcontains $_.FullName})
+ Assert ($leaked.Count -eq 0) '頁面複製失敗仍清除自建驗證目錄'
  # Mock only GitHub transport and fetch; the downloaded ZIP is still validated by the real binary.
  $mockAssets=@(@{name=[IO.Path]::GetFileName($entry.ArchivePath);digest=$entry.ArchiveDigest;size=$entry.ArchiveSize})
  $mockCommit=$f.commit
