@@ -458,18 +458,38 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-public
+          path: ${{ runner.temp }}/windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: 下載同一次執行的容器報告
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: docker-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/docker-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: 封裝並驗證當版完整報表
+        shell: powershell
+        run: |
+          $tool = Join-Path $env:RUNNER_TEMP 'report_bundle_tool.exe'
+          go build -o $tool ./script/test/report_bundle_tool
+          if ($LASTEXITCODE -ne 0) { throw '報表工具建置失敗。' }
+          $archive = Join-Path $env:RUNNER_TEMP ("windows_setup_report_" + $env:GITHUB_REF_NAME + ".zip")
+          $native = Join-Path $env:RUNNER_TEMP ("windows-test-reports-" + $env:GITHUB_RUN_ID + "-" + $env:GITHUB_RUN_ATTEMPT)
+          $container = Join-Path $env:RUNNER_TEMP ("docker-test-reports-" + $env:GITHUB_RUN_ID + "-" + $env:GITHUB_RUN_ATTEMPT)
+          $identity = @('--source-root', $PWD.Path, '--version', $env:GITHUB_REF_NAME, '--commit', $env:GITHUB_SHA, '--run-url', ("https://github.com/" + $env:GITHUB_REPOSITORY + "/actions/runs/" + $env:GITHUB_RUN_ID), '--run-attempt', $env:GITHUB_RUN_ATTEMPT)
+          & $tool export --native-dir $native --container-dir $container @identity --output $archive
+          if ($LASTEXITCODE -ne 0) { throw '報表封裝失敗。' }
+          & $tool verify --archive $archive @identity
+          if ($LASTEXITCODE -ne 0) { throw '報表驗證失敗。' }
       - name: 草稿附齊品質證據後發布不可變版本
         shell: powershell
         env:
           WINDOWS_SETUP_COVERAGE_TOOL: ${{ runner.temp }}/repo_coverage_tool.exe
+          WINDOWS_SETUP_REPORT_BUNDLE_TOOL: ${{ runner.temp }}/report_bundle_tool.exe
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
           SOURCE_COMMIT: ${{ github.sha }}
           IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
-          $arguments = @{PublicDirectory="$env:RUNNER_TEMP\release-public";Version=$env:RELEASE_TAG;Commit=$env:SOURCE_COMMIT;NotesPath="$env:RUNNER_TEMP\release-notes\release_notes.md";Repository=$env:GH_REPO;Prerelease=($env:IS_PRERELEASE -eq 'true')}
+          $arguments = @{PublicDirectory=(Join-Path $env:RUNNER_TEMP ("windows-test-reports-"+$env:GITHUB_RUN_ID+"-"+$env:GITHUB_RUN_ATTEMPT));ReportArchive=(Join-Path $env:RUNNER_TEMP ("windows_setup_report_"+$env:RELEASE_TAG+".zip"));RunAttempt=[int]$env:GITHUB_RUN_ATTEMPT;RunUrl=("https://github.com/"+$env:GITHUB_REPOSITORY+"/actions/runs/"+$env:GITHUB_RUN_ID);Version=$env:RELEASE_TAG;Commit=$env:SOURCE_COMMIT;NotesPath="$env:RUNNER_TEMP\release-notes\release_notes.md";Repository=$env:GH_REPO;Prerelease=($env:IS_PRERELEASE -eq 'true')}
           .\script\report\publish_quality_release.ps1 @arguments
 
   build-portal:

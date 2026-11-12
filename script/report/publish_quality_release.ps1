@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL,[string]$DriverAssetManifestPath)
+param([Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$Version,[Parameter(Mandatory=$true)][string]$Commit,[Parameter(Mandatory=$true)][string]$NotesPath,[Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[switch]$Prerelease,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL,[string]$DriverAssetManifestPath,[string]$ReportArchive,[string]$BundleToolPath=$env:WINDOWS_SETUP_REPORT_BUNDLE_TOOL,[int]$RunAttempt,[string]$RunUrl,[string]$SourceRoot)
 $ErrorActionPreference='Stop'
 if(-not $DriverAssetManifestPath){$DriverAssetManifestPath=Join-Path $PSScriptRoot '../release/driver_release_assets.json'}
 . (Join-Path $PSScriptRoot '../test/test_report.ps1')
@@ -35,7 +35,12 @@ $tagCommit=& gh api ('repos/'+$Repository+'/commits/'+$Version) --jq '.sha'
 if($LASTEXITCODE -ne 0 -or $tagCommit -cne $Commit){throw '標籤來源 SHA 不符。'}
 $existing=& gh api --paginate ('repos/'+$Repository+'/releases?per_page=100') --jq '.[].tag_name'
 if($LASTEXITCODE -ne 0){throw '無法確認既有版本。'}
-$attachments=@($quality,$manifestPath)+@($files|Where-Object {$_ -ne 'summary.json'}|ForEach-Object {Join-Path $PublicDirectory $_})
+if(-not $SourceRoot){$SourceRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))}
+if(-not $ReportArchive -or [IO.Path]::GetFileName($ReportArchive) -cne ('windows_setup_report_'+$Version+'.zip') -or -not (Test-Path -LiteralPath $ReportArchive -PathType Leaf) -or (Get-Item -LiteralPath $ReportArchive).Attributes -band [IO.FileAttributes]::ReparsePoint){throw '缺少當版報表封裝。'}
+if(-not $BundleToolPath -or $RunAttempt -lt 1 -or $RunUrl -cne $snapshot.RunUrl){throw '缺少報表驗證工具或執行次數。'}
+& $BundleToolPath verify --archive $ReportArchive --source-root $SourceRoot --version $Version --commit $Commit --run-url $RunUrl --run-attempt $RunAttempt
+if($LASTEXITCODE -ne 0){throw '報表封裝驗證失敗。'}
+$attachments=@($ReportArchive)
 $driverAssets=@(Get-ReleaseDriverAssets -Path $DriverAssetManifestPath -Version $Version)
 $qualityAssets=@($attachments|ForEach-Object {[pscustomobject]@{Name=[IO.Path]::GetFileName($_);SHA256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant();Size=(Get-Item -LiteralPath $_).Length}})
 $expectedAssets=@($driverAssets)+$qualityAssets

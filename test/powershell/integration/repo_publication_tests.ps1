@@ -45,6 +45,9 @@ $goProfileText="mode: set`nwindows_setup/script/test/example/value.go:1.1,1.2 8 
 $go=[pscustomobject]@{SchemaVersion=1;Scope='all-owned-go-including-cli';Metric='statements';Covered=8;TotalStatements=10;Percent=80.0;Threshold=80;Commit=$identity.Commit;RunUrl=$identity.RunUrl;MeasuredAt=$identity.MeasuredAt;SourceState='Clean';GoVersion='go1.27.3';Environment='windows/amd64';ProfileSHA256=(Get-FileHash (Join-Path $public 'go_coverage.out')).Hash.ToLowerInvariant();Packages=@('windows_setup/script/test/example')}
 $report|Add-Member -NotePropertyName GoCoverage -NotePropertyValue $go
 Write-SnapshotView $report $public
+$archive=Join-Path $fixture 'windows_setup_report_v1.0.0.zip'
+[IO.File]::WriteAllText($archive,'mock report archive')
+function Test-FixtureBundleVerifier { $global:LASTEXITCODE=if($global:fixtureBundleFailure){1}else{0} }
 function gh {
  $words=@($args);$global:LASTEXITCODE=0
  if($words[0] -eq 'api' -and $words -contains '--paginate'){
@@ -56,7 +59,7 @@ function gh {
   $global:repoPublicationDraft=$words -contains '--draft'
   $global:repoPublicationCreated++
   $global:repoPublicationBody=[IO.File]::ReadAllText((Join-Path $public 'summary.md'))
-  $global:repoPublicationAssets=@($words|Where-Object {Test-Path -LiteralPath ([string]$_) -PathType Leaf}|Where-Object {[IO.Path]::GetExtension($_) -ne '.md' -or [IO.Path]::GetFileName($_) -eq 'summary.md'}|Select-Object -Unique|ForEach-Object {@{name=[IO.Path]::GetFileName($_);size=(Get-Item -LiteralPath $_).Length;digest=('sha256:'+(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant())}})
+  $global:repoPublicationAssets=@($words|Where-Object {Test-Path -LiteralPath ([string]$_) -PathType Leaf}|Where-Object {[IO.Path]::GetExtension($_) -eq '.zip'}|Select-Object -Unique|ForEach-Object {@{name=[IO.Path]::GetFileName($_);size=(Get-Item -LiteralPath $_).Length;digest=('sha256:'+(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant())}})
   return
  }
  if($words[0] -eq 'api' -and $words[1] -eq 'repos/example/repo/releases/42' -and $words -notcontains '--method'){
@@ -89,13 +92,23 @@ function gh {
 }
 foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immutable','wrong-sha')){
  $global:repoPublicationMode=$mode;$global:repoPublicationPublished=0;$global:repoPublicationCreated=0;$global:repoPublicationNotesApplied=$false;$global:repoPublicationAssets=@()
- $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publication error: '+$_.Exception.Message)}
+ $accepted=$true;try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool -ReportArchive $archive -BundleToolPath Test-FixtureBundleVerifier -RunAttempt 1 -RunUrl $identity.RunUrl|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publication error: '+$_.Exception.Message)}
  Assert ($accepted -eq ($mode -eq 'success')) ('Schema2只發布真完整不可變證據：'+$mode)
  Assert ($global:repoPublicationCreated -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('來源在建立草稿前核對：'+$mode)
  if($mode -ne 'wrong-sha'){Assert ($global:repoPublicationTitle -ceq 'v1.0.0' -and $global:repoPublicationDraft) ('版本標題及草稿先行：'+$mode)}
  Assert ($global:repoPublicationAssets.Count -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('新 Release 只含一個完整報表 ZIP：'+$mode)
  Assert ($global:repoPublicationPublished -eq $(if($mode -in @('bad-digest','wrong-sha')){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
 }
+foreach($invalid in @('missing-archive','bad-run','bad-attempt','verify-failed')){
+ $global:repoPublicationMode='success';$global:repoPublicationCreated=0;$global:repoPublicationPublished=0;$global:fixtureBundleFailure=($invalid -eq 'verify-failed')
+ $argsForPublisher=@{PublicDirectory=$public;Version='v1.0.0';Commit=$identity.Commit;NotesPath=(Join-Path $public 'summary.md');Repository='example/repo';CoverageToolPath=$tool;ReportArchive=$archive;BundleToolPath='Test-FixtureBundleVerifier';RunAttempt=1;RunUrl=$identity.RunUrl}
+ if($invalid -eq 'missing-archive'){$argsForPublisher.ReportArchive=Join-Path $fixture 'missing/windows_setup_report_v1.0.0.zip'}
+ if($invalid -eq 'bad-run'){$argsForPublisher.RunUrl='https://github.com/example/repo/actions/runs/2'}
+ if($invalid -eq 'bad-attempt'){$argsForPublisher.RunAttempt=0}
+ Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') @argsForPublisher} ('報表驗證失敗拒絕發布 '+$invalid)
+ Assert ($global:repoPublicationCreated -eq 0 -and $global:repoPublicationPublished -eq 0) ('報表驗證失敗沒有建立或發布 '+$invalid)
+}
+$global:fixtureBundleFailure=$false
 Remove-Item Function:\gh
 function New-LocalEntry {
  $manifestPath=Join-Path $public 'quality-manifest.json'

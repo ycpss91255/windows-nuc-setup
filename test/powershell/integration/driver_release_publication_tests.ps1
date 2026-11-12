@@ -37,7 +37,7 @@ function gh {
   Assert ($words[[Array]::IndexOf($words,'--method')+1] -ceq 'PATCH') '只 PATCH 既有已選定 ID'
   Assert ($payload.tag_name -is [string] -and $payload.tag_name -ceq 'v1.0.0' -and $payload.target_commitish -is [string] -and $payload.target_commitish -ceq $identity.Commit -and $payload.name -is [string] -and $payload.name -ceq 'v1.0.0' -and $payload.prerelease -is [bool] -and $payload.prerelease -ceq $false -and $payload.draft -is [bool]) '每次固定 ID PATCH 明確保留標籤、來源、名稱與布林狀態'
   if(-not $payload.draft){
-   Assert ($payload.draft -is [bool] -and $payload.draft -ceq $false -and $global:driverReleaseNotesApplied -and $global:driverReleaseRemoteAssets.Count -eq 13) '十三個資產及 notes 核對完成後才發布 JSON false'
+   Assert ($payload.draft -is [bool] -and $payload.draft -ceq $false -and $global:driverReleaseNotesApplied -and $global:driverReleaseRemoteAssets.Count -eq 2) '兩個資產及 notes 核對完成後才發布 JSON false'
    $global:driverReleasePublished++
   }else{
    Assert ($payload.name -ceq 'v1.0.0' -and $payload.body -ceq [IO.File]::ReadAllText((Join-Path $public 'summary.md'))) 'stage marker 最後才被精確中文正式 notes 取代'
@@ -62,7 +62,7 @@ foreach($mode in @('success','missing-draft','published','foreign','wrong-commit
  $global:driverReleaseRemoteAssets=@(@{name=$driverAsset.Name;size=$driverAsset.Size;digest=('sha256:'+$driverAsset.SHA256)})
  if($mode -eq 'extra'){$global:driverReleaseRemoteAssets+=@{name='foreign.zip';size=1;digest='sha256:'+('f'*64)}}
  if($mode -eq 'bad-digest'){$global:driverReleaseRemoteAssets[0].digest='sha256:'+('f'*64)}
- $accepted=$true;try{& $publisher -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $driverMetadata|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publisher error: '+$_.Exception.Message)}
+ $accepted=$true;try{& $publisher -PublicDirectory $public -Version v1.0.0 -Commit $identity.Commit -NotesPath (Join-Path $public 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $driverMetadata -ReportArchive $archive -BundleToolPath Test-FixtureBundleVerifier -RunAttempt 1 -RunUrl $identity.RunUrl|Out-Null}catch{$accepted=$false;Write-Host ('Fixture publisher error: '+$_.Exception.Message)}
  Assert ($accepted -eq ($mode -eq 'success')) ('驅動品質全集發布結果 '+$mode)
  Assert ($global:driverReleasePublished -eq $(if($mode -in @('success','size-published')){1}else{0})) ('錯誤草稿不發布 '+$mode)
  if($mode -notin @('success','partial-upload','changed-after-upload','wrong-notes','size-upload','size-notes','size-published')){Assert ($global:driverReleaseUploaded -eq 0) ('核對失敗不改草稿 '+$mode)}
