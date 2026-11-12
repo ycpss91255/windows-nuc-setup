@@ -40,10 +40,11 @@ func TestExportSyntheticConsumerFixture(t *testing.T) {
 	}
 	root = filepath.Clean(root)
 	parent := filepath.Dir(root)
-	resolved, err := filepath.EvalSymlinks(parent)
-	if err != nil || !sameOutputParent(parent, resolved, runtime.GOOS) {
+	resolved, err := canonicalSafeParent(parent)
+	if err != nil {
 		t.Fatal("fixture parent must exist and not contain links")
 	}
+	root = filepath.Join(resolved, filepath.Base(root))
 	if err := os.Mkdir(root, 0700); err != nil {
 		t.Fatalf("fixture destination must be new: %v", err)
 	}
