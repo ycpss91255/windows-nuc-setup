@@ -239,6 +239,22 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 			})
 		}
 	})
+	t.Run("verified_output_ordinary_short_name", func(t *testing.T) {
+		root := t.TempDir()
+		long := filepath.Join(root, "ordinary_report_output_directory_long_name")
+		if err := os.Mkdir(long, 0700); err != nil {
+			t.Fatal(err)
+		}
+		short := shortTestPath(t, long)
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", filepath.Join(short, "verified")}
+		if err := verify(args); err != nil {
+			t.Fatalf("ordinary 8.3 parent rejected: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(long, "verified", "native", "summary.json"))
+		if err != nil || !bytes.Equal(got, native["summary.json"]) {
+			t.Fatalf("verified bytes differ: %v", err)
+		}
+	})
 	t.Run("verified_output", func(t *testing.T) {
 		target := filepath.Join(t.TempDir(), "verified")
 		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", target}
