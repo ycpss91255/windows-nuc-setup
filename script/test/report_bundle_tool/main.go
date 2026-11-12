@@ -179,6 +179,70 @@ func sourceClean(o options) error {
 	}
 	return nil
 }
+func rootDocuments(version string) ([]byte, []byte) {
+	return []byte("<!doctype html><html lang=\"zh-Hant\"><meta charset=\"utf-8\"><title>版本測試報表</title><h1>" + html.EscapeString(version) + " 測試報表</h1><p>包含實際執行的單元與隔離整合測試。</p><a href=\"native/index.html\">Windows 原生報表</a> · <a href=\"windows_container/index.html\">Windows 容器報表</a> · <a href=\"report_scope.md\">測試說明</a></html>\n"), []byte("# 版本測試報表\n\n本報表包含同次 Windows 原生與 Windows 容器實際執行的單元及隔離整合測試。原生報表含完整整體及 Go 覆蓋率原始證據；容器報表維持其原始未量測狀態。\n\nCI 依執行及重試次數選取工件；此封裝記錄輸入脈絡，不是獨立來源認證。\n")
+}
+
+func readUniqueJSONValue(d *json.Decoder, depth int) error {
+	if depth > 32 {
+		return errors.New("manifest nesting limit")
+	}
+	token, err := d.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delimiter {
+	case '{':
+		keys := map[string]bool{}
+		for d.More() {
+			key, err := d.Token()
+			if err != nil {
+				return err
+			}
+			name, ok := key.(string)
+			if !ok || keys[name] {
+				return errors.New("duplicate or invalid manifest key")
+			}
+			keys[name] = true
+			if err = readUniqueJSONValue(d, depth+1); err != nil {
+				return err
+			}
+		}
+		end, err := d.Token()
+		if err != nil || end != json.Delim('}') {
+			return errors.New("invalid manifest object")
+		}
+	case '[':
+		for d.More() {
+			if err := readUniqueJSONValue(d, depth+1); err != nil {
+				return err
+			}
+		}
+		end, err := d.Token()
+		if err != nil || end != json.Delim(']') {
+			return errors.New("invalid manifest array")
+		}
+	default:
+		return errors.New("invalid manifest delimiter")
+	}
+	return nil
+}
+func uniqueJSON(data []byte) error {
+	d := json.NewDecoder(strings.NewReader(string(data)))
+	d.UseNumber()
+	if err := readUniqueJSONValue(d, 0); err != nil {
+		return err
+	}
+	if _, err := d.Token(); err != io.EOF {
+		return errors.New("trailing manifest data")
+	}
+	return nil
+}
+
 func export(o options) error {
 	runID, e := validateIdentity(o)
 	if e != nil {
@@ -230,8 +294,7 @@ func export(o options) error {
 	for n, b := range container {
 		files["windows_container/"+n] = b
 	}
-	files["index.html"] = []byte("<!doctype html><html lang=\"zh-Hant\"><meta charset=\"utf-8\"><title>版本測試報表</title><h1>" + html.EscapeString(o.version) + " 測試報表</h1><p>包含實際執行的單元與隔離整合測試。</p><a href=\"native/index.html\">Windows 原生報表</a> · <a href=\"windows_container/index.html\">Windows 容器報表</a> · <a href=\"report_scope.md\">測試說明</a></html>\n")
-	files["report_scope.md"] = []byte("# 版本測試報表\n\n本報表包含同次 Windows 原生與 Windows 容器實際執行的單元及隔離整合測試。原生報表含完整整體及 Go 覆蓋率原始證據；容器報表維持其原始未量測狀態。\n\nCI 依執行及重試次數選取工件；此封裝記錄輸入脈絡，不是獨立來源認證。\n")
+	files["index.html"], files["report_scope.md"] = rootDocuments(o.version)
 	names := make([]string, 0, len(files))
 	for n := range files {
 		names = append(names, n)
@@ -357,6 +420,13 @@ func verify(args []string) error {
 			return errors.New("archive entry size mismatch")
 		}
 		files[entry.Name] = data
+	}
+	index, scope := rootDocuments(o.version)
+	if string(files["index.html"]) != string(index) || string(files["report_scope.md"]) != string(scope) {
+		return errors.New("archive index or scope mismatch")
+	}
+	if e = uniqueJSON(files["manifest.json"]); e != nil {
+		return e
 	}
 	var m bundleManifest
 	dec := json.NewDecoder(strings.NewReader(string(files["manifest.json"])))
