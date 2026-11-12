@@ -22,9 +22,9 @@ function Invoke-RunnerBoundedProcess {
   $output=$process.StandardOutput.ReadToEndAsync()
   $errorOutput=$process.StandardError.ReadToEndAsync()
   $remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds-250
-  if($remaining -le 0 -or -not $process.WaitForExit([Math]::Max(1,$remaining))){throw 'Runner prerequisite process exceeded its deadline.'}
+  if($remaining -le 0 -or -not $process.WaitForExit([Math]::Max(1,$remaining))){throw [TimeoutException]::new('runner-process-deadline')}
   $remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds-250
-  if($remaining -le 0 -or -not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($output,$errorOutput),[Math]::Max(1,$remaining))){throw 'Runner prerequisite output exceeded its deadline.'}
+  if($remaining -le 0 -or -not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($output,$errorOutput),[Math]::Max(1,$remaining))){throw [TimeoutException]::new('runner-output-deadline')}
   return @{ExitCode=$process.ExitCode;Output=$output.Result}
  } finally {
   # Never an unbounded WaitForExit/ReadToEnd, even if a tool stops responding.
@@ -40,18 +40,33 @@ function Wait-HostedWindowsDocker {
  $watch=[Diagnostics.Stopwatch]::StartNew()
  if(-not $Clock){$Clock={$watch.ElapsedMilliseconds}.GetNewClosure()}
  $started=[long](& $Clock)
- $call={param($File,$Arguments)
-  $remaining=$DeadlineMilliseconds-([long](& $Clock)-$started)
-  if($remaining -le 0){throw 'Windows Docker readiness deadline exceeded.'}
-  & $InvokeNative $File $Arguments ([int][Math]::Min($OperationMilliseconds,$remaining))
+ $diagnostic={param([string]$Stage,[string]$Category)
+  if($Stage -cnotin @('probe','query','stop','start')){$Stage='probe'}
+  if($Category -cnotin @('process-deadline','output-deadline','total-deadline','native-error')){$Category='native-error'}
+  $elapsed=[Math]::Max(0,[Math]::Min([long]$DeadlineMilliseconds,([long](& $Clock)-$started)))
+  $remaining=[Math]::Max(0,[long]$DeadlineMilliseconds-$elapsed)
+  throw ('Docker readiness stage='+$Stage+' category='+$Category+' elapsed_ms='+$elapsed+' remaining_ms='+$remaining)
  }
- $pauseWithinBudget={
+ $call={param($Stage,$File,$Arguments)
   $remaining=$DeadlineMilliseconds-([long](& $Clock)-$started)
-  if($remaining -le 0){throw 'Windows Docker readiness deadline exceeded.'}
+  if($remaining -le 0){& $diagnostic $Stage 'total-deadline'}
+  try{& $InvokeNative $File $Arguments ([int][Math]::Min($OperationMilliseconds,$remaining))}catch{
+   $category='native-error';$exception=$_.Exception
+   while($exception){
+    if($exception -is [TimeoutException] -and $exception.Message -ceq 'runner-process-deadline'){$category='process-deadline';break}
+    if($exception -is [TimeoutException] -and $exception.Message -ceq 'runner-output-deadline'){$category='output-deadline';break}
+    $exception=$exception.InnerException
+   }
+   & $diagnostic $Stage $category
+  }
+ }
+ $pauseWithinBudget={param($Stage)
+  $remaining=$DeadlineMilliseconds-([long](& $Clock)-$started)
+  if($remaining -le 0){& $diagnostic $Stage 'total-deadline'}
   & $Pause ([int][Math]::Min(500,$remaining))
  }
  $probe={
-  $result=& $call $DockerFile @('info','--format','{{json .}}')
+  $result=& $call 'probe' $DockerFile @('info','--format','{{json .}}')
   if($result.ExitCode -ne 0){return $false}
   # PS5 may enumerate a root JSON array and coerce bool/array comparisons.
   if($result.Output -isnot [string] -or -not $result.Output.Trim().StartsWith('{')){throw 'Docker returned invalid engine information.'}
@@ -62,21 +77,21 @@ function Wait-HostedWindowsDocker {
  if(& $probe){Write-Host 'Windows Docker daemon is ready.';return}
  if($Identity.GITHUB_ACTIONS -isnot [string] -or $Identity.RUNNER_ENVIRONMENT -isnot [string] -or $Identity.RUNNER_OS -isnot [string] -or $Identity.GITHUB_ACTIONS -cne 'true' -or $Identity.RUNNER_ENVIRONMENT -cne 'github-hosted' -or $Identity.RUNNER_OS -cne 'Windows'){throw 'Docker recovery is restricted to GitHub hosted Windows runners.'}
  $state={
-  $result=& $call $ServiceFile @('query','Docker')
+  $result=& $call 'query' $ServiceFile @('query','Docker')
   if($result.ExitCode -ne 0){throw 'Docker service query failed; no daemon is installed or reconfigured.'}
   $match=[regex]::Match($result.Output,'(?m)^\s*STATE\s*:\s*([1-7])\s')
   if(-not $match.Success){throw 'Docker service returned an unrecognized state.'}
   return [int]$match.Groups[1].Value
  }
  $current=& $state
- while($current -in @(2,3,5,6)) {& $pauseWithinBudget;$current=& $state}
+ while($current -in @(2,3,5,6)) {& $pauseWithinBudget 'query';$current=& $state}
  if($current -eq 4){
   Write-Host 'Hosted Docker daemon unavailable; attempting one bounded service restart.'
-  $result=& $call $ServiceFile @('stop','Docker')
+  $result=& $call 'stop' $ServiceFile @('stop','Docker')
   if($result.ExitCode -ne 0){throw 'Docker service stop failed.'}
-  do { $current=& $state;if($current -eq 1){break};& $pauseWithinBudget } while($true)
+  do { $current=& $state;if($current -eq 1){break};& $pauseWithinBudget 'query' } while($true)
  }elseif($current -ne 1){throw 'Docker service state is not eligible for recovery.'}
- $result=& $call $ServiceFile @('start','Docker')
+ $result=& $call 'start' $ServiceFile @('start','Docker')
  if($result.ExitCode -ne 0){throw 'Docker service start failed.'}
- do {if(& $probe){Write-Host 'Windows Docker daemon is ready after one hosted service recovery.';return};& $pauseWithinBudget} while($true)
+ do {if(& $probe){Write-Host 'Windows Docker daemon is ready after one hosted service recovery.';return};& $pauseWithinBudget 'probe'} while($true)
 }

@@ -15,6 +15,9 @@ $commit=(& git -C $PackageRoot rev-parse --verify ($Revision+'^{commit}'))
 if($LASTEXITCODE -ne 0 -or $commit -notmatch '^[a-fA-F0-9]{40}$'){throw '無法確認來源提交。'}
 $files=@(& git -C $PackageRoot -c core.quotepath=false ls-tree -r --name-only $commit)
 if($LASTEXITCODE -ne 0 -or -not $files.Count){throw '無法讀取提交中的來源檔案。'}
+$worktreeFiles=@(& git -C $PackageRoot -c core.quotepath=false ls-tree -r --name-only $commit -- 'worktree/')
+if($LASTEXITCODE -ne 0){throw '無法確認提交中的根工作樹目錄。'}
+if($worktreeFiles.Count){throw '來源版本不得追蹤根 worktree 開發目錄。'}
 foreach($path in $files){
  $normalized=$path.Replace('\','/')
  if($normalized -match '(^|/)(Reports|TestResults|\.ssh|NUC-Init|Private|LocalConfig)(/|$)' -or

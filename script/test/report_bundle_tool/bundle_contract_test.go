@@ -27,17 +27,17 @@ func syntheticNativeReport(t *testing.T, source string) (map[string][]byte, stri
 	if err := os.WriteFile(p, []byte("package example\nfunc Value() int { return 1 }\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{{"init", "-q"}, {"add", "--", name}} {
-		cmd := exec.Command("git", append([]string{"-C", source}, args...)...)
+	for _, args := range [][]string{{"init", "-q"}, {"config", "--local", "core.longpaths", "true"}, {"add", "--", name}} {
+		cmd := exec.Command("git", append([]string{"-c", "core.longpaths=true", "-C", source}, args...)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("synthetic tracked source: %v %s", err, out)
 		}
 	}
-	commitCmd := exec.Command("git", "-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
+	commitCmd := exec.Command("git", "-c", "core.longpaths=true", "-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		t.Fatalf("commit fixture: %v %s", err, out)
 	}
-	commitBytes, err := exec.Command("git", "-C", source, "rev-parse", "HEAD").Output()
+	commitBytes, err := exec.Command("git", "-c", "core.longpaths=true", "-C", source, "rev-parse", "HEAD").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,6 +237,22 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 					t.Fatal("invalid historical input accepted")
 				}
 			})
+		}
+	})
+	t.Run("verified_output_ordinary_short_name", func(t *testing.T) {
+		root := t.TempDir()
+		long := filepath.Join(root, "ordinary_report_output_directory_long_name")
+		if err := os.Mkdir(long, 0700); err != nil {
+			t.Fatal(err)
+		}
+		short := shortTestPath(t, long)
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", filepath.Join(short, "verified")}
+		if err := verify(args); err != nil {
+			t.Fatalf("ordinary 8.3 parent rejected: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(long, "verified", "native", "summary.json"))
+		if err != nil || !bytes.Equal(got, native["summary.json"]) {
+			t.Fatalf("verified bytes differ: %v", err)
 		}
 	})
 	t.Run("verified_output", func(t *testing.T) {
