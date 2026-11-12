@@ -68,20 +68,27 @@ try {
  $mockCommit=$f.commit
  function gh {
   $global:LASTEXITCODE=0
-  if($args[0] -eq 'release'){$at=[array]::IndexOf($args,'--dir');Copy-Item -LiteralPath $entry.ArchivePath -Destination (Join-Path $args[$at+1] ([IO.Path]::GetFileName($entry.ArchivePath)));return}
-  $request=($args|Where-Object {$_ -like 'repos/*'}|Select-Object -First 1)
-  if($request -like '*/releases?*'){
+  $vector=$args -join '|'
+  if($args.Count -eq 9 -and $args[0] -ceq 'release' -and $args[1] -ceq 'download' -and $args[2] -ceq $f.version -and $args[3] -ceq '--repo' -and $args[4] -ceq $env:GH_REPO -and $args[5] -ceq '--dir' -and $args[7] -ceq '--pattern' -and $args[8] -ceq [IO.Path]::GetFileName($entry.ArchivePath)){Copy-Item -LiteralPath $entry.ArchivePath -Destination (Join-Path $args[6] $args[8]);return}
+  if($vector -ceq ('api|--paginate|repos/'+$env:GH_REPO+'/releases?per_page=100|--jq|.[] | @json')){
    return (@{draft=$false;tag_name=$f.version;html_url=$entry.ReleaseUrl;immutable=$true;assets=$mockAssets}|ConvertTo-Json -Depth 6 -Compress)
   }
-  if($request -like '*/commits/*'){return $f.commit}
+  if($vector -ceq ('api|repos/'+$env:GH_REPO+'/commits/'+$f.version+'|--jq|.sha') -or $vector -ceq ('api|repos/'+$env:GH_REPO+'/commits/main|--jq|.sha')){return $f.commit}
+  if($vector -ceq ('api|repos/'+$env:GH_REPO+'/actions/workflows/windows_tests.yml/runs?branch=main&event=push&status=completed&per_page=100|--jq|.workflow_runs[] | @json')){return}
+  throw 'unexpected gh arguments'
  }
  function git {
   $global:LASTEXITCODE=0
-  if($args -contains 'rev-parse'){return $mockCommit}
-  if($args -contains 'checkout'){
-   $target=$args[1]
+  if($args.Count -lt 3 -or $args[0] -cne '-C'){throw 'unexpected git arguments'}
+  $target=$args[1];$tail=(@($args|Select-Object -Skip 2) -join '|')
+  if($tail -ceq 'init|-q'){return}
+  if($tail -ceq ('-c|core.hooksPath=NUL|-c|core.autocrlf=false|fetch|--no-tags|--depth=1|https://github.com/'+$env:GH_REPO+'.git|refs/tags/'+$f.version)){return}
+  if($tail -ceq 'rev-parse|FETCH_HEAD^{commit}'){return $mockCommit}
+  if($tail -ceq ('-c|core.hooksPath=NUL|-c|core.autocrlf=false|checkout|--detach|--quiet|'+$f.commit)){
    Copy-Item -Path (Join-Path $entry.SourcePath '*') -Destination $target -Recurse -Force
+   return
   }
+  throw 'unexpected git arguments'
  }
  Reject {gh 'unexpected-command'} '未知 gh 請求不可靜默成功'
  Reject {git 'unexpected-command'} '未知 git 請求不可靜默成功'
