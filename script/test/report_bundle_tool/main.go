@@ -474,7 +474,12 @@ func verify(args []string) error {
 	var o options
 	f := flag.NewFlagSet("verify", flag.ContinueOnError)
 	f.SetOutput(io.Discard)
-	var archive, outputDir string
+	var archive, outputDir, expectedDigest string
+	var expectedSize int64
+	var historical bool
+	f.BoolVar(&historical, "historical", false, "")
+	f.StringVar(&expectedDigest, "archive-sha256", "", "")
+	f.Int64Var(&expectedSize, "archive-size", 0, "")
 	f.StringVar(&archive, "archive", "", "")
 	f.StringVar(&outputDir, "output-dir", "", "")
 	f.StringVar(&o.source, "source-root", "", "")
@@ -488,8 +493,19 @@ func verify(args []string) error {
 	if f.NArg() != 0 || archive == "" || o.source == "" {
 		return errors.New("missing verify input")
 	}
-	if _, e := validateIdentity(o); e != nil {
-		return e
+	provided := map[string]bool{}
+	f.Visit(func(v *flag.Flag) { provided[v.Name] = true })
+	if historical {
+		if provided["run-url"] || provided["run-attempt"] || !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(expectedDigest) || expectedSize <= 0 {
+			return errors.New("invalid historical arguments")
+		}
+	} else {
+		if provided["archive-sha256"] || provided["archive-size"] {
+			return errors.New("historical digest arguments require historical mode")
+		}
+		if _, e := validateIdentity(o); e != nil {
+			return e
+		}
 	}
 	if e := sourceClean(o); e != nil {
 		return e
@@ -520,6 +536,12 @@ func verify(args []string) error {
 	}
 	if len(archiveBytes) > maxArchive {
 		return errors.New("archive size limit")
+	}
+	if historical {
+		sum := sha256.Sum256(archiveBytes)
+		if int64(len(archiveBytes)) != expectedSize || hex.EncodeToString(sum[:]) != expectedDigest {
+			return errors.New("immutable archive digest or size mismatch")
+		}
 	}
 	z, e := zip.NewReader(bytes.NewReader(archiveBytes), int64(len(archiveBytes)))
 	if e != nil {
@@ -577,6 +599,12 @@ func verify(args []string) error {
 	if e = dec.Decode(new(any)); e != io.EOF {
 		return errors.New("trailing manifest data")
 	}
+	if historical {
+		o.run, o.attempt = m.RunURL, m.RunAttempt
+		if _, e = validateIdentity(o); e != nil {
+			return e
+		}
+	}
 	if m.SchemaVersion != 1 || m.Version != o.version || m.Commit != o.commit || m.RunURL != o.run || m.RunAttempt != o.attempt || m.Provenance != provenanceNote || len(m.Files) != len(allowed)-1 {
 		return errors.New("manifest identity mismatch")
 	}
@@ -607,7 +635,11 @@ func verify(args []string) error {
 		return errors.New("archive index or scope mismatch")
 	}
 	if outputDir != "" {
-		return writeVerifiedOutput(outputDir, archiveBytes, files, o)
+		origin := "explicit"
+		if historical {
+			origin = "immutable_archive_manifest"
+		}
+		return writeVerifiedOutput(outputDir, archiveBytes, files, o, origin)
 	}
 	return nil
 }
@@ -621,7 +653,7 @@ func sameOutputParent(parent, resolved, platform string) bool {
 }
 
 // writeVerifiedOutput only publishes bytes after every archive and report check passes.
-func writeVerifiedOutput(output string, archive []byte, files map[string][]byte, o options) error {
+func writeVerifiedOutput(output string, archive []byte, files map[string][]byte, o options, origin string) error {
 	if _, err := os.Lstat(output); err == nil || !os.IsNotExist(err) {
 		return errors.New("output must not exist")
 	}
@@ -662,6 +694,7 @@ func writeVerifiedOutput(output string, archive []byte, files map[string][]byte,
 	summary := sha256.Sum256(files["native/summary.json"])
 	profile := sha256.Sum256(files["native/go_coverage.out"])
 	metadata := struct {
+		ContextOrigin string `json:"context_origin"`
 		ArchiveSHA256 string `json:"archive_sha256"`
 		ArchiveSize   int64  `json:"archive_size"`
 		Version       string `json:"version"`
@@ -670,7 +703,7 @@ func writeVerifiedOutput(output string, archive []byte, files map[string][]byte,
 		RunAttempt    int    `json:"run_attempt"`
 		SummarySHA256 string `json:"summary_sha256"`
 		ProfileSHA256 string `json:"profile_sha256"`
-	}{hex.EncodeToString(digest[:]), int64(len(archive)), o.version, o.commit, o.run, o.attempt, hex.EncodeToString(summary[:]), hex.EncodeToString(profile[:])}
+	}{origin, hex.EncodeToString(digest[:]), int64(len(archive)), o.version, o.commit, o.run, o.attempt, hex.EncodeToString(summary[:]), hex.EncodeToString(profile[:])}
 	data, err := json.Marshal(metadata)
 	if err != nil {
 		return err

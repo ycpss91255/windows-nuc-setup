@@ -202,6 +202,43 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if err := export(optionsFor(nativeDir, containerDir, inProcess, 1)); err != nil {
 		t.Fatalf("in-process export: %v", err)
 	}
+	t.Run("historical_context", func(t *testing.T) {
+		archive, err := os.ReadFile(inProcess)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(archive)
+		base := []string{"--historical", "--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--archive-sha256", fmt.Sprintf("%x", sum), "--archive-size", fmt.Sprint(len(archive))}
+		output := filepath.Join(t.TempDir(), "verified")
+		if err := verify(append(append([]string{}, base...), "--output-dir", output)); err != nil {
+			t.Fatalf("historical: %v", err)
+		}
+		b, err := os.ReadFile(filepath.Join(output, "verified.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m struct {
+			Origin  string `json:"context_origin"`
+			Run     string `json:"run_url"`
+			Attempt int    `json:"run_attempt"`
+		}
+		if err := json.Unmarshal(b, &m); err != nil || m.Origin != "immutable_archive_manifest" || m.Run != runURL || m.Attempt != 1 {
+			t.Fatalf("incorrect context: %s %v", b, err)
+		}
+		for name, args := range map[string][]string{
+			"wrong digest":  append(append([]string{}, base...), "--archive-sha256", strings.Repeat("0", 64)),
+			"wrong size":    append(append([]string{}, base...), "--archive-size", "1"),
+			"mixed context": append(append([]string{}, base...), "--run-url", runURL),
+			"mixed attempt": append(append([]string{}, base...), "--run-attempt", "1"),
+			"wrong source":  append(append([]string{}, base...), "--commit", strings.Repeat("a", 40)),
+		} {
+			t.Run(name, func(t *testing.T) {
+				if err := verify(args); err == nil {
+					t.Fatal("invalid historical input accepted")
+				}
+			})
+		}
+	})
 	t.Run("verified_output", func(t *testing.T) {
 		target := filepath.Join(t.TempDir(), "verified")
 		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", target}
@@ -657,6 +694,15 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 			f.Close()
 			if err := verifyArchive(p, "1"); err == nil {
 				t.Fatalf("invalid archive accepted: %s", kind)
+			}
+			archiveBytes, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sum := sha256.Sum256(archiveBytes)
+			historical := []string{"--historical", "--archive", p, "--source-root", source, "--version", version, "--commit", sha, "--archive-sha256", fmt.Sprintf("%x", sum), "--archive-size", fmt.Sprint(len(archiveBytes))}
+			if err := verify(historical); err == nil {
+				t.Fatalf("historical mode accepted invalid archive: %s", kind)
 			}
 		})
 	}
