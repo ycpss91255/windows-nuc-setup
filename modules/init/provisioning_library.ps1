@@ -197,7 +197,7 @@ function Invoke-InitOobeFlow {
   New-InitProvisioningStage $SourceRoot $StageRoot $state
  }
  $launcher=New-InitPublicLauncher -StageRoot $StageRoot
- Write-Host ('取消或中斷時的恢復入口（正常登入後直接執行 windows.cmd）：'+$launcher) -ForegroundColor Cyan
+ Write-Host ('取消或中斷時，在 OOBE 按 Shift+F10，從工具包重新執行 init.cmd；恢復入口：'+$launcher) -ForegroundColor Cyan
  if($state.Phase -eq 'Prepared'){
   $name=Read-Host '新的本機管理員帳號'
   if(-not(Test-InitUserName -Name $name -ExistingNames @((Get-LocalUser).Name))){throw '帳號無效或已存在；不變更既有帳號。'}

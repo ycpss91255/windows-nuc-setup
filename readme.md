@@ -27,8 +27,8 @@ for %d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do @if exist "%d:\wi
 ```
 
 2. 使用找到的完整路徑，例如顯示 `E:\windows_setup\init.cmd` 時輸入 `call "E:\windows_setup\init.cmd"`。E: 只是例子；若列出多份，請選你剛準備的完整工具包。
-3. 依中文提示輸入新本機帳號、密碼與確認密碼。設定包套用前會明確詢問是否繼續，因 Windows 可能立即重新啟動；輸入 `YES` 才繼續。取消會保留帳號與無密碼續跑紀錄。
-4. 登入剛建立的正式帳號，接上網路，直接從完整工具包執行 `windows.cmd`，依下面的 Windows 設定流程繼續；不需要第二次執行 Init。Windows 入口先確認帳號與 OOBE 紀錄，第 4 階段才安裝 SSH。
+3. 依中文提示輸入新本機帳號、密碼與確認密碼。設定包套用前會明確詢問是否繼續，因 Windows 可能立即重新啟動；輸入 `YES` 才繼續。取消會保留帳號與無密碼續跑紀錄；仍在 OOBE 時按 Shift+F10，從完整工具包重新執行 `init.cmd`，再確認是否套用。
+4. 設定包成功套用並完成 Init 後，登入剛建立的正式帳號，接上網路，直接從完整工具包執行 `windows.cmd`，依下面的 Windows 設定流程繼續；不需要第二次執行 Init。Windows 入口先確認帳號與 OOBE 紀錄，第 4 階段才安裝 SSH。
 #### 可選路線：已用 Ctrl+Shift+F3 進入 Administrator 桌面
 
 `Shift+F10` 直接執行 Init 的路線仍可使用。如果你已按 `Ctrl+Shift+F3`，Windows 會重新啟動進入稽核模式的 Administrator 桌面，接著依序操作：
@@ -196,7 +196,7 @@ call windows.cmd -VerifyOnly
 
 設定包只包含 `HideOobe=True`，不含帳密或 Microsoft 工具。先建立並讀回確認正式管理員帳號，才會詢問是否套用；Windows 可能因套用設定包重新啟動，因此必須先輸入 `YES` 同意。腳本不會在 SYSTEM 下執行 Sysprep。
 
-續跑檔案放在 `%ProgramData%\windows_setup_init`，只允許 SYSTEM 與管理員讀寫；同層的 `windows_setup_init.cmd` 是取消／中斷時的恢復入口，供一般使用者唯讀啟動提權。正常登入後直接執行完整工具包的 `windows.cmd`：它在設定前核對同一臺機器、目標 SID、家目錄、正式桌面及已安裝設定包，再記錄帳號確認。此紀錄不代表 SSH 已完成，SSH 由第 4 階段處理。帳密不保存在設定包或續跑 JSON；若帳號已建立但寫入所有權紀錄失敗，會保留帳號並停止，不會猜測接管同名帳號。
+續跑檔案放在 `%ProgramData%\windows_setup_init`，只允許 SYSTEM 與管理員讀寫；同層的 `windows_setup_init.cmd` 是取消／中斷時的恢復入口，供一般使用者唯讀啟動提權。若在 OOBE 取消或中斷，按 Shift+F10 從完整工具包重新執行 `init.cmd` 繼續；設定包成功套用並正常登入後，執行完整工具包的 `windows.cmd`：它在設定前核對同一臺機器、目標 SID、家目錄、正式桌面及已安裝設定包，再記錄帳號確認。此紀錄不代表 SSH 已完成，SSH 由第 4 階段處理。帳密不保存在設定包或續跑 JSON；若帳號已建立但寫入所有權紀錄失敗，會保留帳號並停止，不會猜測接管同名帳號。
 
 舊版 `SshPending`／`Complete` 紀錄通過相同核對後，會先保留受保護的 `state_before_account_confirmation.json`，再轉為 `AccountConfirmed`；不刪除舊執行檔案，也不把舊狀態當成目前 SSH 驗證結果。
 
