@@ -114,18 +114,19 @@ function Test-DriverDownloadGuidance([string]$Text,[string]$Version,[string]$Ass
  return $fixed.Count -gt 0 -or ($section.Contains('windows_driver_nuc8_<version>.zip') -and $section.Contains('version 包含 v'))
 }
 function Test-CurrentDriverGuidance([string]$Text,[string]$Version,[object[]]$Assets){
- if(@($Assets).Count -ne 1){return $false}
- return Test-DriverDownloadGuidance $Text $Version $Assets[0].Name
+ $nucAssets=@($Assets|Where-Object {$_.ProfileId -ceq 'nuc8i7hvk_hnk'})
+ foreach($asset in $nucAssets){if(-not (Test-DriverDownloadGuidance $Text $Version $asset.Name)){return $false}}
+ return $true
 }
 . (Join-Path $root 'script/release/driver_release_library.ps1')
 $currentAssets=@(Get-ReleaseDriverAssets -Path (Join-Path $root 'script/release/driver_release_assets.json') -Version $current)
-Assert ($currentAssets.Count -eq 1) '當前版本有唯一宣告的驅動資產'
 $readme=[IO.File]::ReadAllText((Join-Path $root 'readme.md'))
 $otherAsset=[pscustomobject]@{Name='windows_driver_other.zip';ProfileId='other_profile'}
-Assert (Test-CurrentDriverGuidance $readme $current @($currentAssets[0],$otherAsset)) '其他機型資產不影響 NUC 下載指引'
+$nucAsset=[pscustomobject]@{Name=('windows_driver_nuc8_'+$current+'.zip');ProfileId='nuc8i7hvk_hnk'}
+Assert (Test-CurrentDriverGuidance $readme $current @($nucAsset,$otherAsset)) '其他機型資產不影響 NUC 下載指引'
 Assert (Test-CurrentDriverGuidance $readme $current @($otherAsset)) '版本未宣告 NUC 資產時不要求 NUC 指引'
-Assert (Test-DriverDownloadGuidance $readme $current $currentAssets[0].Name) '驅動下載指引使用當前版或含 v 的版本模板'
-Assert (-not (Test-DriverDownloadGuidance "### 準備獨立驅動包`n下載 v0.0.1 Release 的 windows_driver_nuc8_v0.0.1.zip`n### 下一節`n" $current $currentAssets[0].Name)) '驅動下載區指向其他固定版本必須拒絕'
-Assert (-not (Test-DriverDownloadGuidance "### 準備獨立驅動包`nwindows_driver_nuc8_<version>.zip，version 包含 v；https://github.com/ycpss91255/windows_setup/releases/tag/v0.0.1`n### 下一節`n" $current $currentAssets[0].Name)) '驅動下載區指向其他固定版本 URL 必須拒絕'
-Assert (Test-DriverDownloadGuidance "### 準備獨立驅動包`nwindows_driver_nuc8_<version>.zip，version 包含 v`n### 下一節`n" $current $currentAssets[0].Name) '含 v 的版本模板為有效下載指引'
+Assert (Test-CurrentDriverGuidance $readme $current $currentAssets) '已宣告 NUC 驅動的下載指引使用當前版或含 v 的版本模板'
+Assert (-not (Test-DriverDownloadGuidance "### 準備獨立驅動包`n下載 v0.0.1 Release 的 windows_driver_nuc8_v0.0.1.zip`n### 下一節`n" $current $nucAsset.Name)) '驅動下載區指向其他固定版本必須拒絕'
+Assert (-not (Test-DriverDownloadGuidance "### 準備獨立驅動包`nwindows_driver_nuc8_<version>.zip，version 包含 v；https://github.com/ycpss91255/windows_setup/releases/tag/v0.0.1`n### 下一節`n" $current $nucAsset.Name)) '驅動下載區指向其他固定版本 URL 必須拒絕'
+Assert (Test-DriverDownloadGuidance "### 準備獨立驅動包`nwindows_driver_nuc8_<version>.zip，version 包含 v`n### 下一節`n" $current $nucAsset.Name) '含 v 的版本模板為有效下載指引'
 Write-Host ('ALL PASS: '+$script:count+' release assertions; only temporary fixture repository changed.')
