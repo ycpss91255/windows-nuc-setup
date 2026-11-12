@@ -83,6 +83,8 @@ try {
    Copy-Item -Path (Join-Path $entry.SourcePath '*') -Destination $target -Recurse -Force
   }
  }
+ Reject {gh 'unexpected-command'} '未知 gh 請求不可靜默成功'
+ Reject {git 'unexpected-command'} '未知 git 請求不可靜默成功'
  $inputs=& (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository $env:GH_REPO -OutputDirectory (Join-Path $parent 'inputs')
  $downloaded=Get-Content -LiteralPath $inputs.CatalogPath -Raw -Encoding UTF8|ConvertFrom-Json
  foreach($downloadEntry in $downloaded){
