@@ -19,8 +19,6 @@ New-Item -ItemType Directory -Path $work -ErrorAction Stop|Out-Null
 $baselineRoot=Join-Path $work 'baseline';New-Item -ItemType Directory -Path $baselineRoot|Out-Null
 $native=Join-Path $baselineRoot 'windows-test-reports-1-1'
 Copy-Item -LiteralPath $fixtureNative -Destination $native -Recurse
-$nativeSummary=Get-Content -LiteralPath (Join-Path $native 'summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
-[IO.File]::WriteAllText((Join-Path $native 'repo_coverage.json'),($nativeSummary.RepoCoverage|ConvertTo-Json -Depth 20 -Compress),[Text.UTF8Encoding]::new($false))
 $archive=Join-Path $baselineRoot $data.archive
 $bundleTool=Join-Path $work 'report_bundle_tool.exe';$coverageTool=Join-Path $work 'repo_coverage_tool.exe'
 Push-Location $root
