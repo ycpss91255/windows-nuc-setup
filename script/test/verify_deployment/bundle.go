@@ -89,12 +89,28 @@ func prepareReleaseBundle(metadata []byte, tag, sha, run string, attempt int, to
 		return nil, fmt.Errorf("invalid archive metadata")
 	}
 	info, err := os.Lstat(archive)
-	if err != nil || !info.Mode().IsRegular() || info.Size() != outer.Size || info.Size() > 256*1024*1024 {
+	if err != nil || !info.Mode().IsRegular() || info.Size() != outer.Size || info.Size() > maxReportArchiveBytes {
 		return nil, fmt.Errorf("invalid archive file")
 	}
-	payload, err := os.ReadFile(archive)
+	input, err := os.Open(archive)
 	if err != nil {
 		return nil, err
+	}
+	opened, err := input.Stat()
+	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+		input.Close()
+		return nil, fmt.Errorf("archive changed")
+	}
+	payload, err := io.ReadAll(io.LimitReader(input, maxReportArchiveBytes+1))
+	closeErr := input.Close()
+	if err != nil {
+		return nil, err
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	if len(payload) > int(maxReportArchiveBytes) {
+		return nil, fmt.Errorf("archive too large")
 	}
 	actual := assetFromBytes(outer.Name, payload)
 	if actual.Size != outer.Size || actual.Digest != outer.Digest {
