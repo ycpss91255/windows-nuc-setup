@@ -156,6 +156,8 @@ func ScanInventory(root string) (Inventory, error) {
 		if entry.IsDir() {
 			reason := ""
 			switch {
+			case rel == "worktree":
+				reason = "local development worktrees"
 			case lower == ".git":
 				reason = "version-control metadata"
 			case lower == "vendor" || strings.EqualFold(entry.Name(), "win11debloat"):
