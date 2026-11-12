@@ -119,3 +119,6 @@ NUC-Init/
 # Python verification tools never commit bytecode.
 __pycache__/
 *.py[cod]
+
+# 本機開發工作樹不進入交付來源。
+/worktree/
