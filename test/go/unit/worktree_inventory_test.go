@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,4 +73,30 @@ func TestRepoCoverageRootWorktreeSymlinkIsNotSilentlyExcluded(t *testing.T) {
 		}
 	}
 	t.Fatal("根工作樹為符號連結時必須保留 blocker")
+}
+
+func TestRootWorktreeGitIgnoreOnlyAtRepositoryRoot(t *testing.T) {
+	root := t.TempDir()
+	cmd := exec.Command("git", "-C", root, "init", "-q")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, b)
+	}
+	ignore, err := os.ReadFile(filepath.Join("..", "..", "..", ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), ignore, 0600); err != nil {
+		t.Fatal(err)
+	}
+	check := func(path string) bool {
+		return exec.Command("git", "-C", root, "check-ignore", "-q", "--no-index", path).Run() == nil
+	}
+	if !check("worktree/branch/owned.go") {
+		t.Error("根開發工作樹未被 Git 忽略")
+	}
+	for _, p := range []string{"worktree_extra/owned.go", "core/worktree/owned.go"} {
+		if check(p) {
+			t.Errorf("自有來源不應被忽略：%s", p)
+		}
+	}
 }
