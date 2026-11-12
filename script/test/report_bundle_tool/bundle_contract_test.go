@@ -246,4 +246,68 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if len(seen) != len(files)-1 {
 		t.Fatal("manifest does not cover every non-manifest ZIP file")
 	}
+	verify := func(path string, attempt string) error {
+		t.Helper()
+		cmd := exec.Command("go", "run", ".", "verify", "--archive", path, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", attempt)
+		data, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%w: %s", err, data)
+		}
+		return nil
+	}
+	if err := verify(out, "1"); err != nil {
+		t.Fatalf("valid archive must verify: %v", err)
+	}
+	for _, kind := range []string{"tampered", "missing", "extra", "traversal", "duplicate", "wrong_attempt"} {
+		t.Run(kind, func(t *testing.T) {
+			if kind == "wrong_attempt" {
+				if err := verify(out, "2"); err == nil {
+					t.Fatal("wrong attempt accepted")
+				}
+				return
+			}
+			p := filepath.Join(t.TempDir(), "candidate.zip")
+			f, e := os.Create(p)
+			if e != nil {
+				t.Fatal(e)
+			}
+			w := zip.NewWriter(f)
+			for name, data := range files {
+				if kind == "missing" && name == "native/summary.json" {
+					continue
+				}
+				if kind == "tampered" && name == "native/summary.json" {
+					data = append(append([]byte(nil), data...), ' ')
+				}
+				entry, e := w.Create(name)
+				if e != nil {
+					t.Fatal(e)
+				}
+				if _, e = entry.Write(data); e != nil {
+					t.Fatal(e)
+				}
+			}
+			if kind == "extra" || kind == "traversal" || kind == "duplicate" {
+				name := "extra.txt"
+				if kind == "traversal" {
+					name = "../escape"
+				}
+				if kind == "duplicate" {
+					name = "native/summary.json"
+				}
+				entry, e := w.Create(name)
+				if e != nil {
+					t.Fatal(e)
+				}
+				entry.Write([]byte("unexpected"))
+			}
+			if e = w.Close(); e != nil {
+				t.Fatal(e)
+			}
+			f.Close()
+			if err := verify(p, "1"); err == nil {
+				t.Fatalf("invalid archive accepted: %s", kind)
+			}
+		})
+	}
 }
