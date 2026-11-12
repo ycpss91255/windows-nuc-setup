@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -473,8 +474,9 @@ func verify(args []string) error {
 	var o options
 	f := flag.NewFlagSet("verify", flag.ContinueOnError)
 	f.SetOutput(io.Discard)
-	var archive string
+	var archive, outputDir string
 	f.StringVar(&archive, "archive", "", "")
+	f.StringVar(&outputDir, "output-dir", "", "")
 	f.StringVar(&o.source, "source-root", "", "")
 	f.StringVar(&o.version, "version", "", "")
 	f.StringVar(&o.commit, "commit", "", "")
@@ -499,11 +501,30 @@ func verify(args []string) error {
 	if !st.Mode().IsRegular() || st.Size() > int64(maxArchive) {
 		return errors.New("invalid archive file")
 	}
-	z, e := zip.OpenReader(archive)
+	input, e := os.Open(archive)
 	if e != nil {
 		return e
 	}
-	defer z.Close()
+	opened, e := input.Stat()
+	if e != nil || !opened.Mode().IsRegular() || !os.SameFile(st, opened) {
+		input.Close()
+		return errors.New("archive changed or is not regular")
+	}
+	archiveBytes, e := io.ReadAll(io.LimitReader(input, int64(maxArchive)+1))
+	closeErr := input.Close()
+	if e != nil {
+		return e
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if len(archiveBytes) > maxArchive {
+		return errors.New("archive size limit")
+	}
+	z, e := zip.NewReader(bytes.NewReader(archiveBytes), int64(len(archiveBytes)))
+	if e != nil {
+		return e
+	}
 	allowed := map[string]bool{"index.html": true, "report_scope.md": true, "manifest.json": true}
 	for _, n := range nativeNames {
 		allowed["native/"+n] = true
@@ -585,7 +606,79 @@ func verify(args []string) error {
 	if string(files["index.html"]) != string(index) || string(files["report_scope.md"]) != string(scope) {
 		return errors.New("archive index or scope mismatch")
 	}
+	if outputDir != "" {
+		return writeVerifiedOutput(outputDir, archiveBytes, files, o)
+	}
 	return nil
+}
+
+func sameOutputParent(parent, resolved, platform string) bool {
+	parent, resolved = filepath.Clean(parent), filepath.Clean(resolved)
+	if platform == "windows" {
+		return strings.EqualFold(parent, resolved)
+	}
+	return parent == resolved
+}
+
+// writeVerifiedOutput only publishes bytes after every archive and report check passes.
+func writeVerifiedOutput(output string, archive []byte, files map[string][]byte, o options) error {
+	if _, err := os.Lstat(output); err == nil || !os.IsNotExist(err) {
+		return errors.New("output must not exist")
+	}
+	parent, err := filepath.Abs(filepath.Dir(output))
+	if err != nil {
+		return err
+	}
+	resolved, err := filepath.EvalSymlinks(parent)
+	if err != nil {
+		return err
+	}
+	if !sameOutputParent(parent, resolved, runtime.GOOS) {
+		return errors.New("output parent must not contain symlinks")
+	}
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return err
+	}
+	if len(entries) != 0 {
+		return errors.New("output parent must be a dedicated empty private directory")
+	}
+	// The caller owns this private parent and must prevent concurrent writers.
+	staging, err := os.MkdirTemp(parent, ".report-verified-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(staging)
+	for name, data := range files {
+		path := filepath.Join(staging, filepath.FromSlash(name))
+		if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			return err
+		}
+		if err = os.WriteFile(path, data, 0600); err != nil {
+			return err
+		}
+	}
+	digest := sha256.Sum256(archive)
+	summary := sha256.Sum256(files["native/summary.json"])
+	profile := sha256.Sum256(files["native/go_coverage.out"])
+	metadata := struct {
+		ArchiveSHA256 string `json:"archive_sha256"`
+		ArchiveSize   int64  `json:"archive_size"`
+		Version       string `json:"version"`
+		Commit        string `json:"commit"`
+		RunURL        string `json:"run_url"`
+		RunAttempt    int    `json:"run_attempt"`
+		SummarySHA256 string `json:"summary_sha256"`
+		ProfileSHA256 string `json:"profile_sha256"`
+	}{hex.EncodeToString(digest[:]), int64(len(archive)), o.version, o.commit, o.run, o.attempt, hex.EncodeToString(summary[:]), hex.EncodeToString(profile[:])}
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	if err = os.WriteFile(filepath.Join(staging, "verified.json"), data, 0600); err != nil {
+		return err
+	}
+	return os.Rename(staging, output)
 }
 func run() error {
 	if len(os.Args) < 2 {
