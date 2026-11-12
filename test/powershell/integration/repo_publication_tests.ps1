@@ -47,7 +47,11 @@ $report|Add-Member -NotePropertyName GoCoverage -NotePropertyValue $go
 Write-SnapshotView $report $public
 $archive=Join-Path $fixture 'windows_setup_report_v1.0.0.zip'
 [IO.File]::WriteAllText($archive,'mock report archive')
-function Test-FixtureBundleVerifier { $global:LASTEXITCODE=if($global:fixtureBundleFailure){1}else{0} }
+function Test-FixtureBundleVerifier {
+ $words=@($args)
+ $valid=$words[0] -ceq 'verify' -and $words[[Array]::IndexOf($words,'--archive')+1] -ceq $archive -and $words[[Array]::IndexOf($words,'--version')+1] -ceq 'v1.0.0' -and $words[[Array]::IndexOf($words,'--commit')+1] -ceq $identity.Commit -and $words[[Array]::IndexOf($words,'--run-url')+1] -ceq $identity.RunUrl -and $words[[Array]::IndexOf($words,'--run-attempt')+1] -eq 1
+ $global:LASTEXITCODE=if($global:fixtureBundleFailure -or -not $valid){1}else{0}
+}
 function gh {
  $words=@($args);$global:LASTEXITCODE=0
  if($words[0] -eq 'api' -and $words -contains '--paginate'){
@@ -99,12 +103,13 @@ foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immu
  Assert ($global:repoPublicationAssets.Count -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('新 Release 只含一個完整報表 ZIP：'+$mode)
  Assert ($global:repoPublicationPublished -eq $(if($mode -in @('bad-digest','wrong-sha')){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
 }
-foreach($invalid in @('missing-archive','bad-run','bad-attempt','verify-failed')){
+foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt','verify-failed')){
  $global:repoPublicationMode='success';$global:repoPublicationCreated=0;$global:repoPublicationPublished=0;$global:fixtureBundleFailure=($invalid -eq 'verify-failed')
  $argsForPublisher=@{PublicDirectory=$public;Version='v1.0.0';Commit=$identity.Commit;NotesPath=(Join-Path $public 'summary.md');Repository='example/repo';CoverageToolPath=$tool;ReportArchive=$archive;BundleToolPath='Test-FixtureBundleVerifier';RunAttempt=1;RunUrl=$identity.RunUrl}
  if($invalid -eq 'missing-archive'){$argsForPublisher.ReportArchive=Join-Path $fixture 'missing/windows_setup_report_v1.0.0.zip'}
  if($invalid -eq 'bad-run'){$argsForPublisher.RunUrl='https://github.com/example/repo/actions/runs/2'}
  if($invalid -eq 'bad-attempt'){$argsForPublisher.RunAttempt=0}
+ if($invalid -eq 'wrong-attempt'){$argsForPublisher.RunAttempt=2}
  Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') @argsForPublisher} ('報表驗證失敗拒絕發布 '+$invalid)
  Assert ($global:repoPublicationCreated -eq 0 -and $global:repoPublicationPublished -eq 0) ('報表驗證失敗沒有建立或發布 '+$invalid)
 }
