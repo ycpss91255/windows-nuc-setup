@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	a "windows_setup/script/test/acceptance"
@@ -199,6 +200,17 @@ func TestConsumerFixtureBoundariesAndVerifier(t *testing.T) {
 	root := filepath.Join(base, "generated")
 	if err := run(root); err != nil {
 		t.Fatal(err)
+	}
+	if runtime.GOOS == "windows" {
+		reportScript, err := filepath.Abs(filepath.Join("..", "test_report.ps1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ps := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", `$ErrorActionPreference='Stop'; . $env:FIXTURE_REPORT_SCRIPT; foreach($name in @('windows-test-reports-1-1','docker-test-reports-1-1')) { $r=Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $env:FIXTURE_ROOT ($name+'/summary.json')) | ConvertFrom-Json; Assert-TestReportSnapshot -Report $r -Release }`)
+		ps.Env = append(os.Environ(), "FIXTURE_REPORT_SCRIPT="+reportScript, "FIXTURE_ROOT="+root)
+		if out, err := ps.CombinedOutput(); err != nil {
+			t.Fatalf("PowerShell report contract: %v\n%s", err, out)
+		}
 	}
 	raw, err := os.ReadFile(filepath.Join(root, "fixture.json"))
 	if err != nil {
