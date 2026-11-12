@@ -42,6 +42,10 @@ function Write-SnapshotView {
 }
 function Test-PortalReleaseEvidence {
  param($Entry,[string]$CoverageToolPath=$env:WINDOWS_SETUP_COVERAGE_TOOL)
+ if($Entry.PSObject.Properties['ArchivePath'] -and $Entry.ArchivePath){
+  if($Entry.SnapshotPath -or $Entry.ManifestPath){throw 'ZIP 與舊品質附件不可混合。'}
+  return Test-PortalZipEvidence -Entry $Entry
+ }
  if($Entry.Version -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$'){throw '版本名稱不合法。'}
  if($Entry.Immutable -isnot [bool] -or $Entry.Immutable -cne $true){throw 'Release 未鎖定，不能作為不可變版本證據。'}
  if($Entry.Commit -notmatch '^[a-fA-F0-9]{40}$'){throw '缺少標籤來源提交。'}
