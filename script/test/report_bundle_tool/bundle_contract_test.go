@@ -229,6 +229,7 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 			"wrong digest":  append(append([]string{}, base...), "--archive-sha256", strings.Repeat("0", 64)),
 			"wrong size":    append(append([]string{}, base...), "--archive-size", "1"),
 			"mixed context": append(append([]string{}, base...), "--run-url", runURL),
+			"mixed attempt": append(append([]string{}, base...), "--run-attempt", "1"),
 			"wrong source":  append(append([]string{}, base...), "--commit", strings.Repeat("a", 40)),
 		} {
 			t.Run(name, func(t *testing.T) {
@@ -693,6 +694,15 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 			f.Close()
 			if err := verifyArchive(p, "1"); err == nil {
 				t.Fatalf("invalid archive accepted: %s", kind)
+			}
+			archiveBytes, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sum := sha256.Sum256(archiveBytes)
+			historical := []string{"--historical", "--archive", p, "--source-root", source, "--version", version, "--commit", sha, "--archive-sha256", fmt.Sprintf("%x", sum), "--archive-size", fmt.Sprint(len(archiveBytes))}
+			if err := verify(historical); err == nil {
+				t.Fatalf("historical mode accepted invalid archive: %s", kind)
 			}
 		})
 	}
