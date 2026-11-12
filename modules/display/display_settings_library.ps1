@@ -9,8 +9,11 @@ function Invoke-SetupDisplaySettings {
   $actual=[NUC8Display.Display]::ReadSnapshot()
   $scales=@($actual|Select-Object -Skip 2)
   if(-not $scales.Count){throw 'No active display source.'}
+  $uniform=@($scales|Where-Object {$_ -ne $scales[0]}).Count -eq 0
+  $legacyDpi=$null;$legacyScale=$null
+  if($uniform){$legacyScale=$scales[0];$legacyDpi=$legacyScale*96/100}
   $custom=(Get-ItemProperty $desktop -ErrorAction SilentlyContinue).Win8DpiScaling -eq 1
-  $result=[ordered]@{Success=($actual[0] -eq 1920 -and $actual[1] -eq 1080 -and @($scales|Where-Object {$_ -ne 100}).Count -eq 0 -and -not $custom);Width=$actual[0];Height=$actual[1];CurrentMonitorDPI=($scales[0]*96/100);CurrentScalePercent=$scales[0];NativeScalePercent=$scales;CustomScalingEnabled=$custom;VerifiedAt=(Get-Date).ToString('o');Error='解析度或實際 DPI 尚未符合 1920×1080 / 100%，可能需要重新登入。'}
+  $result=[ordered]@{Success=($actual[0] -eq 1920 -and $actual[1] -eq 1080 -and @($scales|Where-Object {$_ -ne 100}).Count -eq 0 -and -not $custom);Width=$actual[0];Height=$actual[1];CurrentMonitorDPI=$legacyDpi;CurrentScalePercent=$legacyScale;NativeScalePercent=$scales;CustomScalingEnabled=$custom;VerifiedAt=(Get-Date).ToString('o');Error='解析度或實際 DPI 尚未符合 1920×1080 / 100%，可能需要重新登入。'}
   if($result.Success){$result.Error=$null}
   return [pscustomobject]$result
  }
