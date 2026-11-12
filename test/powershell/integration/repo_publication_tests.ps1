@@ -47,9 +47,17 @@ $report|Add-Member -NotePropertyName GoCoverage -NotePropertyValue $go
 Write-SnapshotView $report $public
 $archive=Join-Path $fixture 'windows_setup_report_v1.0.0.zip'
 [IO.File]::WriteAllText($archive,'mock report archive')
+$containerFixture=Join-Path $fixture 'container';New-Item -ItemType Directory $containerFixture|Out-Null
+foreach($name in @('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')){Copy-Item (Join-Path $public $name) -Destination (Join-Path $containerFixture $name)}
 function Test-FixtureBundleVerifier {
  $words=@($args)
  $valid=$words[0] -ceq 'verify' -and $words[[Array]::IndexOf($words,'--archive')+1] -ceq $archive -and $words[[Array]::IndexOf($words,'--version')+1] -ceq 'v1.0.0' -and $words[[Array]::IndexOf($words,'--commit')+1] -ceq $identity.Commit -and $words[[Array]::IndexOf($words,'--run-url')+1] -ceq $identity.RunUrl -and $words[[Array]::IndexOf($words,'--run-attempt')+1] -eq 1
+ if($words -contains '--output-dir'){
+  $dest=$words[[Array]::IndexOf($words,'--output-dir')+1];New-Item -ItemType Directory (Join-Path $dest 'native'),(Join-Path $dest 'windows_container') -Force|Out-Null
+  foreach($name in @('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg','repo_coverage.json','coverage_inventory.json','coverage.xml','go_coverage.json','go_coverage.out','go_coverage.svg')){Copy-Item (Join-Path $public $name) -Destination (Join-Path $dest ('native/'+$name))}
+  foreach($name in @('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')){Copy-Item (Join-Path $containerFixture $name) -Destination (Join-Path $dest ('windows_container/'+$name))}
+  if($global:fixtureBundleMismatch){[IO.File]::AppendAllText((Join-Path $dest 'native/summary.md'),'different validated report')}
+ }
  $global:LASTEXITCODE=if($global:fixtureBundleFailure -or -not $valid){1}else{0}
 }
 function gh {
@@ -103,8 +111,8 @@ foreach($mode in @('success','bad-digest','missing-asset','mutable','string-immu
  Assert ($global:repoPublicationAssets.Count -eq $(if($mode -eq 'wrong-sha'){0}else{1})) ('新 Release 只含一個完整報表 ZIP：'+$mode)
  Assert ($global:repoPublicationPublished -eq $(if($mode -in @('bad-digest','wrong-sha')){0}else{1})) ('草稿驗證失敗不得提前發布：'+$mode)
 }
-foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt','verify-failed')){
- $global:repoPublicationMode='success';$global:repoPublicationCreated=0;$global:repoPublicationPublished=0;$global:fixtureBundleFailure=($invalid -eq 'verify-failed')
+foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt','verify-failed','different-input')){
+ $global:repoPublicationMode='success';$global:repoPublicationCreated=0;$global:repoPublicationPublished=0;$global:fixtureBundleFailure=($invalid -eq 'verify-failed');$global:fixtureBundleMismatch=($invalid -eq 'different-input')
  $argsForPublisher=@{PublicDirectory=$public;Version='v1.0.0';Commit=$identity.Commit;NotesPath=(Join-Path $public 'summary.md');Repository='example/repo';CoverageToolPath=$tool;ReportArchive=$archive;BundleToolPath='Test-FixtureBundleVerifier';RunAttempt=1;RunUrl=$identity.RunUrl}
  if($invalid -eq 'missing-archive'){$argsForPublisher.ReportArchive=Join-Path $fixture 'missing/windows_setup_report_v1.0.0.zip'}
  if($invalid -eq 'bad-run'){$argsForPublisher.RunUrl='https://github.com/example/repo/actions/runs/2'}
@@ -113,7 +121,7 @@ foreach($invalid in @('missing-archive','bad-run','bad-attempt','wrong-attempt',
  Refuse {& (Join-Path $root 'script/report/publish_quality_release.ps1') @argsForPublisher} ('報表驗證失敗拒絕發布 '+$invalid)
  Assert ($global:repoPublicationCreated -eq 0 -and $global:repoPublicationPublished -eq 0) ('報表驗證失敗沒有建立或發布 '+$invalid)
 }
-$global:fixtureBundleFailure=$false
+$global:fixtureBundleFailure=$false;$global:fixtureBundleMismatch=$false
 Remove-Item Function:\gh
 function New-LocalEntry {
  $manifestPath=Join-Path $public 'quality-manifest.json'
