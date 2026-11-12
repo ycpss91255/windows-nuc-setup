@@ -107,5 +107,27 @@ func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []str
 	if e = a.ValidateGoCoverageReport(reader, files, sha, run, true); e != nil {
 		return e
 	}
+	pageBytes, e := reader("index.html")
+	if e != nil {
+		return e
+	}
+	page, e := a.ParsePage(pageBytes)
+	if e != nil {
+		return e
+	}
+	versionText := regexp.MustCompile(`版本\s+` + regexp.QuoteMeta(tag) + `(?:\s|·|$)`)
+	commitText := regexp.MustCompile(`(?:^|[^a-f0-9])` + regexp.QuoteMeta(sha) + `(?:[^a-f0-9]|$)`)
+	if !versionText.MatchString(page.Visible) || !commitText.MatchString(page.Visible) {
+		return fmt.Errorf("visible release version or commit mismatch")
+	}
+	runLink := false
+	for _, link := range page.VisibleLinks {
+		if link == run {
+			runLink = true
+		}
+	}
+	if !runLink {
+		return fmt.Errorf("visible release run link mismatch")
+	}
 	return nil
 }
