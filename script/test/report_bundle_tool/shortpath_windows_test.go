@@ -45,9 +45,44 @@ func TestOutputParentRejectsWindowsJunctions(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("create test junction: %v %s", err, out)
 	}
+	if _, err := loadReport(junction, nil); err == nil {
+		t.Fatal("source report junction accepted")
+	}
 	for _, parent := range []string{junction, filepath.Join(junction, "child")} {
 		if err := writeVerifiedOutput(filepath.Join(parent, "verified"), nil, map[string][]byte{}, options{}, "explicit"); err == nil {
 			t.Fatalf("junction or ancestor accepted: %s", parent)
 		}
+	}
+}
+func TestSyntheticFixtureAcceptsOrdinaryShortParent(t *testing.T) {
+	root := t.TempDir()
+	long := filepath.Join(root, "ordinary_fixture_output_directory_long_name")
+	if err := os.Mkdir(long, 0700); err != nil {
+		t.Fatal(err)
+	}
+	short := shortTestPath(t, long)
+	fixture := filepath.Join(short, "fixture")
+	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestExportSyntheticConsumerFixture$", ".")
+	cmd.Env = append(os.Environ(), "WINDOWS_SETUP_BUNDLE_FIXTURE_DIR="+fixture)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("ordinary short fixture parent rejected: %v %s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(long, "fixture", "fixture.json")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOutputParentRejectsNonDirectory(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "not_a_directory")
+	if err := os.WriteFile(file, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeVerifiedOutput(filepath.Join(file, "verified"), nil, map[string][]byte{}, options{}, "explicit"); err == nil {
+		t.Fatal("non-directory parent accepted")
+	}
+	got, err := os.ReadFile(file)
+	if err != nil || string(got) != "keep" {
+		t.Fatal("non-directory parent changed")
 	}
 }
