@@ -68,6 +68,8 @@ try {
  $verified=Join-Path $parent 'verified'
  & $BundleToolPath verify --archive $ReportArchive --source-root $SourceRoot --version $Version --commit $Commit --run-url $RunUrl --run-attempt $RunAttempt --output-dir $verified
  if($LASTEXITCODE -ne 0){throw '報表封裝驗證失敗。'}
+ $receipt=Get-Content -LiteralPath (Join-Path $verified 'verified.json') -Raw -Encoding UTF8|ConvertFrom-Json
+ if($receipt.archive_sha256 -isnot [string] -or $receipt.archive_sha256 -cnotmatch '^[a-f0-9]{64}$' -or ($receipt.archive_size -isnot [int] -and $receipt.archive_size -isnot [long]) -or $receipt.archive_size -le 0){throw '報表驗證收據無效。'}
  $nativeNames=@('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg','repo_coverage.json','coverage_inventory.json','coverage.xml','go_coverage.json','go_coverage.out','go_coverage.svg')
  $containerNames=@('index.html','summary.json','summary.md','junit.xml','unit.svg','integration.svg','coverage.svg')
  foreach($pair in @(@{Input=$PublicDirectory;Verified='native';Names=$nativeNames},@{Input=$ContainerDirectory;Verified='windows_container';Names=$containerNames})){
@@ -99,6 +101,7 @@ try {
 $attachments=@($ReportArchive)
 $driverAssets=@(Get-ReleaseDriverAssets -Path $DriverAssetManifestPath -Version $Version)
 $qualityAssets=@($attachments|ForEach-Object {[pscustomobject]@{Name=[IO.Path]::GetFileName($_);SHA256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant();Size=(Get-Item -LiteralPath $_).Length}})
+if($qualityAssets.Count -ne 1 -or $qualityAssets[0].SHA256 -cne $receipt.archive_sha256 -or $qualityAssets[0].Size -ne $receipt.archive_size){throw '報表封裝與驗證收據不一致。'}
 $expectedAssets=@($driverAssets)+$qualityAssets
 $notes=[IO.File]::ReadAllText($NotesPath,[Text.UTF8Encoding]::new($false,$true))
 if($driverAssets.Count){
