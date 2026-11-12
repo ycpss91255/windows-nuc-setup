@@ -571,7 +571,7 @@ jobs:
         run: |
           go run ./script/test/verify_deployment --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
 
-      - name: Verify published release evidence
+      - name: 匿名核對公開版本與不可變證據
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
