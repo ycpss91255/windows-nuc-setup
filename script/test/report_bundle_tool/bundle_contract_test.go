@@ -201,6 +201,49 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if err := export(optionsFor(nativeDir, containerDir, inProcess, 1)); err != nil {
 		t.Fatalf("in-process export: %v", err)
 	}
+	t.Run("verified_output", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "verified")
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", target}
+		if err := verify(args); err != nil {
+			t.Fatalf("verified output: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(target, "native", "summary.json"))
+		if err != nil || !bytes.Equal(got, native["summary.json"]) {
+			t.Fatalf("summary differs: %v", err)
+		}
+		b, err := os.ReadFile(filepath.Join(target, "verified.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var meta struct {
+			ArchiveSHA256 string `json:"archive_sha256"`
+			ArchiveSize   int64  `json:"archive_size"`
+		}
+		if err := json.Unmarshal(b, &meta); err != nil {
+			t.Fatal(err)
+		}
+		archive, err := os.ReadFile(inProcess)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(archive)
+		if meta.ArchiveSHA256 != fmt.Sprintf("%x", sum) || meta.ArchiveSize != int64(len(archive)) {
+			t.Fatal("archive metadata differs from verified bytes")
+		}
+		if err := verify(args); err == nil {
+			t.Fatal("existing output accepted")
+		}
+	})
+	t.Run("invalid_archive_leaves_no_output", func(t *testing.T) {
+		target := filepath.Join(t.TempDir(), "verified")
+		args := []string{"--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "2", "--output-dir", target}
+		if err := verify(args); err == nil {
+			t.Fatal("wrong attempt accepted")
+		}
+		if _, err := os.Lstat(target); !os.IsNotExist(err) {
+			t.Fatal("failed verification left output")
+		}
+	})
 	t.Run("scope_summarizes_executed_reports", func(t *testing.T) {
 		z, err := zip.OpenReader(out)
 		if err != nil {
