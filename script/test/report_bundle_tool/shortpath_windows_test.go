@@ -107,4 +107,9 @@ func TestSyntheticFixtureGitUnderLongTemp(t *testing.T) {
 		t.Fatal(err)
 	}
 	syntheticNativeReport(t, source)
+	cmd := exec.Command("git", "-c", "core.longpaths=true", "-C", source, "config", "--local", "--get", "core.longpaths")
+	out, err := cmd.Output()
+	if err != nil || strings.TrimSpace(string(out)) != "true" {
+		t.Fatalf("fixture must keep long path configuration local: %v", err)
+	}
 }

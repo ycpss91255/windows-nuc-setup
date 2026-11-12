@@ -27,17 +27,17 @@ func syntheticNativeReport(t *testing.T, source string) (map[string][]byte, stri
 	if err := os.WriteFile(p, []byte("package example\nfunc Value() int { return 1 }\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{{"init", "-q"}, {"add", "--", name}} {
-		cmd := exec.Command("git", append([]string{"-C", source}, args...)...)
+	for _, args := range [][]string{{"init", "-q"}, {"config", "--local", "core.longpaths", "true"}, {"add", "--", name}} {
+		cmd := exec.Command("git", append([]string{"-c", "core.longpaths=true", "-C", source}, args...)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("synthetic tracked source: %v %s", err, out)
 		}
 	}
-	commitCmd := exec.Command("git", "-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
+	commitCmd := exec.Command("git", "-c", "core.longpaths=true", "-C", source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		t.Fatalf("commit fixture: %v %s", err, out)
 	}
-	commitBytes, err := exec.Command("git", "-C", source, "rev-parse", "HEAD").Output()
+	commitBytes, err := exec.Command("git", "-c", "core.longpaths=true", "-C", source, "rev-parse", "HEAD").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
