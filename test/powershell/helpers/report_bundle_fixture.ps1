@@ -9,8 +9,13 @@ function New-TestReportBundleFixture {
  Push-Location -LiteralPath $root
  try {
   [Environment]::SetEnvironmentVariable('WINDOWS_SETUP_BUNDLE_FIXTURE_DIR',$destination,'Process')
-  & go.exe test -count=1 -run '^TestExportSyntheticConsumerFixture$' ./script/test/report_bundle_tool | Out-Host
-  if($LASTEXITCODE -ne 0){throw 'Synthetic fixture generation failed.'}
+  $fixtureFailed=$false;$oldPreference=$ErrorActionPreference
+  try{
+   $ErrorActionPreference='Continue'
+   & go.exe test -count=1 -run '^TestExportSyntheticConsumerFixture$' ./script/test/report_bundle_tool *> $null
+   $fixtureFailed=($LASTEXITCODE -ne 0)
+  }catch{$fixtureFailed=$true}finally{$ErrorActionPreference=$oldPreference}
+  if($fixtureFailed){Write-Host '@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed';throw 'Synthetic fixture generation failed.'}
   $metadata=Get-Content -LiteralPath (Join-Path $destination 'fixture.json') -Raw -Encoding UTF8|ConvertFrom-Json
   if($metadata.kind -cne 'Synthetic' -or $metadata.source -cne 'source' -or $metadata.archive -cne ('windows_setup_report_'+$metadata.version+'.zip')){throw 'Invalid synthetic fixture metadata.'}
   $source=Join-Path $destination $metadata.source;$archive=Join-Path $destination $metadata.archive
