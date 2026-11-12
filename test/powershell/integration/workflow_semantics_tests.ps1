@@ -2,6 +2,14 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
+$workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
+$runName=[regex]::Match($workflow, '(?m)^run-name:\s*(.+)$')
+Assert ($runName.Success -and $runName.Groups[1].Value -match '\$\{\{') 'workflow has a dynamic top-level run name'
+$name=$runName.Groups[1].Value
+foreach($context in @('github.event_name','github.event.pull_request.number','github.event.pull_request.title','github.ref_name','github.sha')) {
+    Assert ($name.Contains($context)) ('run name includes ' + $context)
+}
+Assert ($name.Contains('||')) 'run name includes fallback for missing event data'
 $tool=$env:WINDOWS_SETUP_ACTIONLINT
 if(-not $tool){$tool=(Get-Command actionlint.exe -CommandType Application -ErrorAction Stop).Source}
 $version=@(& $tool -version)
