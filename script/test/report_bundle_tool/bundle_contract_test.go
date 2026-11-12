@@ -1,12 +1,12 @@
 package main
 
 import (
- "io"
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -185,14 +185,27 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	}
 	t.Run("scope_summarizes_executed_reports", func(t *testing.T) {
 		z, err := zip.OpenReader(out)
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer z.Close()
 		for _, f := range z.File {
-			if f.Name != "report_scope.md" { continue }
-			r, err := f.Open(); if err != nil { t.Fatal(err) }
-			data, err := io.ReadAll(r); r.Close(); if err != nil { t.Fatal(err) }
+			if f.Name != "report_scope.md" {
+				continue
+			}
+			r, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(r)
+			r.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
 			for _, want := range []string{version, sha, runURL, "2026-01-01", "Windows container / Windows synthetic fixture", "NotMeasured", "synthetic contract", "Unit", "Integration"} {
-				if !strings.Contains(string(data), want) { t.Errorf("scope missing verified report detail %q", want) }
+				if !strings.Contains(string(data), want) {
+					t.Errorf("scope missing verified report detail %q", want)
+				}
 			}
 			return
 		}

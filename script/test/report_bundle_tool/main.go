@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -255,8 +256,31 @@ func sourceClean(o options) error {
 	}
 	return nil
 }
-func rootDocuments(version string) ([]byte, []byte) {
-	return []byte("<!doctype html><html lang=\"zh-Hant\"><meta charset=\"utf-8\"><title>版本測試報表</title><h1>" + html.EscapeString(version) + " 測試報表</h1><p>包含實際執行的單元與隔離整合測試。</p><a href=\"native/index.html\">Windows 原生報表</a> · <a href=\"windows_container/index.html\">Windows 容器報表</a> · <a href=\"report_scope.md\">測試說明</a></html>\n"), []byte("# 版本測試報表\n\n本報表包含同次 Windows 原生與 Windows 容器實際執行的單元及隔離整合測試。原生報表含完整整體及 Go 覆蓋率原始證據；容器報表維持其原始未量測狀態。\n\nCI 依執行及重試次數選取工件；此封裝記錄輸入脈絡，不是獨立來源認證。\n")
+func rootDocuments(version string, native, container map[string][]byte) ([]byte, []byte) {
+	var scope strings.Builder
+	fmt.Fprintf(&scope, "# 版本測試報表\n\n版本：%s\n\n同次 Windows 原生與容器執行；CI 選取指定執行與重試的工件，這不是獨立來源認證。\n", version)
+	for i, m := range []map[string][]byte{native, container} {
+		var r a.Report
+		_ = json.Unmarshal(bytes.TrimPrefix(m["summary.json"], []byte{0xef, 0xbb, 0xbf}), &r)
+		label := "Windows 原生"
+		link := "native/index.html"
+		if i == 1 {
+			label = "Windows 容器"
+			link = "windows_container/index.html"
+		}
+		fmt.Fprintf(&scope, "\n## %s\n\n- 版本：%s\n- Commit：%s\n- 執行：%s\n- 量測時間：%s\n- 環境：%s\n- Coverage：%s\n- 測試套件：%d；斷言：%d（通過 %d，失敗 %d）\n- [完整原始報表](%s)\n", label, strconv.Quote(r.Version), strconv.Quote(r.Commit), strconv.Quote(r.RunUrl), strconv.Quote(r.MeasuredAt), strconv.Quote(r.Environment), strconv.Quote(r.Coverage), r.Totals.SuitesExecuted, r.Totals.AssertionsExecuted, r.Totals.AssertionsPassed, r.Totals.AssertionsFailed, link)
+		for _, check := range r.Checks {
+			if check.Layer != "Unit" && check.Layer != "Integration" {
+				continue
+			}
+			fmt.Fprintf(&scope, "\n- %s：%s（%d 個斷言）\n", check.Layer, strconv.Quote(check.Name), len(check.Assertions))
+			for _, assertion := range check.Assertions {
+				fmt.Fprintf(&scope, "  - %s\n", strconv.Quote(assertion.Name))
+			}
+		}
+	}
+	scopeText := scope.String()
+	return []byte("<!doctype html><html lang=\"zh-Hant\"><meta charset=\"utf-8\"><title>版本測試報表</title><h1>" + html.EscapeString(version) + " 測試報表</h1><p>包含實際執行的單元與隔離整合測試。</p><a href=\"native/index.html\">Windows 原生報表</a> · <a href=\"windows_container/index.html\">Windows 容器報表</a> · <a href=\"report_scope.md\">測試說明</a></html>\n"), []byte(scopeText)
 }
 
 func readUniqueJSONValue(d *json.Decoder, depth int) error {
@@ -375,7 +399,7 @@ func export(o options) error {
 	for n, b := range container {
 		files["windows_container/"+n] = b
 	}
-	files["index.html"], files["report_scope.md"] = rootDocuments(o.version)
+	files["index.html"], files["report_scope.md"] = rootDocuments(o.version, native, container)
 	names := make([]string, 0, len(files))
 	for n := range files {
 		names = append(names, n)
@@ -502,10 +526,6 @@ func verify(args []string) error {
 		}
 		files[entry.Name] = data
 	}
-	index, scope := rootDocuments(o.version)
-	if string(files["index.html"]) != string(index) || string(files["report_scope.md"]) != string(scope) {
-		return errors.New("archive index or scope mismatch")
-	}
 	if e = uniqueJSON(files["manifest.json"]); e != nil {
 		return e
 	}
@@ -540,7 +560,14 @@ func verify(args []string) error {
 	for _, n := range containerNames {
 		container[n] = files["windows_container/"+n]
 	}
-	return validateReports(o, native, container)
+	if e = validateReports(o, native, container); e != nil {
+		return e
+	}
+	index, scope := rootDocuments(o.version, native, container)
+	if string(files["index.html"]) != string(index) || string(files["report_scope.md"]) != string(scope) {
+		return errors.New("archive index or scope mismatch")
+	}
+	return nil
 }
 func run() error {
 	if len(os.Args) < 2 {
