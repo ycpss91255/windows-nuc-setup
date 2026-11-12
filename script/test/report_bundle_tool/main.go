@@ -202,8 +202,8 @@ func validateReports(o options, native, container map[string][]byte) error {
 		if r.SchemaVersion != 2 || r.RefType != "Release" || r.RefName != o.version || r.Version != o.version || r.RequestedLayer != "All" || !r.Success || r.Totals.UnexecutedSuites != 0 {
 			return errors.New("report release identity or execution state mismatch")
 		}
-		isContainer := strings.HasPrefix(r.Environment, "Windows container / ")
-		if (i == 1) != isContainer {
+		isContainer := strings.HasPrefix(r.Environment, "Windows container / Windows ")
+		if !strings.HasPrefix(r.Environment, "Windows ") || (i == 1) != isContainer || (i == 0 && strings.HasPrefix(r.Environment, "Windows container / ")) {
 			return errors.New("report environment mismatch")
 		}
 		for _, check := range r.Checks {

@@ -96,7 +96,7 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	summary["RefType"] = "Release"
 	summary["RefName"] = version
 	summary["Version"] = version
-	summary["Environment"] = "Synthetic native fixture"
+	summary["Environment"] = "Windows synthetic native fixture"
 	owned := []string{"windows_setup/script/test/example/value.go"}
 	goEvidence, profile, err := a.CreateCoverageEvidence([][]byte{[]byte("mode: set\n" + owned[0] + ":2.1,2.27 1 1\n")}, owned, a.CoverageProvenance{Commit: sha, RunUrl: runURL, MeasuredAt: "2026-01-01T00:00:00Z", SourceState: "Clean", GoVersion: "go1.27.3", Environment: "Synthetic Go fixture"})
 	if err != nil {
@@ -127,7 +127,7 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	delete(summary, "GoCoverage")
 	delete(summary, "RepoCoverage")
 	summary["Coverage"] = "NotMeasured"
-	summary["Environment"] = "Windows container / Synthetic fixture"
+	summary["Environment"] = "Windows container / Windows synthetic fixture"
 	container["summary.json"], _ = json.Marshal(summary)
 	container["index.html"] = original["main/index.html"]
 	container["summary.md"] = original["main/summary.md"]
