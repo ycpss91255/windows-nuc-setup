@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	htmlparser "golang.org/x/net/html"
 	"html"
 	"io"
 	"os"
@@ -18,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 	a "windows_setup/script/test/acceptance"
 	c "windows_setup/script/test/repo_coverage"
 )
@@ -130,8 +133,68 @@ func reportReader(m map[string][]byte) a.Reader {
 		return b, nil
 	}
 }
+func validatePublicDocuments(files map[string][]byte) error {
+	for name, data := range files {
+		if !strings.HasSuffix(name, ".html") && !strings.HasSuffix(name, ".svg") {
+			continue
+		}
+		if !utf8.Valid(data) {
+			return errors.New("public document is not UTF-8")
+		}
+		root, err := htmlparser.Parse(strings.NewReader(string(data)))
+		if err != nil {
+			return err
+		}
+		var walk func(*htmlparser.Node) error
+		walk = func(node *htmlparser.Node) error {
+			if node.Type == htmlparser.ElementNode {
+				switch node.Data {
+				case "script", "iframe", "object", "embed", "form":
+					return errors.New("active content in public report")
+				}
+				for _, attr := range node.Attr {
+					key := strings.ToLower(attr.Key)
+					if strings.HasPrefix(key, "on") {
+						return errors.New("event handler in public report")
+					}
+					value := strings.Map(func(r rune) rune {
+						if unicode.IsSpace(r) || unicode.IsControl(r) {
+							return -1
+						}
+						return unicode.ToLower(r)
+					}, attr.Val)
+					if strings.Contains(value, "javascript:") || strings.Contains(value, "vbscript:") || strings.Contains(value, "data:text/html") || (key == "style" && (strings.Contains(value, "url(") || strings.Contains(value, "expression(") || strings.Contains(value, "@import"))) {
+						return errors.New("active URL or style in public report")
+					}
+				}
+				if node.Data == "style" {
+					for child := node.FirstChild; child != nil; child = child.NextSibling {
+						v := strings.ToLower(child.Data)
+						if strings.Contains(v, "url(") || strings.Contains(v, "@import") || strings.Contains(v, "expression(") {
+							return errors.New("active stylesheet in public report")
+						}
+					}
+				}
+			}
+			for child := node.FirstChild; child != nil; child = child.NextSibling {
+				if err := walk(child); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if err = walk(root); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 func validateReports(o options, native, container map[string][]byte) error {
 	for i, m := range []map[string][]byte{native, container} {
+		if e := validatePublicDocuments(m); e != nil {
+			return e
+		}
 		r, e := a.ValidateReport(reportReader(m), o.commit, o.run, false)
 		if e != nil {
 			return e
