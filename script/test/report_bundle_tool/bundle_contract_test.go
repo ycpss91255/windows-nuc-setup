@@ -246,6 +246,30 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	if len(seen) != len(files)-1 {
 		t.Fatal("manifest does not cover every non-manifest ZIP file")
 	}
+	for _, malicious := range []string{`<script>alert(1)</script>`, `<a href="javascript:alert(1)">x</a>`, `<p onclick="alert(1)">x</p>`, `<iframe src="https://untrusted.invalid"></iframe>`} {
+		t.Run("unsafe_public_html", func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "windows-test-reports-1-1")
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			for name, data := range native {
+				if name == "index.html" {
+					data = append(append([]byte(nil), data...), []byte(malicious)...)
+				}
+				if err := os.WriteFile(filepath.Join(dir, name), data, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			output := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
+			cmd := exec.Command("go", "run", ".", "export", "--native-dir", dir, "--container-dir", containerDir, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output", output)
+			if data, err := cmd.CombinedOutput(); err == nil {
+				t.Fatalf("unsafe public report accepted: %s", data)
+			}
+			if _, err := os.Stat(output); !os.IsNotExist(err) {
+				t.Fatal("unsafe report created output")
+			}
+		})
+	}
 	verify := func(path string, attempt string) error {
 		t.Helper()
 		cmd := exec.Command("go", "run", ".", "verify", "--archive", path, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", attempt)
