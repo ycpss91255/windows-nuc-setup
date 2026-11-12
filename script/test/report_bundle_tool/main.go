@@ -260,17 +260,22 @@ func readUniqueJSONValue(d *json.Decoder, depth int) error {
 	}
 	switch delimiter {
 	case '{':
-		keys := map[string]bool{}
+		keys := []string{}
 		for d.More() {
 			key, err := d.Token()
 			if err != nil {
 				return err
 			}
 			name, ok := key.(string)
-			if !ok || keys[name] {
-				return errors.New("duplicate or invalid manifest key")
+			if !ok {
+				return errors.New("invalid manifest key")
 			}
-			keys[name] = true
+			for _, prior := range keys {
+				if strings.EqualFold(prior, name) {
+					return errors.New("duplicate or aliased manifest key")
+				}
+			}
+			keys = append(keys, name)
 			if err = readUniqueJSONValue(d, depth+1); err != nil {
 				return err
 			}
