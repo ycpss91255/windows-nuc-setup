@@ -1,4 +1,4 @@
-# 工具與驅動二進位由既有下載/雜湊流程管理，不提交 Git。
+﻿# 工具與驅動二進位由既有下載/雜湊流程管理，不提交 Git。
 /drivers/*/*
 !/drivers/*/profile.json
 !/drivers/*/manifest.json
