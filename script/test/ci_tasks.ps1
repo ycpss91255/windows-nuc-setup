@@ -59,7 +59,7 @@ function Write-CIFailureDiagnostics {
   Write-Output ('CI diagnostic: '+$name)
   if(-not(Test-Path -LiteralPath $path -PathType Leaf)){Write-Output '    unavailable';continue}
   if((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Diagnostic suite log cannot be a reparse point.'}
-  if($suite -ceq 'Integration.report_bundle_publication'){
+  if($suite -eq 'Integration.report_bundle_publication'){
    if((Get-Item -LiteralPath $path).Length -gt 4MB){Write-Output '    unavailable';continue}
    if(@(Get-Content -LiteralPath $path -Encoding UTF8|Where-Object {$_ -ceq '@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed'}).Count){Write-Output '    fixture_export:go_fixture_failed'}
    continue
