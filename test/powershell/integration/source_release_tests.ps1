@@ -34,7 +34,9 @@ try{
  $builderExit=$LASTEXITCODE
 }finally{$ErrorActionPreference=$priorPreference;Pop-Location}
 Assert ($builderExit -eq 0) 'PS5.1 原生 File 入口省略 PackageRoot 可產生所屬 Git 套件版本說明'
-Assert (([IO.File]::ReadAllText((Join-Path $defaultNotes 'release_notes.md'))) -ceq (Get-ReleaseNotes v9.8.7-rc1 ([IO.File]::ReadAllText((Join-Path $defaultRepo 'doc/changelog/changelog.md'))))) '預設發布根目錄不依賴呼叫位置或目前工具倉庫'
+$rcOriginal=Get-ReleaseNotes v9.8.7-rc1 ([IO.File]::ReadAllText((Join-Path $defaultRepo 'doc/changelog/changelog.md')))
+$rcExpected='[此版本測試報表](https://ycpss91255.github.io/windows_setup/versions/v9.8.7-rc1/index.html)' + "`n`n" + $rcOriginal
+Assert (([IO.File]::ReadAllText((Join-Path $defaultNotes 'release_notes.md'))) -ceq $rcExpected) 'RC 報表連結位於頂端且保留完整原始說明'
 foreach($file in @('init.cmd','windows.cmd','readme.md')){WriteFile $file 'fixture'}
 $log="## [Unreleased]`n`n### Changed`n`n- 通用 Windows 設定。`n"
 WriteFile 'doc/changelog/changelog.md' $log
@@ -49,6 +51,11 @@ Push-Location $fixture
 try{$result=& $builder -Version v1.2.3 -PackageRoot $repo -OutputDirectory '.\notes'}finally{Pop-Location}
 Assert ($result.NotesPath -eq (Join-Path $fixture 'notes\release_notes.md')) '發布輸出相對路徑依 PowerShell 位置解析'
 Assert ((Get-Content $result.NotesPath -Raw -Encoding UTF8).Contains('通用 Windows 設定')) '說明來自精確版本章節'
+$original=Get-ReleaseNotes v1.2.3 ([IO.File]::ReadAllText((Join-Path $repo 'doc/changelog/changelog.md')))
+$expected='[此版本測試報表](https://ycpss91255.github.io/windows_setup/versions/v1.2.3/index.html)' + "`n`n" + $original
+$actual=[IO.File]::ReadAllText($result.NotesPath)
+Assert ($actual -ceq $expected) '正式版本必須連結自身版本報表並原樣保留說明'
+Assert ($actual -cne $expected.Replace('/versions/v1.2.3/','/versions/v1.2.4/') -and $actual -cne $expected.Replace('/versions/v1.2.3/index.html','/main/index.html')) '錯版及 main 連結不能通過完整內容契約'
 Assert (@(Get-ChildItem (Join-Path $fixture 'notes')).Count -eq 1) '只輸出說明，不複製 GitHub 來源 ZIP'
 Assert (-not $result.Prerelease) '正式版本分類正確'
 Assert ((Get-ReleaseVersion 'v1.2.3-rc2').Prerelease) 'RC 分類為預覽版本'
