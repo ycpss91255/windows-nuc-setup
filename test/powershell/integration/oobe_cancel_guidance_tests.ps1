@@ -2,7 +2,7 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 . (Join-Path $root 'modules/init/provisioning_library.ps1')
-function Assert([bool]$Condition,[string]$Name){if(-not $Condition){throw ('FAIL: '+$Name)};[Console]::WriteLine('PASS: '+$Name)}
+function Assert([bool]$Condition,[string]$Name){Microsoft.PowerShell.Utility\Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)}}
 $stage=Join-Path $env:TEMP ('init_guidance_'+[guid]::NewGuid().ToString('N'));New-Item -ItemType Directory $stage|Out-Null
 $script:messages=@();$script:accountCalls=0;$script:phase='AwaitingConsent'
 function Write-Host {param($Object,$ForegroundColor) $script:messages+=@([string]$Object)}
