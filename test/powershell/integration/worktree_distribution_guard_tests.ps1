@@ -23,6 +23,10 @@ if(-not $LayoutOnly){Assert ($caught -and -not(Test-Path -LiteralPath (Join-Path
 $sourceArchive=Join-Path $fixture 'complete-source.zip';& git.exe -C $root archive --format=zip ('--output='+$sourceArchive) HEAD;if($LASTEXITCODE -ne 0){throw '無法建立完整來源 fixture'}
 $layoutRepo=Join-Path $fixture 'complete-source';Expand-Archive -LiteralPath $sourceArchive -DestinationPath $layoutRepo
 [IO.Directory]::CreateDirectory((Join-Path $layoutRepo 'worktree'))|Out-Null;[IO.File]::WriteAllText((Join-Path $layoutRepo 'worktree/owned.ps1'),'Write-Output 1')
+$zipLog=Join-Path $fixture 'layout_zip.log';$oldPreference=$ErrorActionPreference
+try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $layout -PackageRoot $layoutRepo -SourceOnly *> $zipLog;$zipExit=$LASTEXITCODE}finally{$ErrorActionPreference=$oldPreference}
+$zipRows=@(Get-Content -LiteralPath $zipLog|Where-Object {$_.StartsWith('@@ASSERT@@')}|ForEach-Object {$_.Substring(10)|ConvertFrom-Json})
+Assert ($zipExit -ne 0 -and @($zipRows|Where-Object {$_.Name -ceq 'tracked root worktree is excluded from source distribution' -and -not $_.Passed}).Count -eq 1) '無 Git 來源版面也拒絕根工作樹'
 & git.exe -C $layoutRepo init -q;& git.exe -C $layoutRepo config user.name 'CI Fixture';& git.exe -C $layoutRepo config user.email 'fixture@example.invalid';& git.exe -C $layoutRepo add -A;& git.exe -C $layoutRepo add -f worktree/owned.ps1;& git.exe -C $layoutRepo commit -qm fixture;if($LASTEXITCODE -ne 0){throw '無法準備完整來源 fixture'}
 $log=Join-Path $fixture 'layout.log';$old=$ErrorActionPreference
 try{$ErrorActionPreference='Continue';& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $layout -PackageRoot $layoutRepo -SourceOnly *> $log;$exit=$LASTEXITCODE}finally{$ErrorActionPreference=$old}
