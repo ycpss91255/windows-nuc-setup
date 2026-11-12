@@ -40,7 +40,11 @@ func TestDeploymentExecutableLineCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, _, err := c.NormalizeGo([][]byte{data}, map[string][]byte{"script/test/verify_deployment/main.go": source, "script/test/verify_deployment/tag.go": tagSource}, "windows_setup")
+	bundleSource, err := os.ReadFile(filepath.Join(root, "script/test/verify_deployment/bundle.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, _, err := c.NormalizeGo([][]byte{data}, map[string][]byte{"script/test/verify_deployment/main.go": source, "script/test/verify_deployment/tag.go": tagSource, "script/test/verify_deployment/bundle.go": bundleSource}, "windows_setup")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,6 +21,11 @@ func run() error {
 	mode := flag.String("mode", "branch", "branch or release")
 	tag := flag.String("tag", "", "release tag")
 	metadata := flag.String("release-metadata", "", "immutable GitHub release metadata")
+	download := flag.Bool("download-release-asset", false, "download report asset from release")
+	repository := flag.String("release-repository", "", "repository for report download")
+	bundleTool := flag.String("report-bundle-tool", "", "trusted report verifier executable")
+	archive := flag.String("report-archive", "", "downloaded report archive")
+	attempt := flag.Int("run-attempt", 0, "expected run attempt")
 	base := flag.String("base-url", "", "HTTPS Pages root")
 	doc := flag.String("readme", "", "README path")
 	sha := flag.String("expected-sha", "", "expected commit")
@@ -54,8 +59,19 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		if *download {
+			if err := downloadReportAsset(data, *tag, *repository, *archive); err != nil {
+				return err
+			}
+		} else if *repository != "" {
+			return fmt.Errorf("repository requires report download")
+		}
+		bundle, err := prepareReleaseBundle(data, *tag, *sha, *run, *attempt, *bundleTool, *archive)
+		if err != nil {
+			return err
+		}
 		for i := 0; i < 12; i++ {
-			err = verifyTag(read, data, *tag, *sha, *run, files)
+			err = verifyTag(read, data, *tag, *sha, *run, files, bundle)
 			if err == nil {
 				fmt.Printf("公開版本驗收通過：%s %s\n", *tag, *sha)
 				return nil
@@ -66,7 +82,7 @@ func run() error {
 		}
 		return err
 	}
-	if *mode != "branch" || *tag != "" || *metadata != "" {
+	if *mode != "branch" || *tag != "" || *metadata != "" || *bundleTool != "" || *archive != "" || *attempt != 0 || *download || *repository != "" {
 		return fmt.Errorf("invalid deployment mode")
 	}
 	var measured *c.Evidence
