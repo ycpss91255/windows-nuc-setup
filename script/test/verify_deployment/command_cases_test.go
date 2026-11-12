@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -170,6 +171,74 @@ func TestDeploymentCases(t *testing.T) {
 		return []string{"--base-url", server.URL, "--readme", doc, "--expected-sha", sha, "--expected-run-url", runURL}
 	}
 	t.Setenv("GITHUB_STEP_SUMMARY", "")
+	t.Run("tag_public_evidence", func(t *testing.T) {
+		tag := "v0.2.4"
+		profile := []byte("mode: set\nsynthetic profile\n")
+		digest := fmt.Sprintf("sha256:%x", sha256.Sum256(profile))
+		metadata := filepath.Join(t.TempDir(), "release.json")
+		writeRelease := func(d string) {
+			t.Helper()
+			b, _ := json.Marshal(map[string]any{"tag_name": tag, "draft": false, "immutable": true, "assets": []any{map[string]any{"name": "go_coverage.out", "digest": d, "size": len(profile)}}})
+			if e := os.WriteFile(metadata, b, 0600); e != nil {
+				t.Fatal(e)
+			}
+		}
+		writeRelease(digest)
+		summary, _ := json.Marshal(map[string]any{"SchemaVersion": 2, "Commit": sha, "RunUrl": runURL, "RefType": "Release", "RefName": tag, "Version": tag, "SourceState": "Clean", "RequestedLayer": "All", "Success": true})
+		prefix := "versions/" + tag + "/"
+		pages[prefix+"index.html"] = []byte(`<html><body><a href="go_coverage.out">Go profile</a></body></html>`)
+		pages[prefix+"summary.json"] = summary
+		pages[prefix+"go_coverage.out"] = profile
+		pages["versions.json"] = []byte(`[{"Version":"v0.2.4","Status":"Passed","Path":"versions/v0.2.4/index.html"}]`)
+		defer func() {
+			delete(pages, prefix+"index.html")
+			delete(pages, prefix+"summary.json")
+			delete(pages, prefix+"go_coverage.out")
+			pages["versions.json"] = []byte(`[]`)
+		}()
+		tagArgs := append(args(), "--tag", tag, "--release-metadata", metadata)
+		if e := invoke(tagArgs...); e != nil {
+			t.Fatalf("valid tag publication rejected: %v", e)
+		}
+		for _, name := range []string{"index.html", "summary.json", "go_coverage.out"} {
+			t.Run("missing_"+name, func(t *testing.T) {
+				old := pages[prefix+name]
+				delete(pages, prefix+name)
+				defer func() { pages[prefix+name] = old }()
+				if e := invoke(tagArgs...); e == nil {
+					t.Fatal("missing page or evidence accepted")
+				}
+			})
+		}
+		t.Run("wrong_source", func(t *testing.T) {
+			pages[prefix+"summary.json"] = []byte(strings.Replace(string(summary), sha, strings.Repeat("b", 40), 1))
+			defer func() { pages[prefix+"summary.json"] = summary }()
+			if e := invoke(tagArgs...); e == nil {
+				t.Fatal("wrong source accepted")
+			}
+		})
+		t.Run("wrong_run", func(t *testing.T) {
+			pages[prefix+"summary.json"] = []byte(strings.Replace(string(summary), runURL, runURL+"0", 1))
+			defer func() { pages[prefix+"summary.json"] = summary }()
+			if e := invoke(tagArgs...); e == nil {
+				t.Fatal("wrong run accepted")
+			}
+		})
+		t.Run("wrong_digest", func(t *testing.T) {
+			writeRelease("sha256:" + strings.Repeat("0", 64))
+			defer writeRelease(digest)
+			if e := invoke(tagArgs...); e == nil {
+				t.Fatal("wrong release digest accepted")
+			}
+		})
+		t.Run("changed_profile", func(t *testing.T) {
+			pages[prefix+"go_coverage.out"] = append(append([]byte(nil), profile...), 'x')
+			defer func() { pages[prefix+"go_coverage.out"] = profile }()
+			if e := invoke(tagArgs...); e == nil {
+				t.Fatal("changed profile accepted")
+			}
+		})
+	})
 	t.Run("required_parameters", func(t *testing.T) {
 		if err := invoke(); err == nil || !strings.Contains(err.Error(), "必要") {
 			t.Fatalf("missing flags: %v", err)
