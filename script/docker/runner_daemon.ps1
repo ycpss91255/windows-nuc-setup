@@ -10,6 +10,6 @@ try {
  exit 0
 }catch{
  $message=[string]$_.Exception.Message
- if($message -cnotmatch '^Docker readiness stage=(probe|query|stop|start) category=(process-deadline|output-deadline|total-deadline|native-error) elapsed_ms=[0-9]{1,6} remaining_ms=[0-9]{1,6}$'){$message='Windows Docker readiness failed.'}
+ if($message -cnotmatch '^Docker readiness stage=(probe|query|stop|start) category=(process-deadline|output-deadline|total-deadline|native-error|cleanup-process-active|cleanup-budget-exhausted|cleanup-output-incomplete|cleanup-operation-error) elapsed_ms=[0-9]{1,6} remaining_ms=[0-9]{1,6}$'){$message='Windows Docker readiness failed.'}
  [Console]::Error.WriteLine($message);exit 1
 }

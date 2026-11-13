@@ -8,6 +8,7 @@ function Invoke-RunnerBoundedProcess {
  param([string]$File,[string[]]$Arguments,[ValidateRange(1,120000)][int]$TimeoutMilliseconds)
  $watch=[Diagnostics.Stopwatch]::StartNew()
  $started=$false
+ $processDeadline=$false
  $process=New-Object Diagnostics.Process
  $process.StartInfo=New-Object Diagnostics.ProcessStartInfo
  $process.StartInfo.FileName=$File
@@ -22,14 +23,26 @@ function Invoke-RunnerBoundedProcess {
   $output=$process.StandardOutput.ReadToEndAsync()
   $errorOutput=$process.StandardError.ReadToEndAsync()
   $remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds-250
-  if($remaining -le 0 -or -not $process.WaitForExit([Math]::Max(1,$remaining))){throw [TimeoutException]::new('runner-process-deadline')}
+  if($remaining -le 0 -or -not $process.WaitForExit([Math]::Max(1,$remaining))){$processDeadline=$true;throw [TimeoutException]::new('runner-process-deadline')}
   $remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds-250
   if($remaining -le 0 -or -not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($output,$errorOutput),[Math]::Max(1,$remaining))){throw [TimeoutException]::new('runner-output-deadline')}
   return @{ExitCode=$process.ExitCode;Output=$output.Result}
  } finally {
   # Never an unbounded WaitForExit/ReadToEnd, even if a tool stops responding.
-  if($started -and -not $process.HasExited){$process.Kill();$remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds;if($remaining -gt 0){$null=$process.WaitForExit([Math]::Min(250,$remaining))}}
-  $process.Dispose()
+  try {
+   try {
+    if($started -and -not $process.HasExited){$process.Kill();$remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds;if($remaining -gt 0){$null=$process.WaitForExit([Math]::Min(250,$remaining))}}
+   } catch {if($processDeadline){throw [InvalidOperationException]::new('runner-cleanup-operation-error')};throw}
+   if($processDeadline){
+    try {$exited=$process.HasExited} catch {throw [InvalidOperationException]::new('runner-cleanup-operation-error')}
+    if(-not $exited){throw [InvalidOperationException]::new('runner-cleanup-process-active')}
+    $remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds
+    if($remaining -le 0){throw [InvalidOperationException]::new('runner-cleanup-budget-exhausted')}
+    try {$drained=[Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($output,$errorOutput),[Math]::Max(1,$remaining))} catch {throw [InvalidOperationException]::new('runner-cleanup-operation-error')}
+    if(-not $drained){throw [InvalidOperationException]::new('runner-cleanup-output-incomplete')}
+    throw [TimeoutException]::new('runner-process-deadline-cleaned')
+   }
+  } finally {$process.Dispose()}
  }
 }
 function Wait-HostedWindowsDocker {
@@ -42,17 +55,20 @@ function Wait-HostedWindowsDocker {
  $started=[long](& $Clock)
  $diagnostic={param([string]$Stage,[string]$Category)
   if($Stage -cnotin @('probe','query','stop','start')){$Stage='probe'}
-  if($Category -cnotin @('process-deadline','output-deadline','total-deadline','native-error')){$Category='native-error'}
+  if($Category -cnotin @('process-deadline','output-deadline','total-deadline','native-error','cleanup-process-active','cleanup-budget-exhausted','cleanup-output-incomplete','cleanup-operation-error')){$Category='native-error'}
   $elapsed=[Math]::Max(0,[Math]::Min([long]$DeadlineMilliseconds,([long](& $Clock)-$started)))
   $remaining=[Math]::Max(0,[long]$DeadlineMilliseconds-$elapsed)
   throw ('Docker readiness stage='+$Stage+' category='+$Category+' elapsed_ms='+$elapsed+' remaining_ms='+$remaining)
  }
- $call={param($Stage,$File,$Arguments)
+ $hosted=($Identity.GITHUB_ACTIONS -is [string] -and $Identity.RUNNER_ENVIRONMENT -is [string] -and $Identity.RUNNER_OS -is [string] -and $Identity.GITHUB_ACTIONS -ceq 'true' -and $Identity.RUNNER_ENVIRONMENT -ceq 'github-hosted' -and $Identity.RUNNER_OS -ceq 'Windows')
+ $call={param($Stage,$File,$Arguments,[bool]$AllowCleanedTimeout=$false)
   $remaining=$DeadlineMilliseconds-([long](& $Clock)-$started)
   if($remaining -le 0){& $diagnostic $Stage 'total-deadline'}
   try{& $InvokeNative $File $Arguments ([int][Math]::Min($OperationMilliseconds,$remaining))}catch{
    $category='native-error';$exception=$_.Exception
    while($exception){
+    if($exception -is [InvalidOperationException] -and $exception.Message -cin @('runner-cleanup-process-active','runner-cleanup-budget-exhausted','runner-cleanup-output-incomplete','runner-cleanup-operation-error')){$category=$exception.Message.Substring(7);break}
+    if($exception -is [TimeoutException] -and $exception.Message -ceq 'runner-process-deadline-cleaned'){if($AllowCleanedTimeout -and $hosted){return @{ExitCode=1;Output=''}};$category='process-deadline';break}
     if($exception -is [TimeoutException] -and $exception.Message -ceq 'runner-process-deadline'){$category='process-deadline';break}
     if($exception -is [TimeoutException] -and $exception.Message -ceq 'runner-output-deadline'){$category='output-deadline';break}
     $exception=$exception.InnerException
@@ -65,8 +81,8 @@ function Wait-HostedWindowsDocker {
   if($remaining -le 0){& $diagnostic $Stage 'total-deadline'}
   & $Pause ([int][Math]::Min(500,$remaining))
  }
- $probe={
-  $result=& $call 'probe' $DockerFile @('info','--format','{{json .}}')
+ $probe={param([bool]$Initial=$false)
+  $result=& $call 'probe' $DockerFile @('info','--format','{{json .}}') $Initial
   if($result.ExitCode -ne 0){return $false}
   # PS5 may enumerate a root JSON array and coerce bool/array comparisons.
   if($result.Output -isnot [string] -or -not $result.Output.Trim().StartsWith('{')){throw 'Docker returned invalid engine information.'}
@@ -74,8 +90,8 @@ function Wait-HostedWindowsDocker {
   if($engine -isnot [Management.Automation.PSCustomObject] -or $engine.OSType -isnot [string] -or $engine.OSType -cne 'windows'){throw 'A Windows Docker engine is required; engine switching is forbidden.'}
   return $true
  }
- if(& $probe){Write-Host 'Windows Docker daemon is ready.';return}
- if($Identity.GITHUB_ACTIONS -isnot [string] -or $Identity.RUNNER_ENVIRONMENT -isnot [string] -or $Identity.RUNNER_OS -isnot [string] -or $Identity.GITHUB_ACTIONS -cne 'true' -or $Identity.RUNNER_ENVIRONMENT -cne 'github-hosted' -or $Identity.RUNNER_OS -cne 'Windows'){throw 'Docker recovery is restricted to GitHub hosted Windows runners.'}
+ if(& $probe $true){Write-Host 'Windows Docker daemon is ready.';return}
+ if(-not $hosted){throw 'Docker recovery is restricted to GitHub hosted Windows runners.'}
  $state={
   $result=& $call 'query' $ServiceFile @('query','Docker')
   if($result.ExitCode -ne 0){throw 'Docker service query failed; no daemon is installed or reconfigured.'}
