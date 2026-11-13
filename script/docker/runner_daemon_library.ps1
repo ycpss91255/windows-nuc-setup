@@ -4,9 +4,15 @@ function ConvertTo-RunnerNativeArgument {
  # Windows CommandLineToArgvW escaping, including quotes and trailing slashes.
  return '"'+[regex]::Replace([regex]::Replace($Value,'(\\*)"','$1$1\"'),'(\\+)$','$1$1')+'"'
 }
+function Get-RunnerCleanupReserve {
+ param([ValidateRange(1,120000)][int]$TimeoutMilliseconds,[bool]$InitialHostedProbe=$false)
+ if($InitialHostedProbe){return [int][Math]::Min(2000,[Math]::Floor($TimeoutMilliseconds/4))}
+ return 250
+}
 function Invoke-RunnerBoundedProcess {
- param([string]$File,[string[]]$Arguments,[ValidateRange(1,120000)][int]$TimeoutMilliseconds)
+ param([string]$File,[string[]]$Arguments,[ValidateRange(1,120000)][int]$TimeoutMilliseconds,[bool]$InitialHostedProbe=$false)
  $watch=[Diagnostics.Stopwatch]::StartNew()
+ $cleanupReserve=Get-RunnerCleanupReserve -TimeoutMilliseconds $TimeoutMilliseconds -InitialHostedProbe $InitialHostedProbe
  $started=$false
  $processDeadline=$false
  $process=New-Object Diagnostics.Process
@@ -22,16 +28,16 @@ function Invoke-RunnerBoundedProcess {
   $started=$true
   $output=$process.StandardOutput.ReadToEndAsync()
   $errorOutput=$process.StandardError.ReadToEndAsync()
-  $remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds-250
+  $remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds-$cleanupReserve
   if($remaining -le 0 -or -not $process.WaitForExit([Math]::Max(1,$remaining))){$processDeadline=$true;throw [TimeoutException]::new('runner-process-deadline')}
-  $remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds-250
+  $remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds-$cleanupReserve
   if($remaining -le 0 -or -not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($output,$errorOutput),[Math]::Max(1,$remaining))){throw [TimeoutException]::new('runner-output-deadline')}
   return @{ExitCode=$process.ExitCode;Output=$output.Result}
  } finally {
   # Never an unbounded WaitForExit/ReadToEnd, even if a tool stops responding.
   try {
    try {
-    if($started -and -not $process.HasExited){$process.Kill();$remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds;if($remaining -gt 0){$null=$process.WaitForExit([Math]::Min(250,$remaining))}}
+    if($started -and -not $process.HasExited){$process.Kill();$remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds;if($remaining -gt 0){$null=$process.WaitForExit([Math]::Min($cleanupReserve,$remaining))}}
    } catch {if($processDeadline){throw [InvalidOperationException]::new('runner-cleanup-operation-error')};throw}
    if($processDeadline){
     try {$exited=$process.HasExited} catch {throw [InvalidOperationException]::new('runner-cleanup-operation-error')}
@@ -47,7 +53,7 @@ function Invoke-RunnerBoundedProcess {
 }
 function Wait-HostedWindowsDocker {
  param([hashtable]$Identity,[ValidateRange(1,120000)][int]$DeadlineMilliseconds=120000,[ValidateRange(1,30000)][int]$OperationMilliseconds=15000,
- [scriptblock]$InvokeNative={param($File,$Arguments,$TimeoutMilliseconds);Invoke-RunnerBoundedProcess -File $File -Arguments $Arguments -TimeoutMilliseconds $TimeoutMilliseconds},
+ [scriptblock]$InvokeNative={param($File,$Arguments,$TimeoutMilliseconds,$InitialHostedProbe);Invoke-RunnerBoundedProcess -File $File -Arguments $Arguments -TimeoutMilliseconds $TimeoutMilliseconds -InitialHostedProbe $InitialHostedProbe},
  [scriptblock]$Clock,[scriptblock]$Pause={param($Milliseconds);Start-Sleep -Milliseconds $Milliseconds},
  [string]$DockerFile='docker.exe',[string]$ServiceFile='sc.exe')
  $watch=[Diagnostics.Stopwatch]::StartNew()
@@ -64,7 +70,7 @@ function Wait-HostedWindowsDocker {
  $call={param($Stage,$File,$Arguments,[bool]$AllowCleanedTimeout=$false)
   $remaining=$DeadlineMilliseconds-([long](& $Clock)-$started)
   if($remaining -le 0){& $diagnostic $Stage 'total-deadline'}
-  try{& $InvokeNative $File $Arguments ([int][Math]::Min($OperationMilliseconds,$remaining))}catch{
+  try{& $InvokeNative $File $Arguments ([int][Math]::Min($OperationMilliseconds,$remaining)) ([bool]($AllowCleanedTimeout -and $hosted))}catch{
    $category='native-error';$exception=$_.Exception
    while($exception){
     if($exception -is [InvalidOperationException] -and $exception.Message -cin @('runner-cleanup-process-active','runner-cleanup-budget-exhausted','runner-cleanup-output-incomplete','runner-cleanup-operation-error')){$category=$exception.Message.Substring(7);break}
