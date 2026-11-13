@@ -111,7 +111,15 @@ jobs:
         env:
           SHARD_INDEX: ${{ matrix.shard }}
         run: |
-          .\script\test\powershell_coverage_shard.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-public') -PrivateDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-private') -ShardIndex ([int]$env:SHARD_INDEX) -ShardCount 4 -Commit $env:GITHUB_SHA -RunUrl ("https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID") -RunAttempt ([int]$env:GITHUB_RUN_ATTEMPT)
+          $timer=[Diagnostics.Stopwatch]::StartNew();$completed=$false
+          try {
+            .\script\test\powershell_coverage_shard.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-public') -PrivateDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-private') -ShardIndex ([int]$env:SHARD_INDEX) -ShardCount 4 -Commit $env:GITHUB_SHA -RunUrl ("https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID") -RunAttempt ([int]$env:GITHUB_RUN_ATTEMPT)
+            $completed=$true
+          } finally {
+            $timer.Stop()
+            $state=if($completed){'success'}else{'failure；未提供完整量測'}
+            try { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 -Value ("## PowerShell 分片 $env:SHARD_INDEX`n`n分片量測階段耗時：$([Math]::Round($timer.Elapsed.TotalSeconds,1)) 秒；結果：$state。") } catch { if($completed){throw} }
+          }
       - name: 僅保留已驗證的相對路徑分片證據七天
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -247,6 +255,11 @@ jobs:
       - name: 收集四語言整體覆蓋率並強制完整八成
         run: |
           & .\script\test\run_repo_coverage.ps1 -SourceRoot $PWD.Path -PublicDirectory (Join-Path $env:RUNNER_TEMP 'native-stage-import/report') -GoCoverageDirectory (Join-Path $env:RUNNER_TEMP 'native-stage-import/go') -ManagedEvidencePath (Join-Path $env:RUNNER_TEMP 'managed-coverage/evidence.json') -OutputDirectory (Join-Path $env:RUNNER_TEMP 'repo-coverage') -PowerShellShardDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shards') -RunAttempt ([int]$env:GITHUB_RUN_ATTEMPT)
+      - name: 顯示已驗證的同次品質摘要
+        run: |
+          . .\script\test\ci_quality_summary.ps1
+          $report=Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'native-stage-import/report/summary.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+          New-CIQualitySummary -Report $report -AggregationState 'success' | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8
       - name: 短期保留去識別整體證據七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -409,7 +422,13 @@ jobs:
           COVERAGE_RESULT: ${{ needs.coverage-aggregation.result }}
         run: |
           . .\script\test\ci_tasks.ps1
-          Assert-CIResults @{Tests=$env:TEST_RESULT;Requirements=$env:REQUIREMENTS_RESULT;Docker=$env:DOCKER_RESULT;Payload=$env:OOBE_PAYLOAD_RESULT;PowerShellCoverage=$env:POWERSHELL_COVERAGE_RESULT;Coverage=$env:COVERAGE_RESULT}
+          $states=@{Tests=$env:TEST_RESULT;Requirements=$env:REQUIREMENTS_RESULT;Docker=$env:DOCKER_RESULT;Payload=$env:OOBE_PAYLOAD_RESULT;PowerShellCoverage=$env:POWERSHELL_COVERAGE_RESULT;Coverage=$env:COVERAGE_RESULT}
+          if(@($states.Values | Where-Object {$_ -cne 'success'}).Count){
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 -Value '## 品質檢查失敗或未完成'
+            foreach($key in @($states.Keys | Sort-Object)){Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 -Value ("- ${key}: $($states[$key])")}
+            if($env:COVERAGE_RESULT -cne 'success'){Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 -Value '**未提供完整量測。**'}
+          }
+          Assert-CIResults $states
 
   release:
     name: 發布 GitHub 來源版本
