@@ -8,10 +8,10 @@ function gh {
  if($argsList[0] -ceq 'api' -and $argsList -contains '--paginate'){return}
  if($argsList[0] -ceq 'api' -and $argsList[1] -like '*/commits/main'){return $sha}
  if($argsList[0] -ceq 'api' -and $argsList[1] -like '*/actions/runs/42/artifacts'){
-  return (@{artifacts=@(@{name=('windows-test-reports-42-'+$script:artifactAttempt);expired=$false})}|ConvertTo-Json -Depth 5)
+  return (@{artifacts=@(@{name=('windows-test-reports-42-'+$global:artifactAttempt);expired=$false})}|ConvertTo-Json -Depth 5)
  }
  if($argsList[0] -ceq 'api' -and $argsList[1] -like '*/actions/runs/42'){
-  return (@{id=42;head_sha=$script:runSha;head_branch=$script:runBranch;event=$script:runEvent;run_attempt=$script:runAttempt}|ConvertTo-Json -Compress)
+  return (@{id=42;head_sha=$global:runSha;head_branch=$global:runBranch;event=$global:runEvent;run_attempt=$global:runAttempt}|ConvertTo-Json -Compress)
  }
  if($argsList[0] -ceq 'run' -and $argsList[1] -ceq 'download'){
   $dir=$argsList[[Array]::IndexOf($argsList,'--dir')+1];[IO.File]::WriteAllText((Join-Path $dir 'summary.json'),('{"Commit":"'+$sha+'"}'));return
@@ -26,8 +26,8 @@ foreach($case in @(
  @{Name='wrong attempt';Event='workflow_dispatch';Branch='main';Sha=$sha;Attempt=1;Artifact=1;Expected=$false},
  @{Name='wrong artifact attempt';Event='workflow_dispatch';Branch='main';Sha=$sha;Attempt=2;Artifact=1;Expected=$false}
 )){
- $script:runEvent=$case.Event;$script:runBranch=$case.Branch;$script:runSha=$case.Sha;$script:runAttempt=$case.Attempt;$script:artifactAttempt=$case.Artifact
- $ok=$true;try{$result=& (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository example/repo -OutputDirectory (Join-Path $parent $case.Name) -MainRunId 42 -ExpectedMainEvent workflow_dispatch -ExpectedMainAttempt 2; if(-not (Test-Path -LiteralPath $result.MainSnapshotPath -PathType Leaf)){$ok=$false}}catch{$ok=$false}
+ $global:runEvent=$case.Event;$global:runBranch=$case.Branch;$global:runSha=$case.Sha;$global:runAttempt=$case.Attempt;$global:artifactAttempt=$case.Artifact
+ $ok=$true;try{$result=& (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository example/repo -OutputDirectory (Join-Path $parent $case.Name) -MainRunId 42 -ExpectedMainEvent workflow_dispatch -ExpectedMainAttempt 2; if(-not (Test-Path -LiteralPath $result.MainSnapshotPath -PathType Leaf)){$ok=$false}}catch{$ok=$false;Write-Host ('fixture: '+$_.Exception.Message)}
  Assert ($ok -eq $case.Expected) ('同次 main 恢復來源 '+$case.Name)
 }
 Remove-Item Function:\gh

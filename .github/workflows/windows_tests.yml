@@ -523,10 +523,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           EVENT_REF: ${{ github.ref }}
+          EVENT_NAME: ${{ github.event_name }}
           CURRENT_RUN: ${{ github.run_id }}
+          CURRENT_ATTEMPT: ${{ github.run_attempt }}
         run: |
           . .\script\test\ci_tasks.ps1
-          $parameters = Get-CIPortalParameters -Repository $env:GH_REPO -OutputDirectory "$env:RUNNER_TEMP\portal-inputs" -EventRef $env:EVENT_REF -RunId $env:CURRENT_RUN
+          $parameters = Get-CIPortalParameters -Repository $env:GH_REPO -OutputDirectory "$env:RUNNER_TEMP\portal-inputs" -EventRef $env:EVENT_REF -RunId $env:CURRENT_RUN -EventName $env:EVENT_NAME -RunAttempt ([int]$env:CURRENT_ATTEMPT)
           $inputs = .\script\report\get_portal_inputs.ps1 @parameters
           .\script\report\build_portal.ps1 -CatalogPath $inputs.CatalogPath -MainSnapshotPath $inputs.MainSnapshotPath -OutputDirectory "$env:RUNNER_TEMP\quality-portal" -RequireGoCoverage
       - name: 保存去識別 portal 供 Linux 部署
