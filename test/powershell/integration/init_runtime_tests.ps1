@@ -23,6 +23,7 @@ function Get-ItemProperty {param($Path,$ErrorAction);switch -Wildcard ($Path){'*
 function Get-CimInstance {param($ClassName,$Filter);@([pscustomobject]@{SessionId=44;ProcessId=1},[pscustomobject]@{SessionId=99;ProcessId=2})}
 function Invoke-CimMethod {param($InputObject,$MethodName);[pscustomobject]@{ReturnValue=$script:ownerExit;Sid=$(if($script:desktop){$script:native.Sid}else{'other'})}}
 function Invoke-InitProvisioningEntry {param($SourceRoot,$StageRoot,$ResumeStatePath,$ExpectedUserSID);$script:provisioning=@{SourceRoot=$SourceRoot;StageRoot=$StageRoot;ResumeStatePath=$ResumeStatePath;ExpectedUserSID=$ExpectedUserSID};return $script:handled}
+function Assert-InitProvisioningAsset {param($AssetRoot);return @{PackageSHA256='fixture'}}
 function Get-LocalUser {param($SID,$ErrorAction);if($SID){[pscustomobject]@{Name='fixture';Enabled=$script:userEnabled}}else{[pscustomobject]@{Name='existing'}}}
 function Get-Process {param($Name,$ErrorAction);if($script:runningSysprep){[pscustomobject]@{Name='sysprep'}}}
 function Read-Host {param($Prompt,[switch]$AsSecureString);if(-not $script:queue.Count){throw 'unexpected prompt'};return $script:queue.Dequeue()}

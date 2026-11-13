@@ -516,7 +516,8 @@ Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安�
 - modules\desktop\save_desktop_layout.cmd：圖示移動後，將目前位置儲存成新範本。
 - modules\updates\show_update_status.cmd：查看更新進度；關閉進度視窗不會停止更新。
 - windows.cmd -VerifyOnly：檢查設定、目前顯示比例、圖示座標、開始釘選匯出、App清理、輸入法及快捷鍵程序。
-- Terminal 快捷鍵日誌：%LOCALAPPDATA%\NUC8-Setup\TerminalHotkey\status.log。
+- Terminal 快捷鍵日誌：%LOCALAPPDATA%\NUC8-Setup\TerminalHotkey\status-<桌面工作階段編號>.log；每個桌面工作階段有自己的日誌。舊版 listener 仍執行時，驗收可能使用原本的 status.log。
+  從 SSH 的工作階段 0 驗收時，若同一使用者有多個桌面而無法唯一判定，驗收會停止；請在要檢查的桌面執行。
   REGISTERED 表示成功註冊；LAUNCHED 表示收到按鍵並呼叫 Terminal；FAILED 1409 表示快捷鍵衝突，需要排查。
 
 ### 主機名稱與區域網路
