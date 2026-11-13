@@ -111,14 +111,9 @@ jobs:
         env:
           SHARD_INDEX: ${{ matrix.shard }}
         run: |
-          $timer=[Diagnostics.Stopwatch]::StartNew();$completed=$false
-          try {
+          . .\script\test\ci_quality_summary.ps1
+          Invoke-CIShardTimed -ShardIndex ([int]$env:SHARD_INDEX) -SummaryPath $env:GITHUB_STEP_SUMMARY -Action {
             .\script\test\powershell_coverage_shard.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-public') -PrivateDirectory (Join-Path $env:RUNNER_TEMP 'powershell-shard-private') -ShardIndex ([int]$env:SHARD_INDEX) -ShardCount 4 -Commit $env:GITHUB_SHA -RunUrl ("https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID") -RunAttempt ([int]$env:GITHUB_RUN_ATTEMPT)
-            $completed=$true
-          } finally {
-            $timer.Stop()
-            $state=if($completed){'success'}else{'failure；未提供完整量測'}
-            try { Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 -Value ("## PowerShell 分片 $env:SHARD_INDEX`n`n分片量測階段耗時：$([Math]::Round($timer.Elapsed.TotalSeconds,1)) 秒；結果：$state。") } catch { if($completed){throw} }
           }
       - name: 僅保留已驗證的相對路徑分片證據七天
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

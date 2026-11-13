@@ -13,3 +13,12 @@ function New-CIQualitySummary {
  if($Report.GoCoverage){$g=$Report.GoCoverage;$lines+=@('',('Go 分項：'+([double]$g.Percent).ToString('0.0',[Globalization.CultureInfo]::InvariantCulture)+'%（'+$g.Covered+'/'+$g.TotalStatements+' statements；門檻 80%，與可執行行不同）'))}
  return ($lines -join "`n")
 }
+function Invoke-CIShardTimed {
+ param([Parameter(Mandatory=$true)][int]$ShardIndex,[Parameter(Mandatory=$true)][string]$SummaryPath,[Parameter(Mandatory=$true)][scriptblock]$Action)
+ $timer=[Diagnostics.Stopwatch]::StartNew();$completed=$false
+ try { & $Action; $completed=$true } finally {
+  $timer.Stop()
+  $state=if($completed){'success'}else{'failure；未提供完整量測'}
+  try {Add-Content -LiteralPath $SummaryPath -Encoding UTF8 -Value ("## PowerShell 分片 $ShardIndex`n`n分片量測階段耗時：$([Math]::Round($timer.Elapsed.TotalSeconds,1)) 秒；結果：$state。") } catch {if($completed){throw}}
+ }
+}
