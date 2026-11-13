@@ -1,4 +1,10 @@
 ﻿#Requires -Version 5.1
+function Test-RunnerOwnedProbeExited {
+ param([string]$Name)
+ if($Name -cnotmatch '^owned_probe_[0-9a-f]{32}$'){throw 'Invalid owned probe name.'}
+ $processes=@([Diagnostics.Process]::GetProcessesByName($Name))
+ try {return ($processes.Count -eq 0)} finally {foreach($process in $processes){$process.Dispose()}}
+}
 function Get-RunnerProbeNativeKind {
  param([Exception]$Exception)
  while($null -ne $Exception){
