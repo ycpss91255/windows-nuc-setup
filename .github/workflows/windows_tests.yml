@@ -413,7 +413,7 @@ jobs:
 
   release:
     name: 發布 GitHub 來源版本
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     needs: [ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 10
@@ -485,7 +485,7 @@ jobs:
 
   build-portal:
     name: 建立 main 與不可變版本品質索引
-    if: always() && needs.ci-rollup.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
+    if: always() && needs.ci-rollup.result == 'success' && ((github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
     needs: [coverage-aggregation, requirements-gate, docker-tests, release, ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 15
@@ -570,7 +570,7 @@ jobs:
   verify-deployment:
     name: 公開部署需求驗收
     needs: [publish-reports]
-    if: always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && needs.publish-reports.result == 'success'
+    if: always() && ((github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && needs.publish-reports.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 7
     permissions:
