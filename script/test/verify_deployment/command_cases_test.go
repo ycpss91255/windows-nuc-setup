@@ -172,6 +172,15 @@ func TestDeploymentCases(t *testing.T) {
 		return []string{"--base-url", server.URL, "--readme", doc, "--expected-sha", sha, "--expected-run-url", runURL}
 	}
 	t.Setenv("GITHUB_STEP_SUMMARY", "")
+	t.Run("branch_verifies_deployed_portal", func(t *testing.T) {
+		portal := t.TempDir()
+		if err := os.WriteFile(filepath.Join(portal, "versions.json"), pages["versions.json"], 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := invoke(append(args(), "--portal-dir", portal)...); err != nil {
+			t.Fatalf("valid same-run portal must verify: %v", err)
+		}
+	})
 	t.Run("tag_public_evidence", func(t *testing.T) {
 		oldSleep := deploymentSleep
 		deploymentSleep = func(time.Duration) {}
