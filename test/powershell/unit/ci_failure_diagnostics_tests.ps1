@@ -40,3 +40,83 @@ $oversized=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('In
 Assert ($oversized.Contains('unavailable') -and $oversized.Length -lt 256) '大型私有日誌不讀取或公開'
 $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
 Assert ($workflow.Contains("'Integration.report_bundle_publication'")) '原生 All 失敗流程接入安全合成工件診斷'
+$nested=Join-Path $temp 'nested.private.log'
+$nestedSuite=Join-Path $temp 'Integration.ci_runner_coverage.log'
+$valid='PowerShell worker failure diagnostic: {"SchemaVersion":1,"TestFile":"test/powershell/integration/ci_runner_tests.ps1","WorkerIndex":0,"Engine":"powershell","NativeExitCode":1,"CompletedAssertions":2,"FailedAssertionIndices":[2],"Locations":[],"ExceptionTypes":[]}'
+[IO.File]::WriteAllLines($nested,[string[]]@('PRIVATE-SENTINEL C:\Users\hidden',$valid))
+$record=Get-CINestedCoverageDiagnostic -Path $nested
+Assert ($record -ceq '@@SAFE_NESTED_CI@@worker:2:unavailable') '巢狀 worker 只輸出固定階段與失敗斷言序號'
+[IO.File]::WriteAllText($nestedSuite,"PRIVATE-SENTINEL C:\Users\hidden`n$record")
+$safe=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
+Assert ($safe.Contains('worker:2') -and -not $safe.Contains('PRIVATE-SENTINEL') -and -not $safe.Contains('C:\Users')) 'CI 只公開精確固定診斷而非原始巢狀日誌'
+foreach($bad in @('',($valid -replace '"WorkerIndex":0','"WorkerIndex":1'),($valid -replace '\[2\]','[999]'),($valid+"`n"+$valid),'@@SAFE_NESTED_CI@@worker:2')){
+ [IO.File]::WriteAllText($nested,$bad)
+ Assert ((Get-CINestedCoverageDiagnostic -Path $nested) -ceq '@@SAFE_NESTED_CI@@unavailable') '缺失、錯誤或重複記錄必須安全回 unavailable'
+}
+[IO.File]::WriteAllText($nested,('x'*(4MB+1)))
+Assert ((Get-CINestedCoverageDiagnostic -Path $nested) -ceq '@@SAFE_NESTED_CI@@unavailable') '過大巢狀日誌不可公開'
+[IO.File]::WriteAllText($nestedSuite,"@@SAFE_NESTED_CI@@worker:2`n@@SAFE_NESTED_CI@@worker:2`nPRIVATE-SENTINEL")
+$safe=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
+Assert ($safe.Contains('unavailable') -and -not $safe.Contains('worker:2') -and -not $safe.Contains('PRIVATE-SENTINEL')) '重複外層標記不可當成可信診斷'
+Assert ($workflow.Contains("'Integration.ci_runner_coverage'")) '失敗 workflow 接入限型別巢狀診斷'
+$wrapper=Join-Path $temp 'nested_wrapper.ps1';$capture=Join-Path $temp 'nested_wrapper.private.log'
+$wrapperText=@'
+function powershell.exe {
+ Write-Output 'PRIVATE-SENTINEL C:\Users\hidden'
+ Write-Output 'PowerShell worker failure diagnostic: {"SchemaVersion":1,"TestFile":"test/powershell/integration/ci_runner_tests.ps1","WorkerIndex":0,"Engine":"powershell","NativeExitCode":1,"CompletedAssertions":2,"FailedAssertionIndices":[2],"Locations":[],"ExceptionTypes":[]}'
+ $global:LASTEXITCODE=1
+}
+try { & '__SUITE__'; exit 0 } catch { exit 1 }
+'@
+$wrapperText=$wrapperText.Replace('__SUITE__',(Join-Path $root 'test/powershell/integration/ci_runner_coverage_tests.ps1').Replace("'","''"))
+[IO.File]::WriteAllText($wrapper,$wrapperText,[Text.UTF8Encoding]::new($true))
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $wrapper *> $capture
+$nestedExit=$LASTEXITCODE
+[IO.File]::Copy($capture,$nestedSuite,$true)
+$safe=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
+Assert ($nestedExit -eq 1 -and $safe.Contains('worker:2') -and -not $safe.Contains('PRIVATE-SENTINEL') -and -not $safe.Contains('C:\Users')) '真外層 suite 失敗保留非零退出並由 CI 安全顯示巢狀序號'
+$invalidRecords=@(
+ $valid.Replace('"SchemaVersion":1','"SchemaVersion":1,"Extra":"secret"'),
+ $valid.Replace('"SchemaVersion":1','"SchemaVersion":9,"SchemaVersion":1'),
+ $valid.Replace('"TestFile":"test/powershell/integration/ci_runner_tests.ps1"','"TestFile":["test/powershell/integration/ci_runner_tests.ps1"]'),
+ $valid.Replace('"Engine":"powershell"','"Engine":["powershell"]'),
+ $valid.Replace('"Locations":[]','"Locations":"secret"'),
+ $valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":"secret"'),
+ $valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":["secret"]'),
+ $valid.Replace('"Locations":[]','"Locations":[{"File":"secret","Line":1}]'),
+ $valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":[],"PesterFailures":"secret"'),
+ $valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":[],"PesterFailures":[{"Phase":"secret","Type":"RuntimeException","File":"","Line":0}]'),
+ $valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":[],"FixtureStage":"fixture_export","FixtureReason":"go_fixture_failed"')
+)
+$acceptedInvalid=0
+foreach($invalid in $invalidRecords){[IO.File]::WriteAllText($nested,$invalid);if((Get-CINestedCoverageDiagnostic -Path $nested) -cne '@@SAFE_NESTED_CI@@unavailable'){$acceptedInvalid++}}
+Assert ($acceptedInvalid -eq 0) '嚴格拒絕額外重複欄位、錯誤陣列與不符該 suite 的可選診斷'
+$typed=$valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":["RuntimeException"]')
+[IO.File]::WriteAllText($nested,$typed)
+$typedRecord=Get-CINestedCoverageDiagnostic -Path $nested
+Assert ($typedRecord -ceq '@@SAFE_NESTED_CI@@worker:2:RuntimeException') '既有固定錯誤型別可與斷言序號共同呈現'
+[IO.File]::WriteAllText($nestedSuite,$typedRecord)
+$typedOutput=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
+Assert ($typedOutput.Contains('worker:2:RuntimeException') -and -not $typedOutput.Contains('PRIVATE-SENTINEL')) '外層只顯示固定白名單型別'
+. (Join-Path $root 'script/test/powershell_worker_diagnostics.ps1')
+$workerStdout=Join-Path $temp 'worker.private.stdout';$workerStderr=Join-Path $temp 'worker.private.stderr';$workerSidecar=Join-Path $temp 'worker.private.json'
+[IO.File]::WriteAllText($workerStdout,'@@ASSERT@@{"Name":"private","Passed":false}')
+[IO.File]::WriteAllText($workerStderr,'CategoryInfo : RuntimeException')
+[IO.File]::WriteAllText($workerSidecar,'{"SchemaVersion":1,"Failures":[{"Phase":"TestRun","Type":"RuntimeException","File":"test/powershell/integration/ci_runner_tests.ps1","Line":1}]}')
+$allowed=@('test/powershell/integration/ci_runner_tests.ps1')
+$produced=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $root -TestFile $allowed[0] -WorkerIndex 0 -Engine powershell -NativeExitCode 1 -StandardOutputPath $workerStdout -StandardErrorPath $workerStderr -FailureRecordPath $workerSidecar -AllowedFiles $allowed
+[IO.File]::WriteAllText($nested,('PowerShell worker failure diagnostic: '+($produced|ConvertTo-Json -Depth 5 -Compress)))
+Assert ((Get-CINestedCoverageDiagnostic -Path $nested) -ceq '@@SAFE_NESTED_CI@@worker:1:RuntimeException') '既有 worker 真正產生含有效 PesterFailures 的記錄可讀取'
+foreach($preference in @('Continue','Stop')){
+ [IO.File]::WriteAllText($nested,'locked private');[IO.File]::WriteAllText($nestedSuite,'locked private')
+ $lock1=[IO.File]::Open($nested,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+ $lock2=[IO.File]::Open($nestedSuite,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+ $prior=$ErrorActionPreference
+ try{
+  $ErrorActionPreference=$preference
+  $nestedRead=@(Get-CINestedCoverageDiagnostic -Path $nested *>&1)
+  $outerRead=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage') *>&1)
+ }finally{$ErrorActionPreference=$prior;$lock1.Dispose();$lock2.Dispose()}
+ Assert ($nestedRead.Count -eq 1 -and $nestedRead[0] -is [string] -and $nestedRead[0] -ceq '@@SAFE_NESTED_CI@@unavailable') ('鎖定巢狀記錄只回固定 unavailable '+$preference)
+ Assert ($outerRead.Count -eq 2 -and @($outerRead|Where-Object {$_ -isnot [string]}).Count -eq 0 -and $outerRead[1] -ceq '    unavailable') ('鎖定外層記錄只回固定 unavailable '+$preference)
+}

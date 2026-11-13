@@ -2,11 +2,14 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
+. (Join-Path $root 'script/test/ci_tasks.ps1')
 $d=Join-Path ([IO.Path]::GetTempPath()) ('ci_runner_source_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($d)
 $manifest=@{SourceRoot=$root;Sources=@('script/test/ci_runner_library.ps1','script/test/run_ci.ps1');Tests=@('test/powershell/integration/ci_runner_tests.ps1');Wrapper='test/powershell/coverage/safe_suite.ps1'}
 $path=Join-Path $d 'manifest.json';$manifest|ConvertTo-Json -Depth 4|Set-Content $path -Encoding UTF8
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'script/test/powershell_coverage.ps1') -ManifestPath $path -OutputDirectory (Join-Path $d 'output') *> (Join-Path $d 'private.log')
-Assert ($LASTEXITCODE -eq 0) ('CI 聚合器真原始 counter 收集完成 '+$d)
+$coverageExit=$LASTEXITCODE
+if($coverageExit -ne 0){Write-Host (Get-CINestedCoverageDiagnostic -Path (Join-Path $d 'private.log'))}
+Assert ($coverageExit -eq 0) 'CI 聚合器真原始 counter 收集完成'
 [xml]$xml=Get-Content (Join-Path $d 'output/coverage.xml') -Raw
 $classes=@($xml.coverage.packages.package.classes.class)
 Assert ($classes.Count -eq 2 -and @($classes|Where-Object filename -eq 'script/test/run_ci.ps1').Count -eq 1) '薄入口未命中行也保留完整分母'
