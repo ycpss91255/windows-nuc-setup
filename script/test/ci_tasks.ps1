@@ -54,11 +54,11 @@ function Get-CINestedCoverageDiagnostic {
  param([Parameter(Mandatory=$true)][string]$Path)
  $unavailable='@@SAFE_NESTED_CI@@unavailable'
  try{
-  if(-not(Test-Path -LiteralPath $Path -PathType Leaf)){return $unavailable}
-  $file=Get-Item -LiteralPath $Path -Force
+  if(-not(Test-Path -LiteralPath $Path -PathType Leaf -ErrorAction Stop)){return $unavailable}
+  $file=Get-Item -LiteralPath $Path -Force -ErrorAction Stop
   if(($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $file.Length -gt 4MB){return $unavailable}
   $prefix='PowerShell worker failure diagnostic: '
-  $lines=@(Get-Content -LiteralPath $Path -Encoding UTF8 | Where-Object {$_.StartsWith($prefix)})
+  $lines=@(Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction Stop | Where-Object {$_.StartsWith($prefix)})
   if($lines.Count -ne 1){return $unavailable}
   $json=$lines[0].Substring($prefix.Length)
   $item=$json|ConvertFrom-Json
@@ -98,14 +98,17 @@ function Write-CIFailureDiagnostics {
  foreach($suite in $SuiteNames){
   $name=$suite+'.log';$path=Join-Path $directory $name
   Write-Output ('CI diagnostic: '+$name)
-  if(-not(Test-Path -LiteralPath $path -PathType Leaf)){Write-Output '    unavailable';continue}
-  if((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Diagnostic suite log cannot be a reparse point.'}
   if($suite -eq 'Integration.ci_runner_coverage'){
-   if((Get-Item -LiteralPath $path).Length -gt 4MB){Write-Output '    unavailable';continue}
-   $markers=@(Get-Content -LiteralPath $path -Encoding UTF8 | Where-Object {$_.StartsWith('@@SAFE_NESTED_CI@@')})
-   if($markers.Count -eq 1 -and $markers[0] -cmatch '^@@SAFE_NESTED_CI@@worker:([1-9][0-9]{0,5}):(unavailable|RuntimeException|IOException|UnauthorizedAccessException|ArgumentException|ParameterBindingException|CommandNotFoundException|OutOfMemoryException|InvalidOperationException|ParseException)$' -and [int]$Matches[1] -le 100000){Write-Output ('    worker:'+$Matches[1]+':'+$Matches[2])}else{Write-Output '    unavailable'}
+   try{
+    $file=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+    if(($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $file.Length -gt 4MB){Write-Output '    unavailable';continue}
+    $markers=@(Get-Content -LiteralPath $path -Encoding UTF8 -ErrorAction Stop | Where-Object {$_.StartsWith('@@SAFE_NESTED_CI@@')})
+    if($markers.Count -eq 1 -and $markers[0] -cmatch '^@@SAFE_NESTED_CI@@worker:([1-9][0-9]{0,5}):(unavailable|RuntimeException|IOException|UnauthorizedAccessException|ArgumentException|ParameterBindingException|CommandNotFoundException|OutOfMemoryException|InvalidOperationException|ParseException)$' -and [int]$Matches[1] -le 100000){Write-Output ('    worker:'+$Matches[1]+':'+$Matches[2])}else{Write-Output '    unavailable'}
+   }catch{Write-Output '    unavailable'}
    continue
   }
+  if(-not(Test-Path -LiteralPath $path -PathType Leaf)){Write-Output '    unavailable';continue}
+  if((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Diagnostic suite log cannot be a reparse point.'}
   if($suite -eq 'Integration.report_bundle_publication'){
    if((Get-Item -LiteralPath $path).Length -gt 4MB){Write-Output '    unavailable';continue}
    if(@(Get-Content -LiteralPath $path -Encoding UTF8|Where-Object {$_ -ceq '@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed'}).Count){Write-Output '    fixture_export:go_fixture_failed'}
