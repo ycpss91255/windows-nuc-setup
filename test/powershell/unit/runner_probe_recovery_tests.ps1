@@ -2,14 +2,16 @@
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 . (Join-Path $root 'script/docker/runner_daemon_library.ps1')
+. (Join-Path $root 'test/powershell/support/runner_probe_diagnostic.ps1')
 function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Value}|ConvertTo-Json -Compress));if(-not $Value){throw $Name}}
 $hosted=@{GITHUB_ACTIONS='true';RUNNER_ENVIRONMENT='github-hosted';RUNNER_OS='Windows'}
-$script:calls=@();$script:probes=0
+$script:calls=@();$script:probes=0;$script:phase='initial'
 $pidFile=Join-Path $env:TEMP ('owned_probe_pid_'+[guid]::NewGuid().ToString('N'))
 $previousPidFile=$env:OWNED_PROBE_PID_FILE
 $env:OWNED_PROBE_PID_FILE=$pidFile
 $native={param($File,$Arguments,$TimeoutMilliseconds)
  $script:calls+=@($File+' '+($Arguments -join ' '))
+ $script:phase=if($File -eq 'owned-probe'){'probe'}elseif($Arguments[0] -cin @('query','stop','start')){$Arguments[0]}else{'unknown'}
  if($File -eq 'owned-probe'){
   $script:probes++
   if($script:probes -eq 1){return Invoke-RunnerBoundedProcess -File (Join-Path $PSHOME 'powershell.exe') -Arguments @('-NoProfile','-Command','[IO.File]::WriteAllText($env:OWNED_PROBE_PID_FILE,[string]$PID); Start-Sleep -Seconds 60') -TimeoutMilliseconds $TimeoutMilliseconds}
@@ -24,7 +26,7 @@ $native={param($File,$Arguments,$TimeoutMilliseconds)
 }
 try {
  $ok=$false
- try {Wait-HostedWindowsDocker -Identity $hosted -DeadlineMilliseconds 5000 -OperationMilliseconds 1000 -InvokeNative $native -DockerFile 'owned-probe' -ServiceFile 'owned-service';$ok=$true}catch{Write-Host ('Observed: '+$_.Exception.Message)}
+ try {Wait-HostedWindowsDocker -Identity $hosted -DeadlineMilliseconds 5000 -OperationMilliseconds 1000 -InvokeNative $native -DockerFile 'owned-probe' -ServiceFile 'owned-service';$ok=$true}catch{foreach($diagnostic in @(Get-RunnerProbeDiagnostic -Phase $script:phase -HasPid (Test-Path -LiteralPath $pidFile -PathType Leaf) -Message ([string]$_.Exception.Message))){Assert $true $diagnostic}}
  Assert $ok 'owned 初次 probe 確認終止後應允許 hosted 單次恢復並驗證 Windows'
  Assert (@($script:calls|Where-Object{$_ -eq 'owned-service stop Docker'}).Count -eq 1 -and @($script:calls|Where-Object{$_ -eq 'owned-service start Docker'}).Count -eq 1 -and $script:probes -eq 2) '精確一次 stop/start 與再次 probe'
 } finally {
