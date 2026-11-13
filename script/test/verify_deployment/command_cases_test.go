@@ -180,6 +180,17 @@ func TestDeploymentCases(t *testing.T) {
 		if err := invoke(append(args(), "--portal-dir", portal)...); err != nil {
 			t.Fatalf("valid same-run portal must verify: %v", err)
 		}
+		latest := filepath.Join(t.TempDir(), "latest.json")
+		if err := os.WriteFile(latest, []byte(`{"tag_name":"v0.2.5","draft":false,"immutable":true}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		oldSleepForLatest := deploymentSleep
+		deploymentSleep = func(time.Duration) {}
+		err := invoke(append(args(), "--portal-dir", portal, "--latest-release-metadata", latest)...)
+		deploymentSleep = oldSleepForLatest
+		if err == nil || !strings.Contains(err.Error(), "required release") {
+			t.Fatalf("missing latest release must be rejected: %v", err)
+		}
 		if err := invoke(append(args(), "--mode", "release", "--portal-dir", portal)...); err == nil || !strings.Contains(err.Error(), "only valid in branch mode") {
 			t.Fatalf("release mode must reject portal artifact: %v", err)
 		}
