@@ -20,3 +20,18 @@ Assert ((Get-RunnerProbeNativeKind ([Exception]::new('runner-process-deadline-cl
 Assert ((Get-RunnerProbeNativeKind ([Exception]::new('C:\private\secret'))) -ceq 'unknown') '未知例外不輸出私人內容'
 $names=@(Get-RunnerProbeDiagnostic -Phase 'probe' -HasPid $true -Message 'private' -NativeKind 'private C:\secret' -NativeElapsedMilliseconds 123)
 Assert ($names -contains 'probe diagnostic native_kind=unknown' -and $names -contains 'probe diagnostic native_elapsed_ms=123' -and ($names -join '|') -notmatch 'private|secret') '僅輸出受控分類與實際計時整數'
+Assert ($null -ne (Get-Command Test-RunnerOwnedProbeExited -ErrorAction SilentlyContinue)) '獨立檢查唯一 owned probe 程序是否結束'
+$probeName='owned_probe_'+[guid]::NewGuid().ToString('N')
+$exe=Join-Path $env:TEMP ($probeName+'.exe')
+$process=$null
+try {
+ Add-Type -OutputAssembly $exe -OutputType ConsoleApplication -TypeDefinition 'public class OwnedProbe { public static void Main(){ System.Threading.Thread.Sleep(60000); } }'
+ $process=Start-Process -FilePath $exe -WindowStyle Hidden -PassThru
+ Assert (-not (Test-RunnerOwnedProbeExited $probeName)) '真 owned 程序存活時不可宣稱結束'
+ $process.Kill()
+ Assert ($process.WaitForExit(5000)) '停止真 owned 程序'
+ Assert (Test-RunnerOwnedProbeExited $probeName) '真 owned 程序結束後可確認'
+} finally {
+ if($process){if(-not $process.HasExited){$process.Kill();$null=$process.WaitForExit(5000)};$process.Dispose()}
+ if(Test-Path -LiteralPath $exe){[IO.File]::Delete($exe)}
+}
