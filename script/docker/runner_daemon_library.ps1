@@ -30,10 +30,16 @@ function Invoke-RunnerBoundedProcess {
  } finally {
   # Never an unbounded WaitForExit/ReadToEnd, even if a tool stops responding.
   try {
-   if($started -and -not $process.HasExited){$process.Kill();$remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds;if($remaining -gt 0){$null=$process.WaitForExit([Math]::Min(250,$remaining))}}
+   try {
+    if($started -and -not $process.HasExited){$process.Kill();$remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds;if($remaining -gt 0){$null=$process.WaitForExit([Math]::Min(250,$remaining))}}
+   } catch {if($processDeadline){throw [InvalidOperationException]::new('runner-cleanup-operation-error')};throw}
    if($processDeadline){
+    try {$exited=$process.HasExited} catch {throw [InvalidOperationException]::new('runner-cleanup-operation-error')}
+    if(-not $exited){throw [InvalidOperationException]::new('runner-cleanup-process-active')}
     $remaining=$TimeoutMilliseconds-[int]$watch.ElapsedMilliseconds
-    if(-not $process.HasExited -or $remaining -le 0 -or -not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($output,$errorOutput),[Math]::Max(1,$remaining))){throw 'Runner prerequisite process cleanup failed.'}
+    if($remaining -le 0){throw [InvalidOperationException]::new('runner-cleanup-budget-exhausted')}
+    try {$drained=[Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($output,$errorOutput),[Math]::Max(1,$remaining))} catch {throw [InvalidOperationException]::new('runner-cleanup-operation-error')}
+    if(-not $drained){throw [InvalidOperationException]::new('runner-cleanup-output-incomplete')}
     throw [TimeoutException]::new('runner-process-deadline-cleaned')
    }
   } finally {$process.Dispose()}
@@ -49,7 +55,7 @@ function Wait-HostedWindowsDocker {
  $started=[long](& $Clock)
  $diagnostic={param([string]$Stage,[string]$Category)
   if($Stage -cnotin @('probe','query','stop','start')){$Stage='probe'}
-  if($Category -cnotin @('process-deadline','output-deadline','total-deadline','native-error')){$Category='native-error'}
+  if($Category -cnotin @('process-deadline','output-deadline','total-deadline','native-error','cleanup-process-active','cleanup-budget-exhausted','cleanup-output-incomplete','cleanup-operation-error')){$Category='native-error'}
   $elapsed=[Math]::Max(0,[Math]::Min([long]$DeadlineMilliseconds,([long](& $Clock)-$started)))
   $remaining=[Math]::Max(0,[long]$DeadlineMilliseconds-$elapsed)
   throw ('Docker readiness stage='+$Stage+' category='+$Category+' elapsed_ms='+$elapsed+' remaining_ms='+$remaining)
@@ -61,6 +67,7 @@ function Wait-HostedWindowsDocker {
   try{& $InvokeNative $File $Arguments ([int][Math]::Min($OperationMilliseconds,$remaining))}catch{
    $category='native-error';$exception=$_.Exception
    while($exception){
+    if($exception -is [InvalidOperationException] -and $exception.Message -cin @('runner-cleanup-process-active','runner-cleanup-budget-exhausted','runner-cleanup-output-incomplete','runner-cleanup-operation-error')){$category=$exception.Message.Substring(7);break}
     if($exception -is [TimeoutException] -and $exception.Message -ceq 'runner-process-deadline-cleaned'){if($AllowCleanedTimeout -and $hosted){return @{ExitCode=1;Output=''}};$category='process-deadline';break}
     if($exception -is [TimeoutException] -and $exception.Message -ceq 'runner-process-deadline'){$category='process-deadline';break}
     if($exception -is [TimeoutException] -and $exception.Message -ceq 'runner-output-deadline'){$category='output-deadline';break}

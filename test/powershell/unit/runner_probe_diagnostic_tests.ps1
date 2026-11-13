@@ -18,6 +18,11 @@ foreach($case in @(
 Assert ((Get-RunnerProbeNativeKind ([Exception]::new('Runner prerequisite process cleanup failed.'))) -ceq 'cleanup-unconfirmed') '確認清理失敗分類'
 Assert ((Get-RunnerProbeNativeKind ([Exception]::new('runner-process-deadline-cleaned'))) -ceq 'unknown') '錯誤型別不能偽造已清理訊號'
 Assert ((Get-RunnerProbeNativeKind ([Exception]::new('C:\private\secret'))) -ceq 'unknown') '未知例外不輸出私人內容'
+foreach($category in @('cleanup-process-active','cleanup-budget-exhausted','cleanup-output-incomplete','cleanup-operation-error')){
+ $kind=Get-RunnerProbeNativeKind ([InvalidOperationException]::new('runner-'+$category))
+ $names=@(Get-RunnerProbeDiagnostic -Phase 'probe' -HasPid $false -Message ('Docker readiness stage=probe category='+$category+' elapsed_ms=1 remaining_ms=999') -NativeKind $kind -NativeElapsedMilliseconds 1)
+ Assert ($names -contains ('probe diagnostic category='+$category) -and $names -contains ('probe diagnostic native_kind='+$category)) ('fixture 診斷保留安全 cleanup 類別 '+$category)
+}
 $names=@(Get-RunnerProbeDiagnostic -Phase 'probe' -HasPid $true -Message 'private' -NativeKind 'private C:\secret' -NativeElapsedMilliseconds 123)
 Assert ($names -contains 'probe diagnostic native_kind=unknown' -and $names -contains 'probe diagnostic native_elapsed_ms=123' -and ($names -join '|') -notmatch 'private|secret') '僅輸出受控分類與實際計時整數'
 Assert ($null -ne (Get-Command Test-RunnerOwnedProbeExited -ErrorAction SilentlyContinue)) '獨立檢查唯一 owned probe 程序是否結束'
