@@ -4,26 +4,34 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
 $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
+function Test-RollupFailure([string]$Message,[string]$Name){return $Message -ceq ('必要工作失敗、取消或跳過：'+$Name)}
 $rollup=[regex]::Match($workflow,'(?ms)^  ci-rollup:\r?\n(?<body>.*?)^  release:').Groups['body'].Value
 $scriptText=([regex]::Match($rollup,'(?ms)        run: \|\r?\n(?<body>.*)$').Groups['body'].Value -replace '(?m)^          ','').Trim()
 $priorCoverageResult=$env:COVERAGE_RESULT
+$priorSummaryPath=$env:GITHUB_STEP_SUMMARY
+$summaryPath=Join-Path ([IO.Path]::GetTempPath()) ('oobe_rollup_summary_'+[guid]::NewGuid().ToString('N')+'.md')
+$env:GITHUB_STEP_SUMMARY=$summaryPath
 try {
 $env:TEST_RESULT='success';$env:REQUIREMENTS_RESULT='success';$env:DOCKER_RESULT='success';$env:POWERSHELL_COVERAGE_RESULT='success';$env:OOBE_PAYLOAD_RESULT='failure';$env:COVERAGE_RESULT='success'
-$rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
+$rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=Test-RollupFailure $_.Exception.Message 'Payload'}
 Assert $rejected 'actual ci-rollup rejects failed OOBE package content inspection'
 $env:OOBE_PAYLOAD_RESULT='success'
 & ([scriptblock]::Create($scriptText))
 Assert $true 'actual ci-rollup accepts all required jobs succeeding'
 $env:POWERSHELL_COVERAGE_RESULT='failure'
-$rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
+$rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=Test-RollupFailure $_.Exception.Message 'PowerShellCoverage'}
 Assert $rejected 'actual ci-rollup rejects failed or incomplete PowerShell shard matrix'
 $env:POWERSHELL_COVERAGE_RESULT='success'
 foreach($state in @('failure','cancelled','skipped','')){
  $env:COVERAGE_RESULT=$state;$rejected=$false
- try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
+ try{& ([scriptblock]::Create($scriptText))}catch{$rejected=Test-RollupFailure $_.Exception.Message 'Coverage'}
  Assert $rejected ('actual ci-rollup rejects incomplete final coverage aggregation: '+$state)
 }
-}finally{$env:COVERAGE_RESULT=$priorCoverageResult}
+$env:COVERAGE_RESULT='failure'
+$wrongScript=$scriptText.Replace('$env:POWERSHELL_COVERAGE_RESULT','$env:COVERAGE_RESULT')
+$wrongMessage='';try{& ([scriptblock]::Create($wrongScript))}catch{$wrongMessage=$_.Exception.Message}
+Assert ((Test-RollupFailure $wrongMessage 'PowerShellCoverage') -and -not (Test-RollupFailure $wrongMessage 'Coverage')) 'wrong PowerShellCoverage failure cannot satisfy Coverage check'
+}finally{$env:COVERAGE_RESULT=$priorCoverageResult;$env:GITHUB_STEP_SUMMARY=$priorSummaryPath;if(Test-Path -LiteralPath $summaryPath){[IO.File]::Delete($summaryPath)}}
 $job=[regex]::Match($workflow,'(?ms)^  oobe_payload_inspection:\r?\n(?<body>.*?)(?=^  [a-z][a-z_-]+:)').Groups['body'].Value
 Assert ($job -match 'runs-on: windows-2022' -and $job -notmatch '(?m)^    needs:') 'payload inspection runs independently on Windows'
 Assert ($job.Contains('verify_oobe_payload.ps1') -and $job.Contains('payload_baseline.json') -and $job.Contains('if: always()') -and $job.Contains('retention-days: 7')) 'CI invokes real reader with reviewed baseline and preserves failure evidence seven days'
