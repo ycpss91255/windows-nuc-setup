@@ -50,13 +50,63 @@ function Get-CIPortalParameters {
  return $parameters
 }
 
+function Get-CINestedCoverageDiagnostic {
+ param([Parameter(Mandatory=$true)][string]$Path)
+ $unavailable='@@SAFE_NESTED_CI@@unavailable'
+ try{
+  if(-not(Test-Path -LiteralPath $Path -PathType Leaf -ErrorAction Stop)){return $unavailable}
+  $file=Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+  if(($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $file.Length -gt 4MB){return $unavailable}
+  $prefix='PowerShell worker failure diagnostic: '
+  $lines=@(Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction Stop | Where-Object {$_.StartsWith($prefix)})
+  if($lines.Count -ne 1){return $unavailable}
+  $json=$lines[0].Substring($prefix.Length)
+  $item=$json|ConvertFrom-Json
+  if($item -isnot [pscustomobject] -or ($item|ConvertTo-Json -Depth 5 -Compress) -cne $json){return $unavailable}
+  $required=@('SchemaVersion','TestFile','WorkerIndex','Engine','NativeExitCode','CompletedAssertions','FailedAssertionIndices','Locations','ExceptionTypes')
+  $properties=@($item.PSObject.Properties.Name)
+  if(@($required|Where-Object {$_ -cnotin $properties}).Count -or @($properties|Where-Object {$_ -cnotin ($required+@('PesterFailures'))}).Count){return $unavailable}
+  if($item.SchemaVersion -isnot [int] -or $item.SchemaVersion -ne 1 -or $item.TestFile -isnot [string] -or $item.TestFile -cne 'test/powershell/integration/ci_runner_tests.ps1' -or $item.WorkerIndex -isnot [int] -or $item.WorkerIndex -ne 0 -or $item.Engine -isnot [string] -or $item.Engine -cne 'powershell' -or $item.NativeExitCode -isnot [int] -or $item.NativeExitCode -eq 0 -or $item.CompletedAssertions -isnot [int] -or $item.CompletedAssertions -lt 1 -or $item.CompletedAssertions -gt 100000){return $unavailable}
+  if($item.FailedAssertionIndices -isnot [array] -or $item.Locations -isnot [array] -or $item.ExceptionTypes -isnot [array] -or $item.Locations.Count -gt 4 -or $item.ExceptionTypes.Count -gt 4){return $unavailable}
+  $allowedFiles=@('script/test/ci_runner_library.ps1','script/test/run_ci.ps1','test/powershell/integration/ci_runner_tests.ps1','test/powershell/coverage/safe_suite.ps1')
+  foreach($location in $item.Locations){
+   if($location -isnot [pscustomobject] -or @($location.PSObject.Properties).Count -ne 2 -or @($location.PSObject.Properties.Name|Where-Object {$_ -cnotin @('File','Line')}).Count -or $location.File -isnot [string] -or $location.File -cnotin $allowedFiles -or $location.Line -isnot [int] -or $location.Line -lt 1 -or $location.Line -gt 1000000){return $unavailable}
+  }
+  $types=@('RuntimeException','IOException','UnauthorizedAccessException','ArgumentException','ParameterBindingException','CommandNotFoundException','OutOfMemoryException','InvalidOperationException','ParseException')
+  foreach($type in $item.ExceptionTypes){if($type -isnot [string] -or $type -cnotin $types){return $unavailable}}
+  if('PesterFailures' -cin $properties){
+   if($item.PesterFailures -isnot [array] -or $item.PesterFailures.Count -lt 1 -or $item.PesterFailures.Count -gt 16){return $unavailable}
+   . (Join-Path $PSScriptRoot 'powershell_worker_diagnostics.ps1')
+   $seen=@{}
+   foreach($row in $item.PesterFailures){
+    if($row -isnot [pscustomobject] -or @($row.PSObject.Properties).Count -ne 4 -or @($row.PSObject.Properties.Name|Where-Object {$_ -cnotin @('Phase','Type','File','Line')}).Count -or $row.Phase -isnot [string] -or $row.Phase -cnotin @('InvokePester','InvokePesterNoResult','ContainerDiscovery','ContainerFailure','BlockLifecycle','TestRun') -or $row.Type -isnot [string] -or $row.Type -cnotin @(Get-PesterDiagnosticTypes) -or $row.File -isnot [string] -or $row.Line -isnot [int] -or $row.Line -lt 0 -or $row.Line -gt 1000000){return $unavailable}
+    if($row.File){if($row.File -cnotin $allowedFiles -or $row.Line -lt 1){return $unavailable}}elseif($row.Line -ne 0){return $unavailable}
+    if($row.Type -ceq 'NoErrorRecord' -and ($row.Phase -cne 'InvokePesterNoResult' -or $row.File -cne '' -or $row.Line -ne 0)){return $unavailable}
+    $key=$row.Phase+'|'+$row.Type+'|'+$row.File+'|'+$row.Line;if($seen.ContainsKey($key)){return $unavailable};$seen[$key]=$true
+   }
+  }
+  $indices=@($item.FailedAssertionIndices)
+  if($indices.Count -ne 1 -or $indices[0] -isnot [int] -or $indices[0] -lt 1 -or $indices[0] -gt $item.CompletedAssertions){return $unavailable}
+  $type=if($item.ExceptionTypes.Count){$item.ExceptionTypes[0]}else{'unavailable'}
+  return ('@@SAFE_NESTED_CI@@worker:'+$indices[0]+':'+$type)
+ }catch{return $unavailable}
+}
 function Write-CIFailureDiagnostics {
- param([Parameter(Mandatory=$true)][string]$ReportDirectory,[ValidateSet('Unit.uac_helpers','Integration.managed_catalog','Integration.collector_self_coverage','Integration.driver_source_coverage','Integration.network_helpers_coverage','Integration.powershell_coverage','Integration.powershell_engine','Integration.uac_updates_coverage','Integration.verification_coverage','Unit.terminal_helpers','Unit.driver_cache_cleanup','Integration.init_runtime','Integration.driver_full_source_coverage','Integration.report_bundle_publication')][string[]]$SuiteNames=@('Unit.uac_helpers','Integration.managed_catalog'))
+ param([Parameter(Mandatory=$true)][string]$ReportDirectory,[ValidateSet('Unit.uac_helpers','Integration.managed_catalog','Integration.collector_self_coverage','Integration.driver_source_coverage','Integration.network_helpers_coverage','Integration.powershell_coverage','Integration.powershell_engine','Integration.uac_updates_coverage','Integration.verification_coverage','Unit.terminal_helpers','Unit.driver_cache_cleanup','Integration.init_runtime','Integration.driver_full_source_coverage','Integration.report_bundle_publication','Integration.ci_runner_coverage')][string[]]$SuiteNames=@('Unit.uac_helpers','Integration.managed_catalog'))
  $directory=[IO.Path]::GetFullPath($ReportDirectory)
  if((Test-Path -LiteralPath $directory) -and ((Get-Item -LiteralPath $directory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Diagnostic report directory cannot be a reparse point.'}
  foreach($suite in $SuiteNames){
   $name=$suite+'.log';$path=Join-Path $directory $name
   Write-Output ('CI diagnostic: '+$name)
+  if($suite -eq 'Integration.ci_runner_coverage'){
+   try{
+    $file=Get-Item -LiteralPath $path -Force -ErrorAction Stop
+    if(($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $file.Length -gt 4MB){Write-Output '    unavailable';continue}
+    $markers=@(Get-Content -LiteralPath $path -Encoding UTF8 -ErrorAction Stop | Where-Object {$_.StartsWith('@@SAFE_NESTED_CI@@')})
+    if($markers.Count -eq 1 -and $markers[0] -cmatch '^@@SAFE_NESTED_CI@@worker:([1-9][0-9]{0,5}):(unavailable|RuntimeException|IOException|UnauthorizedAccessException|ArgumentException|ParameterBindingException|CommandNotFoundException|OutOfMemoryException|InvalidOperationException|ParseException)$' -and [int]$Matches[1] -le 100000){Write-Output ('    worker:'+$Matches[1]+':'+$Matches[2])}else{Write-Output '    unavailable'}
+   }catch{Write-Output '    unavailable'}
+   continue
+  }
   if(-not(Test-Path -LiteralPath $path -PathType Leaf)){Write-Output '    unavailable';continue}
   if((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Diagnostic suite log cannot be a reparse point.'}
   if($suite -eq 'Integration.report_bundle_publication'){

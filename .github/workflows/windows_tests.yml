@@ -160,7 +160,7 @@ jobs:
         if: failure()
         run: |
           . .\script\test\ci_tasks.ps1
-          Write-CIFailureDiagnostics -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results') -SuiteNames @('Unit.uac_helpers','Integration.managed_catalog','Unit.driver_cache_cleanup','Integration.init_runtime','Integration.driver_full_source_coverage','Integration.report_bundle_publication')
+          Write-CIFailureDiagnostics -ReportDirectory (Join-Path $env:RUNNER_TEMP 'NUC-CI-Results') -SuiteNames @('Unit.uac_helpers','Integration.managed_catalog','Unit.driver_cache_cleanup','Integration.init_runtime','Integration.driver_full_source_coverage','Integration.report_bundle_publication','Integration.ci_runner_coverage')
       - name: 產生明確標示的合成首頁驗收樣本
         if: always()
         run: |
