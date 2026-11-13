@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	a "windows_setup/script/test/acceptance"
 	c "windows_setup/script/test/repo_coverage"
 )
 
@@ -23,7 +24,7 @@ func TestDeploymentExecutableLineCoverage(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		goexe += ".exe"
 	}
-	cmd := exec.Command(goexe, "test", "-mod=vendor", "-count=1", "-run", "^TestDeploymentCases$", "-coverprofile="+profile, "./script/test/verify_deployment")
+	cmd := exec.Command(goexe, "test", "-mod=vendor", "-count=1", "-run", "^(TestDeploymentCases|TestPortalArtifactPublicBytes)$", "-coverprofile="+profile, "./script/test/verify_deployment")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("actual deployment cases: %v\n%s", err, out)
@@ -32,19 +33,26 @@ func TestDeploymentExecutableLineCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := os.ReadFile(filepath.Join(root, "script/test/verify_deployment/main.go"))
+	owned, err := a.OwnedGoFiles(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tagSource, err := os.ReadFile(filepath.Join(root, "script/test/verify_deployment/tag.go"))
-	if err != nil {
-		t.Fatal(err)
+	sources := map[string][]byte{}
+	for _, name := range owned {
+		path := strings.TrimPrefix(name, "windows_setup/")
+		if !strings.HasPrefix(path, "script/test/verify_deployment/") {
+			continue
+		}
+		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources[path] = content
 	}
-	bundleSource, err := os.ReadFile(filepath.Join(root, "script/test/verify_deployment/bundle.go"))
-	if err != nil {
-		t.Fatal(err)
+	if len(sources) == 0 {
+		t.Fatal("no owned verifier source")
 	}
-	report, _, err := c.NormalizeGo([][]byte{data}, map[string][]byte{"script/test/verify_deployment/main.go": source, "script/test/verify_deployment/tag.go": tagSource, "script/test/verify_deployment/bundle.go": bundleSource}, "windows_setup")
+	report, _, err := c.NormalizeGo([][]byte{data}, sources, "windows_setup")
 	if err != nil {
 		t.Fatal(err)
 	}

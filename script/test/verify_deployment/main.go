@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -26,6 +27,8 @@ func run() error {
 	bundleTool := flag.String("report-bundle-tool", "", "trusted report verifier executable")
 	archive := flag.String("report-archive", "", "downloaded report archive")
 	attempt := flag.Int("run-attempt", 0, "expected run attempt")
+	portalDir := flag.String("portal-dir", "", "validated same-run portal artifact")
+	latestMetadata := flag.String("latest-release-metadata", "", "immutable latest release metadata")
 	base := flag.String("base-url", "", "HTTPS Pages root")
 	doc := flag.String("readme", "", "README path")
 	sha := flag.String("expected-sha", "", "expected commit")
@@ -52,6 +55,9 @@ func run() error {
 		return e
 	}
 	if *mode == "release" {
+		if *portalDir != "" || *latestMetadata != "" {
+			return fmt.Errorf("portal artifact is only valid in branch mode")
+		}
 		if *tag == "" || *metadata == "" || *run == "" {
 			return fmt.Errorf("release mode requires tag, metadata and run")
 		}
@@ -85,6 +91,24 @@ func run() error {
 	if *mode != "branch" || *tag != "" || *metadata != "" || *bundleTool != "" || *archive != "" || *attempt != 0 || *download || *repository != "" {
 		return fmt.Errorf("invalid deployment mode")
 	}
+	requiredVersion := ""
+	if *latestMetadata != "" {
+		if *portalDir == "" {
+			return fmt.Errorf("latest release requires portal artifact")
+		}
+		data, err := os.ReadFile(*latestMetadata)
+		if err != nil {
+			return err
+		}
+		var latest releaseMetadata
+		if err = json.Unmarshal(data, &latest); err != nil {
+			return err
+		}
+		if latest.Draft == nil || *latest.Draft || latest.Immutable == nil || !*latest.Immutable || !regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$`).MatchString(latest.Tag) {
+			return fmt.Errorf("invalid immutable latest release")
+		}
+		requiredVersion = latest.Tag
+	}
 	var measured *c.Evidence
 	r, e := a.VerifyWithRetry(read, string(b), *sha, *run, *base, 12, func() {
 		fmt.Println("部署驗收尚未符合本次來源，有限等待 CDN 更新。")
@@ -106,7 +130,13 @@ func run() error {
 		if err = c.ValidateInventory(".", inventory); err != nil {
 			return err
 		}
-		return a.ValidateGoCoverageReport(reportReader, files, *sha, *run, false)
+		if err = a.ValidateGoCoverageReport(reportReader, files, *sha, *run, false); err != nil {
+			return err
+		}
+		if *portalDir != "" {
+			return verifyPortalBytes(read, *portalDir, requiredVersion)
+		}
+		return nil
 	})
 	if e != nil {
 		return e
