@@ -75,3 +75,19 @@ $nestedExit=$LASTEXITCODE
 [IO.File]::Copy($capture,$nestedSuite,$true)
 $safe=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
 Assert ($nestedExit -eq 1 -and $safe.Contains('worker:2') -and -not $safe.Contains('PRIVATE-SENTINEL') -and -not $safe.Contains('C:\Users')) '真外層 suite 失敗保留非零退出並由 CI 安全顯示巢狀序號'
+$invalidRecords=@(
+ $valid.Replace('"SchemaVersion":1','"SchemaVersion":1,"Extra":"secret"'),
+ $valid.Replace('"SchemaVersion":1','"SchemaVersion":9,"SchemaVersion":1'),
+ $valid.Replace('"TestFile":"test/powershell/integration/ci_runner_tests.ps1"','"TestFile":["test/powershell/integration/ci_runner_tests.ps1"]'),
+ $valid.Replace('"Engine":"powershell"','"Engine":["powershell"]'),
+ $valid.Replace('"Locations":[]','"Locations":"secret"'),
+ $valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":"secret"'),
+ $valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":["secret"]'),
+ $valid.Replace('"Locations":[]','"Locations":[{"File":"secret","Line":1}]'),
+ $valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":[],"PesterFailures":"secret"'),
+ $valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":[],"PesterFailures":[{"Phase":"secret","Type":"RuntimeException","File":"","Line":0}]'),
+ $valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":[],"FixtureStage":"fixture_export","FixtureReason":"go_fixture_failed"')
+)
+$acceptedInvalid=0
+foreach($invalid in $invalidRecords){[IO.File]::WriteAllText($nested,$invalid);if((Get-CINestedCoverageDiagnostic -Path $nested) -cne '@@SAFE_NESTED_CI@@unavailable'){$acceptedInvalid++}}
+Assert ($acceptedInvalid -eq 0) '嚴格拒絕額外重複欄位、錯誤陣列與不符該 suite 的可選診斷'
