@@ -40,3 +40,22 @@ $oversized=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('In
 Assert ($oversized.Contains('unavailable') -and $oversized.Length -lt 256) '大型私有日誌不讀取或公開'
 $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
 Assert ($workflow.Contains("'Integration.report_bundle_publication'")) '原生 All 失敗流程接入安全合成工件診斷'
+$nested=Join-Path $temp 'nested.private.log'
+$nestedSuite=Join-Path $temp 'Integration.ci_runner_coverage.log'
+$valid='PowerShell worker failure diagnostic: {"SchemaVersion":1,"TestFile":"test/powershell/integration/ci_runner_tests.ps1","WorkerIndex":0,"Engine":"powershell","NativeExitCode":1,"CompletedAssertions":2,"FailedAssertionIndices":[2],"Locations":[],"ExceptionTypes":[]}'
+[IO.File]::WriteAllLines($nested,[string[]]@('PRIVATE-SENTINEL C:\Users\hidden',$valid))
+$record=Get-CINestedCoverageDiagnostic -Path $nested
+Assert ($record -ceq '@@SAFE_NESTED_CI@@worker:2') '巢狀 worker 只輸出固定階段與失敗斷言序號'
+[IO.File]::WriteAllText($nestedSuite,"PRIVATE-SENTINEL C:\Users\hidden`n$record")
+$safe=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
+Assert ($safe.Contains('worker:2') -and -not $safe.Contains('PRIVATE-SENTINEL') -and -not $safe.Contains('C:\Users')) 'CI 只公開精確固定診斷而非原始巢狀日誌'
+foreach($bad in @('',($valid -replace '"WorkerIndex":0','"WorkerIndex":1'),($valid -replace '\[2\]','[999]'),($valid+"`n"+$valid),'@@SAFE_NESTED_CI@@worker:2')){
+ [IO.File]::WriteAllText($nested,$bad)
+ Assert ((Get-CINestedCoverageDiagnostic -Path $nested) -ceq '@@SAFE_NESTED_CI@@unavailable') '缺失、錯誤或重複記錄必須安全回 unavailable'
+}
+[IO.File]::WriteAllText($nested,('x'*(4MB+1)))
+Assert ((Get-CINestedCoverageDiagnostic -Path $nested) -ceq '@@SAFE_NESTED_CI@@unavailable') '過大巢狀日誌不可公開'
+[IO.File]::WriteAllText($nestedSuite,"@@SAFE_NESTED_CI@@worker:2`n@@SAFE_NESTED_CI@@worker:2`nPRIVATE-SENTINEL")
+$safe=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
+Assert ($safe.Contains('unavailable') -and -not $safe.Contains('worker:2') -and -not $safe.Contains('PRIVATE-SENTINEL')) '重複外層標記不可當成可信診斷'
+Assert ($workflow.Contains("'Integration.ci_runner_coverage'")) '失敗 workflow 接入限型別巢狀診斷'
