@@ -107,3 +107,16 @@ $allowed=@('test/powershell/integration/ci_runner_tests.ps1')
 $produced=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $root -TestFile $allowed[0] -WorkerIndex 0 -Engine powershell -NativeExitCode 1 -StandardOutputPath $workerStdout -StandardErrorPath $workerStderr -FailureRecordPath $workerSidecar -AllowedFiles $allowed
 [IO.File]::WriteAllText($nested,('PowerShell worker failure diagnostic: '+($produced|ConvertTo-Json -Depth 5 -Compress)))
 Assert ((Get-CINestedCoverageDiagnostic -Path $nested) -ceq '@@SAFE_NESTED_CI@@worker:1:RuntimeException') '既有 worker 真正產生含有效 PesterFailures 的記錄可讀取'
+foreach($preference in @('Continue','Stop')){
+ [IO.File]::WriteAllText($nested,'locked private');[IO.File]::WriteAllText($nestedSuite,'locked private')
+ $lock1=[IO.File]::Open($nested,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+ $lock2=[IO.File]::Open($nestedSuite,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+ $prior=$ErrorActionPreference
+ try{
+  $ErrorActionPreference=$preference
+  $nestedRead=@(Get-CINestedCoverageDiagnostic -Path $nested *>&1)
+  $outerRead=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage') *>&1)
+ }finally{$ErrorActionPreference=$prior;$lock1.Dispose();$lock2.Dispose()}
+ Assert ($nestedRead.Count -eq 1 -and $nestedRead[0] -is [string] -and $nestedRead[0] -ceq '@@SAFE_NESTED_CI@@unavailable') ('鎖定巢狀記錄只回固定 unavailable '+$preference)
+ Assert ($outerRead.Count -eq 2 -and @($outerRead|Where-Object {$_ -isnot [string]}).Count -eq 0 -and $outerRead[1] -ceq '    unavailable') ('鎖定外層記錄只回固定 unavailable '+$preference)
+}
