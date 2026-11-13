@@ -26,6 +26,7 @@ func run() error {
 	bundleTool := flag.String("report-bundle-tool", "", "trusted report verifier executable")
 	archive := flag.String("report-archive", "", "downloaded report archive")
 	attempt := flag.Int("run-attempt", 0, "expected run attempt")
+	portalDir := flag.String("portal-dir", "", "validated same-run portal artifact")
 	base := flag.String("base-url", "", "HTTPS Pages root")
 	doc := flag.String("readme", "", "README path")
 	sha := flag.String("expected-sha", "", "expected commit")
@@ -52,6 +53,9 @@ func run() error {
 		return e
 	}
 	if *mode == "release" {
+		if *portalDir != "" {
+			return fmt.Errorf("portal artifact is only valid in branch mode")
+		}
 		if *tag == "" || *metadata == "" || *run == "" {
 			return fmt.Errorf("release mode requires tag, metadata and run")
 		}
@@ -106,7 +110,13 @@ func run() error {
 		if err = c.ValidateInventory(".", inventory); err != nil {
 			return err
 		}
-		return a.ValidateGoCoverageReport(reportReader, files, *sha, *run, false)
+		if err = a.ValidateGoCoverageReport(reportReader, files, *sha, *run, false); err != nil {
+			return err
+		}
+		if *portalDir != "" {
+			return verifyPortalBytes(read, *portalDir)
+		}
+		return nil
 	})
 	if e != nil {
 		return e
