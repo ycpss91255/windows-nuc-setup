@@ -45,7 +45,7 @@ $nestedSuite=Join-Path $temp 'Integration.ci_runner_coverage.log'
 $valid='PowerShell worker failure diagnostic: {"SchemaVersion":1,"TestFile":"test/powershell/integration/ci_runner_tests.ps1","WorkerIndex":0,"Engine":"powershell","NativeExitCode":1,"CompletedAssertions":2,"FailedAssertionIndices":[2],"Locations":[],"ExceptionTypes":[]}'
 [IO.File]::WriteAllLines($nested,[string[]]@('PRIVATE-SENTINEL C:\Users\hidden',$valid))
 $record=Get-CINestedCoverageDiagnostic -Path $nested
-Assert ($record -ceq '@@SAFE_NESTED_CI@@worker:2') '巢狀 worker 只輸出固定階段與失敗斷言序號'
+Assert ($record -ceq '@@SAFE_NESTED_CI@@worker:2:unavailable') '巢狀 worker 只輸出固定階段與失敗斷言序號'
 [IO.File]::WriteAllText($nestedSuite,"PRIVATE-SENTINEL C:\Users\hidden`n$record")
 $safe=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
 Assert ($safe.Contains('worker:2') -and -not $safe.Contains('PRIVATE-SENTINEL') -and -not $safe.Contains('C:\Users')) 'CI 只公開精確固定診斷而非原始巢狀日誌'
@@ -98,3 +98,12 @@ Assert ($typedRecord -ceq '@@SAFE_NESTED_CI@@worker:2:RuntimeException') '既有
 [IO.File]::WriteAllText($nestedSuite,$typedRecord)
 $typedOutput=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
 Assert ($typedOutput.Contains('worker:2:RuntimeException') -and -not $typedOutput.Contains('PRIVATE-SENTINEL')) '外層只顯示固定白名單型別'
+. (Join-Path $root 'script/test/powershell_worker_diagnostics.ps1')
+$workerStdout=Join-Path $temp 'worker.private.stdout';$workerStderr=Join-Path $temp 'worker.private.stderr';$workerSidecar=Join-Path $temp 'worker.private.json'
+[IO.File]::WriteAllText($workerStdout,'@@ASSERT@@{"Name":"private","Passed":false}')
+[IO.File]::WriteAllText($workerStderr,'CategoryInfo : RuntimeException')
+[IO.File]::WriteAllText($workerSidecar,'{"SchemaVersion":1,"Failures":[{"Phase":"TestRun","Type":"RuntimeException","File":"test/powershell/integration/ci_runner_tests.ps1","Line":1}]}')
+$allowed=@('test/powershell/integration/ci_runner_tests.ps1')
+$produced=Get-PowerShellWorkerFailureDiagnostic -SourceRoot $root -TestFile $allowed[0] -WorkerIndex 0 -Engine powershell -NativeExitCode 1 -StandardOutputPath $workerStdout -StandardErrorPath $workerStderr -FailureRecordPath $workerSidecar -AllowedFiles $allowed
+[IO.File]::WriteAllText($nested,('PowerShell worker failure diagnostic: '+($produced|ConvertTo-Json -Depth 5 -Compress)))
+Assert ((Get-CINestedCoverageDiagnostic -Path $nested) -ceq '@@SAFE_NESTED_CI@@worker:1:RuntimeException') '既有 worker 真正產生含有效 PesterFailures 的記錄可讀取'
