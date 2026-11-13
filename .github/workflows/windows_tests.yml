@@ -594,13 +594,21 @@ jobs:
         with:
           name: quality-portal-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/verified-portal
+      - name: 取得不可變最新版本
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$RELEASE_REPO/releases/latest" > "$RUNNER_TEMP/latest-release.json"
       - name: 匿名核對公開網站與本次來源
         if: github.ref == 'refs/heads/main'
         env:
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LATEST_RELEASE_METADATA: ${{ github.event_name == 'workflow_dispatch' && format('{0}/latest-release.json', runner.temp) || '' }}
         run: |
-          go run ./script/test/verify_deployment --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --portal-dir "$RUNNER_TEMP/verified-portal"
+          go run ./script/test/verify_deployment --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --portal-dir "$RUNNER_TEMP/verified-portal" --latest-release-metadata "$LATEST_RELEASE_METADATA"
 
       - name: 匿名核對公開版本與不可變證據
         if: startsWith(github.ref, 'refs/tags/v')
