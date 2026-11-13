@@ -172,6 +172,81 @@ func TestDeploymentCases(t *testing.T) {
 		return []string{"--base-url", server.URL, "--readme", doc, "--expected-sha", sha, "--expected-run-url", runURL}
 	}
 	t.Setenv("GITHUB_STEP_SUMMARY", "")
+	t.Run("branch_verifies_deployed_portal", func(t *testing.T) {
+		portal := t.TempDir()
+		if err := os.WriteFile(filepath.Join(portal, "versions.json"), pages["versions.json"], 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := invoke(append(args(), "--portal-dir", portal)...); err != nil {
+			t.Fatalf("valid same-run portal must verify: %v", err)
+		}
+		latest := filepath.Join(t.TempDir(), "latest.json")
+		if err := os.WriteFile(latest, []byte(`{"tag_name":"v0.2.5","draft":false,"immutable":true}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		oldSleepForLatest := deploymentSleep
+		deploymentSleep = func(time.Duration) {}
+		err := invoke(append(args(), "--portal-dir", portal, "--latest-release-metadata", latest)...)
+		deploymentSleep = oldSleepForLatest
+		if err == nil || !strings.Contains(err.Error(), "required release") {
+			t.Fatalf("missing latest release must be rejected: %v", err)
+		}
+		for _, raw := range []string{`{"tag_name":"v0.2.5","draft":true,"immutable":true}`, `{"tag_name":"v0.2.5","draft":false,"immutable":false}`, `{"tag_name":"../bad","draft":false,"immutable":true}`, `{"tag_name":"v0.2.5","draft":false,"immutable":"true"}`} {
+			if err := os.WriteFile(latest, []byte(raw), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := invoke(append(args(), "--portal-dir", portal, "--latest-release-metadata", latest)...); err == nil {
+				t.Fatalf("invalid latest release accepted: %s", raw)
+			}
+		}
+		if err := invoke(append(args(), "--latest-release-metadata", latest)...); err == nil || !strings.Contains(err.Error(), "requires portal artifact") {
+			t.Fatalf("metadata without portal must fail: %v", err)
+		}
+		if err := invoke(append(args(), "--mode", "release", "--latest-release-metadata", latest)...); err == nil || !strings.Contains(err.Error(), "only valid in branch mode") {
+			t.Fatalf("release mode must reject latest metadata: %v", err)
+		}
+		if err := invoke(append(args(), "--mode", "release", "--portal-dir", portal)...); err == nil || !strings.Contains(err.Error(), "only valid in branch mode") {
+			t.Fatalf("release mode must reject portal artifact: %v", err)
+		}
+		oldSleep := deploymentSleep
+		waits := 0
+		deploymentSleep = func(time.Duration) { waits++ }
+		defer func() { deploymentSleep = oldSleep }()
+		catalog := []byte(`[{"Version":"v0.2.5","Status":"Verified","Path":"versions/v0.2.5/index.html"}]`)
+		originalCatalog := pages["versions.json"]
+		defer func() {
+			pages["versions.json"] = originalCatalog
+			delete(pages, "versions/v0.2.5/index.html")
+			delete(pages, "versions/v0.2.5/summary.json")
+			delete(pages, "versions/v0.2.5/go_coverage.out")
+		}()
+		pages["versions.json"] = catalog
+		if err := os.WriteFile(filepath.Join(portal, "versions.json"), catalog, 0600); err != nil {
+			t.Fatal(err)
+		}
+		versionDir := filepath.Join(portal, "versions", "v0.2.5")
+		if err := os.MkdirAll(versionDir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		for name, body := range map[string][]byte{"index.html": []byte("tag page"), "summary.json": []byte("tag summary"), "go_coverage.out": []byte("tag profile")} {
+			if err := os.WriteFile(filepath.Join(versionDir, name), body, 0600); err != nil {
+				t.Fatal(err)
+			}
+			pages["versions/v0.2.5/"+name] = body
+		}
+		if err := invoke(append(args(), "--portal-dir", portal)...); err != nil {
+			t.Fatalf("valid version bytes: %v", err)
+		}
+		pages["versions/v0.2.5/go_coverage.out"] = []byte("wrong profile")
+		if err := invoke(append(args(), "--portal-dir", portal)...); err == nil || waits != 11 {
+			t.Fatalf("wrong profile must use bounded retry: error=%v waits=%d", err, waits)
+		}
+		waits = 0
+		delete(pages, "versions/v0.2.5/summary.json")
+		if err := invoke(append(args(), "--portal-dir", portal)...); err == nil || waits != 11 {
+			t.Fatalf("missing public summary must use bounded retry: error=%v waits=%d", err, waits)
+		}
+	})
 	t.Run("tag_public_evidence", func(t *testing.T) {
 		oldSleep := deploymentSleep
 		deploymentSleep = func(time.Duration) {}
