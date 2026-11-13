@@ -180,6 +180,47 @@ func TestDeploymentCases(t *testing.T) {
 		if err := invoke(append(args(), "--portal-dir", portal)...); err != nil {
 			t.Fatalf("valid same-run portal must verify: %v", err)
 		}
+		if err := invoke(append(args(), "--mode", "release", "--portal-dir", portal)...); err == nil || !strings.Contains(err.Error(), "only valid in branch mode") {
+			t.Fatalf("release mode must reject portal artifact: %v", err)
+		}
+		oldSleep := deploymentSleep
+		waits := 0
+		deploymentSleep = func(time.Duration) { waits++ }
+		defer func() { deploymentSleep = oldSleep }()
+		catalog := []byte(`[{"Version":"v0.2.5","Status":"Verified","Path":"versions/v0.2.5/index.html"}]`)
+		originalCatalog := pages["versions.json"]
+		defer func() {
+			pages["versions.json"] = originalCatalog
+			delete(pages, "versions/v0.2.5/index.html")
+			delete(pages, "versions/v0.2.5/summary.json")
+			delete(pages, "versions/v0.2.5/go_coverage.out")
+		}()
+		pages["versions.json"] = catalog
+		if err := os.WriteFile(filepath.Join(portal, "versions.json"), catalog, 0600); err != nil {
+			t.Fatal(err)
+		}
+		versionDir := filepath.Join(portal, "versions", "v0.2.5")
+		if err := os.MkdirAll(versionDir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		for name, body := range map[string][]byte{"index.html": []byte("tag page"), "summary.json": []byte("tag summary"), "go_coverage.out": []byte("tag profile")} {
+			if err := os.WriteFile(filepath.Join(versionDir, name), body, 0600); err != nil {
+				t.Fatal(err)
+			}
+			pages["versions/v0.2.5/"+name] = body
+		}
+		if err := invoke(append(args(), "--portal-dir", portal)...); err != nil {
+			t.Fatalf("valid version bytes: %v", err)
+		}
+		pages["versions/v0.2.5/go_coverage.out"] = []byte("wrong profile")
+		if err := invoke(append(args(), "--portal-dir", portal)...); err == nil || waits != 11 {
+			t.Fatalf("wrong profile must use bounded retry: error=%v waits=%d", err, waits)
+		}
+		waits = 0
+		delete(pages, "versions/v0.2.5/summary.json")
+		if err := invoke(append(args(), "--portal-dir", portal)...); err == nil || waits != 11 {
+			t.Fatalf("missing public summary must use bounded retry: error=%v waits=%d", err, waits)
+		}
 	})
 	t.Run("tag_public_evidence", func(t *testing.T) {
 		oldSleep := deploymentSleep
