@@ -191,6 +191,20 @@ func TestDeploymentCases(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "required release") {
 			t.Fatalf("missing latest release must be rejected: %v", err)
 		}
+		for _, raw := range []string{`{"tag_name":"v0.2.5","draft":true,"immutable":true}`, `{"tag_name":"v0.2.5","draft":false,"immutable":false}`, `{"tag_name":"../bad","draft":false,"immutable":true}`, `{"tag_name":"v0.2.5","draft":false,"immutable":"true"}`} {
+			if err := os.WriteFile(latest, []byte(raw), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := invoke(append(args(), "--portal-dir", portal, "--latest-release-metadata", latest)...); err == nil {
+				t.Fatalf("invalid latest release accepted: %s", raw)
+			}
+		}
+		if err := invoke(append(args(), "--latest-release-metadata", latest)...); err == nil || !strings.Contains(err.Error(), "requires portal artifact") {
+			t.Fatalf("metadata without portal must fail: %v", err)
+		}
+		if err := invoke(append(args(), "--mode", "release", "--latest-release-metadata", latest)...); err == nil || !strings.Contains(err.Error(), "only valid in branch mode") {
+			t.Fatalf("release mode must reject latest metadata: %v", err)
+		}
 		if err := invoke(append(args(), "--mode", "release", "--portal-dir", portal)...); err == nil || !strings.Contains(err.Error(), "only valid in branch mode") {
 			t.Fatalf("release mode must reject portal artifact: %v", err)
 		}

@@ -10,7 +10,7 @@ import (
 
 func TestPortalArtifactPublicBytes(t *testing.T) {
 	const catalog = `[{"Version":"v0.2.5","Status":"Verified","Path":"versions/v0.2.5/index.html"},{"Version":"v0.2.0","Status":"Unknown","Path":"versions/v0.2.0/index.html"}]`
-	for _, kind := range []string{"valid", "stale_catalog", "stale_page", "stale_summary", "stale_profile", "missing_public", "missing_local", "duplicate", "bad_version", "bad_path", "symlink"} {
+	for _, kind := range []string{"valid", "required_verified", "required_missing", "required_unknown", "stale_catalog", "stale_page", "stale_summary", "stale_profile", "missing_public", "missing_local", "duplicate", "bad_version", "bad_path", "symlink"} {
 		t.Run(kind, func(t *testing.T) {
 			root := t.TempDir()
 			files := map[string][]byte{"versions.json": []byte(catalog), "versions/v0.2.5/index.html": []byte("verified version page"), "versions/v0.2.5/summary.json": []byte("tag report summary"), "versions/v0.2.5/go_coverage.out": []byte("tag profile")}
@@ -22,6 +22,9 @@ func TestPortalArtifactPublicBytes(t *testing.T) {
 			}
 			if kind == "bad_path" {
 				files["versions.json"] = []byte(`[{"Version":"v0.2.5","Status":"Verified","Path":"versions/v0.2.4/index.html"}]`)
+			}
+			if kind == "required_unknown" {
+				files["versions.json"] = []byte(`[{"Version":"v0.2.5","Status":"Unknown","Path":"versions/v0.2.5/index.html"}]`)
 			}
 			for name, data := range files {
 				path := filepath.Join(root, filepath.FromSlash(name))
@@ -59,8 +62,15 @@ func TestPortalArtifactPublicBytes(t *testing.T) {
 				}
 				return b, nil
 			}
-			err := verifyPortalBytes(read, root, "")
-			if (err == nil) != (kind == "valid") {
+			required := ""
+			if strings.HasPrefix(kind, "required_") {
+				required = "v0.2.5"
+			}
+			if kind == "required_missing" {
+				required = "v0.2.6"
+			}
+			err := verifyPortalBytes(read, root, required)
+			if (err == nil) != (kind == "valid" || kind == "required_verified") {
 				t.Fatalf("kind=%s error=%v", kind, err)
 			}
 		})
