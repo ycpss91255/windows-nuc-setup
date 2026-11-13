@@ -9,18 +9,18 @@ $scriptText=([regex]::Match($rollup,'(?ms)        run: \|\r?\n(?<body>.*)$').Gro
 $priorCoverageResult=$env:COVERAGE_RESULT
 try {
 $env:TEST_RESULT='success';$env:REQUIREMENTS_RESULT='success';$env:DOCKER_RESULT='success';$env:POWERSHELL_COVERAGE_RESULT='success';$env:OOBE_PAYLOAD_RESULT='failure';$env:COVERAGE_RESULT='success'
-$rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
+$rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$_.Exception.Message -match 'Payload$'}
 Assert $rejected 'actual ci-rollup rejects failed OOBE package content inspection'
 $env:OOBE_PAYLOAD_RESULT='success'
 & ([scriptblock]::Create($scriptText))
 Assert $true 'actual ci-rollup accepts all required jobs succeeding'
 $env:POWERSHELL_COVERAGE_RESULT='failure'
-$rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
+$rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$_.Exception.Message -match 'PowerShellCoverage$'}
 Assert $rejected 'actual ci-rollup rejects failed or incomplete PowerShell shard matrix'
 $env:POWERSHELL_COVERAGE_RESULT='success'
 foreach($state in @('failure','cancelled','skipped','')){
  $env:COVERAGE_RESULT=$state;$rejected=$false
- try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$true}
+ try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$_.Exception.Message -match 'Coverage$'}
  Assert $rejected ('actual ci-rollup rejects incomplete final coverage aggregation: '+$state)
 }
 }finally{$env:COVERAGE_RESULT=$priorCoverageResult}
