@@ -50,8 +50,25 @@ function Get-CIPortalParameters {
  return $parameters
 }
 
+function Get-CINestedCoverageDiagnostic {
+ param([Parameter(Mandatory=$true)][string]$Path)
+ $unavailable='@@SAFE_NESTED_CI@@unavailable'
+ try{
+  if(-not(Test-Path -LiteralPath $Path -PathType Leaf)){return $unavailable}
+  $file=Get-Item -LiteralPath $Path -Force
+  if(($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $file.Length -gt 4MB){return $unavailable}
+  $prefix='PowerShell worker failure diagnostic: '
+  $lines=@(Get-Content -LiteralPath $Path -Encoding UTF8 | Where-Object {$_.StartsWith($prefix)})
+  if($lines.Count -ne 1){return $unavailable}
+  $item=$lines[0].Substring($prefix.Length)|ConvertFrom-Json
+  if($item.SchemaVersion -isnot [int] -or $item.SchemaVersion -ne 1 -or $item.TestFile -cne 'test/powershell/integration/ci_runner_tests.ps1' -or $item.WorkerIndex -isnot [int] -or $item.WorkerIndex -ne 0 -or $item.Engine -cne 'powershell' -or $item.NativeExitCode -isnot [int] -or $item.NativeExitCode -eq 0 -or $item.CompletedAssertions -isnot [int] -or $item.CompletedAssertions -lt 1 -or $item.CompletedAssertions -gt 100000){return $unavailable}
+  $indices=@($item.FailedAssertionIndices)
+  if($indices.Count -ne 1 -or $indices[0] -isnot [int] -or $indices[0] -lt 1 -or $indices[0] -gt $item.CompletedAssertions){return $unavailable}
+  return ('@@SAFE_NESTED_CI@@worker:'+$indices[0])
+ }catch{return $unavailable}
+}
 function Write-CIFailureDiagnostics {
- param([Parameter(Mandatory=$true)][string]$ReportDirectory,[ValidateSet('Unit.uac_helpers','Integration.managed_catalog','Integration.collector_self_coverage','Integration.driver_source_coverage','Integration.network_helpers_coverage','Integration.powershell_coverage','Integration.powershell_engine','Integration.uac_updates_coverage','Integration.verification_coverage','Unit.terminal_helpers','Unit.driver_cache_cleanup','Integration.init_runtime','Integration.driver_full_source_coverage','Integration.report_bundle_publication')][string[]]$SuiteNames=@('Unit.uac_helpers','Integration.managed_catalog'))
+ param([Parameter(Mandatory=$true)][string]$ReportDirectory,[ValidateSet('Unit.uac_helpers','Integration.managed_catalog','Integration.collector_self_coverage','Integration.driver_source_coverage','Integration.network_helpers_coverage','Integration.powershell_coverage','Integration.powershell_engine','Integration.uac_updates_coverage','Integration.verification_coverage','Unit.terminal_helpers','Unit.driver_cache_cleanup','Integration.init_runtime','Integration.driver_full_source_coverage','Integration.report_bundle_publication','Integration.ci_runner_coverage')][string[]]$SuiteNames=@('Unit.uac_helpers','Integration.managed_catalog'))
  $directory=[IO.Path]::GetFullPath($ReportDirectory)
  if((Test-Path -LiteralPath $directory) -and ((Get-Item -LiteralPath $directory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Diagnostic report directory cannot be a reparse point.'}
  foreach($suite in $SuiteNames){
@@ -59,6 +76,12 @@ function Write-CIFailureDiagnostics {
   Write-Output ('CI diagnostic: '+$name)
   if(-not(Test-Path -LiteralPath $path -PathType Leaf)){Write-Output '    unavailable';continue}
   if((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Diagnostic suite log cannot be a reparse point.'}
+  if($suite -eq 'Integration.ci_runner_coverage'){
+   if((Get-Item -LiteralPath $path).Length -gt 4MB){Write-Output '    unavailable';continue}
+   $markers=@(Get-Content -LiteralPath $path -Encoding UTF8 | Where-Object {$_.StartsWith('@@SAFE_NESTED_CI@@')})
+   if($markers.Count -eq 1 -and $markers[0] -cmatch '^@@SAFE_NESTED_CI@@worker:([1-9][0-9]{0,5})$' -and [int]$Matches[1] -le 100000){Write-Output ('    worker:'+$Matches[1])}else{Write-Output '    unavailable'}
+   continue
+  }
   if($suite -eq 'Integration.report_bundle_publication'){
    if((Get-Item -LiteralPath $path).Length -gt 4MB){Write-Output '    unavailable';continue}
    if(@(Get-Content -LiteralPath $path -Encoding UTF8|Where-Object {$_ -ceq '@@SAFE_FIXTURE_DIAG@@fixture_export:go_fixture_failed'}).Count){Write-Output '    fixture_export:go_fixture_failed'}

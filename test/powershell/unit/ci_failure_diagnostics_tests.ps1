@@ -59,3 +59,19 @@ Assert ((Get-CINestedCoverageDiagnostic -Path $nested) -ceq '@@SAFE_NESTED_CI@@u
 $safe=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
 Assert ($safe.Contains('unavailable') -and -not $safe.Contains('worker:2') -and -not $safe.Contains('PRIVATE-SENTINEL')) '重複外層標記不可當成可信診斷'
 Assert ($workflow.Contains("'Integration.ci_runner_coverage'")) '失敗 workflow 接入限型別巢狀診斷'
+$wrapper=Join-Path $temp 'nested_wrapper.ps1';$capture=Join-Path $temp 'nested_wrapper.private.log'
+$wrapperText=@'
+function powershell.exe {
+ Write-Output 'PRIVATE-SENTINEL C:\Users\hidden'
+ Write-Output 'PowerShell worker failure diagnostic: {"SchemaVersion":1,"TestFile":"test/powershell/integration/ci_runner_tests.ps1","WorkerIndex":0,"Engine":"powershell","NativeExitCode":1,"CompletedAssertions":2,"FailedAssertionIndices":[2],"Locations":[],"ExceptionTypes":[]}'
+ $global:LASTEXITCODE=1
+}
+try { & '__SUITE__'; exit 0 } catch { exit 1 }
+'@
+$wrapperText=$wrapperText.Replace('__SUITE__',(Join-Path $root 'test/powershell/integration/ci_runner_coverage_tests.ps1').Replace("'","''"))
+[IO.File]::WriteAllText($wrapper,$wrapperText,[Text.UTF8Encoding]::new($true))
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $wrapper *> $capture
+$nestedExit=$LASTEXITCODE
+[IO.File]::Copy($capture,$nestedSuite,$true)
+$safe=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
+Assert ($nestedExit -eq 1 -and $safe.Contains('worker:2') -and -not $safe.Contains('PRIVATE-SENTINEL') -and -not $safe.Contains('C:\Users')) '真外層 suite 失敗保留非零退出並由 CI 安全顯示巢狀序號'
