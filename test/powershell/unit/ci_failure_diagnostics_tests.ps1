@@ -91,3 +91,10 @@ $invalidRecords=@(
 $acceptedInvalid=0
 foreach($invalid in $invalidRecords){[IO.File]::WriteAllText($nested,$invalid);if((Get-CINestedCoverageDiagnostic -Path $nested) -cne '@@SAFE_NESTED_CI@@unavailable'){$acceptedInvalid++}}
 Assert ($acceptedInvalid -eq 0) '嚴格拒絕額外重複欄位、錯誤陣列與不符該 suite 的可選診斷'
+$typed=$valid.Replace('"ExceptionTypes":[]','"ExceptionTypes":["RuntimeException"]')
+[IO.File]::WriteAllText($nested,$typed)
+$typedRecord=Get-CINestedCoverageDiagnostic -Path $nested
+Assert ($typedRecord -ceq '@@SAFE_NESTED_CI@@worker:2:RuntimeException') '既有固定錯誤型別可與斷言序號共同呈現'
+[IO.File]::WriteAllText($nestedSuite,$typedRecord)
+$typedOutput=@(Write-CIFailureDiagnostics -ReportDirectory $temp -SuiteNames @('Integration.ci_runner_coverage')) -join "`n"
+Assert ($typedOutput.Contains('worker:2:RuntimeException') -and -not $typedOutput.Contains('PRIVATE-SENTINEL')) '外層只顯示固定白名單型別'
