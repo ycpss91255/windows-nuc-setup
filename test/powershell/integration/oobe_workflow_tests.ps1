@@ -7,6 +7,9 @@ function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name
 $rollup=[regex]::Match($workflow,'(?ms)^  ci-rollup:\r?\n(?<body>.*?)^  release:').Groups['body'].Value
 $scriptText=([regex]::Match($rollup,'(?ms)        run: \|\r?\n(?<body>.*)$').Groups['body'].Value -replace '(?m)^          ','').Trim()
 $priorCoverageResult=$env:COVERAGE_RESULT
+$priorSummaryPath=$env:GITHUB_STEP_SUMMARY
+$summaryPath=Join-Path ([IO.Path]::GetTempPath()) ('oobe_rollup_summary_'+[guid]::NewGuid().ToString('N')+'.md')
+$env:GITHUB_STEP_SUMMARY=$summaryPath
 try {
 $env:TEST_RESULT='success';$env:REQUIREMENTS_RESULT='success';$env:DOCKER_RESULT='success';$env:POWERSHELL_COVERAGE_RESULT='success';$env:OOBE_PAYLOAD_RESULT='failure';$env:COVERAGE_RESULT='success'
 $rejected=$false;try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$_.Exception.Message -match 'Payload$'}
@@ -23,7 +26,7 @@ foreach($state in @('failure','cancelled','skipped','')){
  try{& ([scriptblock]::Create($scriptText))}catch{$rejected=$_.Exception.Message -match 'Coverage$'}
  Assert $rejected ('actual ci-rollup rejects incomplete final coverage aggregation: '+$state)
 }
-}finally{$env:COVERAGE_RESULT=$priorCoverageResult}
+}finally{$env:COVERAGE_RESULT=$priorCoverageResult;$env:GITHUB_STEP_SUMMARY=$priorSummaryPath;if(Test-Path -LiteralPath $summaryPath){[IO.File]::Delete($summaryPath)}}
 $job=[regex]::Match($workflow,'(?ms)^  oobe_payload_inspection:\r?\n(?<body>.*?)(?=^  [a-z][a-z_-]+:)').Groups['body'].Value
 Assert ($job -match 'runs-on: windows-2022' -and $job -notmatch '(?m)^    needs:') 'payload inspection runs independently on Windows'
 Assert ($job.Contains('verify_oobe_payload.ps1') -and $job.Contains('payload_baseline.json') -and $job.Contains('if: always()') -and $job.Contains('retention-days: 7')) 'CI invokes real reader with reviewed baseline and preserves failure evidence seven days'
