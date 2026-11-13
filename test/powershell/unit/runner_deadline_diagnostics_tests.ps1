@@ -4,6 +4,15 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 . (Join-Path $root 'script/docker/runner_daemon_library.ps1')
 function Assert([bool]$Passed,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Passed}|ConvertTo-Json -Compress));if(-not $Passed){throw $Name}}
 $hosted=@{GITHUB_ACTIONS='true';RUNNER_ENVIRONMENT='github-hosted';RUNNER_OS='Windows'}
+foreach($category in @('cleanup-process-active','cleanup-budget-exhausted','cleanup-output-incomplete','cleanup-operation-error')){
+ $script:calls=@();$script:kind=$category;$record=$null
+ try{Wait-HostedWindowsDocker -Identity $hosted -InvokeNative {param($f,$a,$t);$script:calls+=@($f);throw [InvalidOperationException]::new('runner-'+$script:kind)}}catch{$record=$_}
+ Assert ($null -ne $record -and $record.Exception.Message -match ('category='+$category+'\b') -and $record.Exception.Message -notmatch 'PRIVATE|Users|stderr' -and $null -eq $record.Exception.InnerException) ('cleanup 診斷分類且不洩漏原文 '+$category)
+ Assert ($script:calls.Count -eq 1 -and $script:calls[0] -eq 'docker.exe') 'cleanup 不確定時不得操作服務'
+}
+$script:calls=@();$record=$null
+try{Wait-HostedWindowsDocker -Identity $hosted -InvokeNative {param($f,$a,$t);$script:calls+=@($f);throw [Exception]::new('runner-cleanup-process-active PRIVATE_C:\Users\hidden')}}catch{$record=$_}
+Assert ($record.Exception.Message -match 'category=native-error\b' -and $record.Exception.Message -notmatch 'PRIVATE|Users|hidden' -and $script:calls.Count -eq 1) '未知例外即使含類似文字仍維持安全失敗'
 foreach($wanted in @('probe','query','stop','start')){
  $script:target=$wanted;$script:stopped=$false
  $native={param($File,$Arguments,$TimeoutMilliseconds)
@@ -42,6 +51,17 @@ try {
   $output=@(& (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'script/docker/runner_daemon.ps1') 2>&1 | ForEach-Object {[string]$_});$code=$LASTEXITCODE
  }finally{$env:PATH=$oldPath;$env:GITHUB_ACTIONS=$oldActions;$ErrorActionPreference=$oldPreference}
  Assert ($code -ne 0 -and ($output -join ' ') -notmatch 'PRIVATE_SENTINEL|Users|System32') 'actual entry fails without leaking native stdout stderr or private paths'
+ Copy-Item -LiteralPath (Join-Path $root 'script/docker/runner_daemon.ps1') -Destination (Join-Path $owned 'entry.ps1')
+ [IO.File]::WriteAllText((Join-Path $owned 'runner_daemon_library.ps1'), 'function Wait-HostedWindowsDocker { throw ("Docker readiness stage=probe category="+$env:OWNED_CLEANUP_CATEGORY+" elapsed_ms=1 remaining_ms=999") }')
+ $oldPath=$env:PATH;$oldCategory=$env:OWNED_CLEANUP_CATEGORY;$oldPreference=$ErrorActionPreference
+ try {
+  $env:PATH=$owned+';'+$oldPath;$ErrorActionPreference='Continue'
+  foreach($category in @('cleanup-process-active','cleanup-budget-exhausted','cleanup-output-incomplete','cleanup-operation-error')){
+   $env:OWNED_CLEANUP_CATEGORY=$category
+   $output=@(& (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File (Join-Path $owned 'entry.ps1') 2>&1 | ForEach-Object {[string]$_});$code=$LASTEXITCODE
+   Assert ($code -eq 1 -and ($output -join ' ') -match ('category='+$category+'\b') -and ($output -join ' ') -notmatch 'PRIVATE_SENTINEL|Users|System32') ('entry preserves safe cleanup category and failure '+$category)
+  }
+ } finally {$env:PATH=$oldPath;$env:OWNED_CLEANUP_CATEGORY=$oldCategory;$ErrorActionPreference=$oldPreference}
 }finally{
  . (Join-Path $root 'test/powershell/support/runner_fixture.ps1')
  $checked=Assert-RunnerOwnedDirectory -Path $owned -Parent $ownedParent -Name $ownedName
