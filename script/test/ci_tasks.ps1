@@ -44,9 +44,9 @@ function Assert-CIContainerReport {
  if($report.Environment -notmatch 'Windows container'){throw '報告未標示實際 Windows 容器環境。'}
 }
 function Get-CIPortalParameters {
- param([string]$Repository,[string]$OutputDirectory,[string]$EventRef,[string]$RunId)
+ param([string]$Repository,[string]$OutputDirectory,[string]$EventRef,[string]$RunId,[string]$EventName,[int]$RunAttempt)
  $parameters=@{Repository=$Repository;OutputDirectory=$OutputDirectory}
- if($EventRef -eq 'refs/heads/main'){$parameters.MainRunId=$RunId}
+ if($EventRef -eq 'refs/heads/main'){$parameters.MainRunId=$RunId;if($EventName){$parameters.ExpectedMainEvent=$EventName;$parameters.ExpectedMainAttempt=$RunAttempt}}
  return $parameters
 }
 

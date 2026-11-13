@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-param([Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$MainRunId)
+param([Parameter(Mandatory=$true)][ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')][string]$Repository,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$MainRunId,[ValidateSet('push','workflow_dispatch')][string]$ExpectedMainEvent='push',[int]$ExpectedMainAttempt=0)
 $ErrorActionPreference='Stop'
 $out=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 if(Test-Path -LiteralPath $out){throw '證據下載目錄必須不存在。'}
@@ -64,7 +64,7 @@ if(-not $MainRunId){
 if($MainRunId){
  if($MainRunId -notmatch '^[0-9]+$'){throw 'Run ID 不合法。'}
  $run=(& gh api ('repos/'+$Repository+'/actions/runs/'+$MainRunId))|ConvertFrom-Json
- if($LASTEXITCODE -ne 0 -or $run.head_sha -cne $mainSha -or $run.head_branch -cne 'main' -or $run.event -cne 'push'){throw 'main run 來源不符。'}
+ if($LASTEXITCODE -ne 0 -or ($run.id -isnot [int] -and $run.id -isnot [long]) -or [string]$run.id -cne $MainRunId -or ($run.run_attempt -isnot [int] -and $run.run_attempt -isnot [long]) -or $run.run_attempt -lt 1 -or $run.head_sha -cne $mainSha -or $run.head_branch -cne 'main' -or $run.event -cne $ExpectedMainEvent -or ($ExpectedMainEvent -ceq 'workflow_dispatch' -and $ExpectedMainAttempt -lt 1) -or ($ExpectedMainAttempt -gt 0 -and $run.run_attempt -ne $ExpectedMainAttempt)){throw 'main run 來源不符。'}
  $artifacts=(& gh api ('repos/'+$Repository+'/actions/runs/'+$MainRunId+'/artifacts'))|ConvertFrom-Json
  $artifact=@($artifacts.artifacts|Where-Object {$_.name -eq ('windows-test-reports-'+$MainRunId+'-'+$run.run_attempt) -and -not $_.expired})
  if($artifact.Count -eq 1){
@@ -73,6 +73,6 @@ if($MainRunId){
   if($LASTEXITCODE -ne 0){throw 'main 品質快照下載失敗。'}
   $snapshot=Get-Content (Join-Path $mainDir 'summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
   if($snapshot.Commit -cne $mainSha){throw 'main 快照提交不符。'}
- }
+ }else{throw 'main 同次品質工件缺少或重複。'}
 }
 [pscustomobject]@{CatalogPath=(Join-Path $out 'catalog.json');MainSnapshotPath=(Join-Path $out 'main/summary.json')}
