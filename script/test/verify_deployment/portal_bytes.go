@@ -12,7 +12,7 @@ import (
 )
 
 // verifyPortalBytes compares public pages to the already validated same-run portal artifact.
-func verifyPortalBytes(read a.Reader, root string) error {
+func verifyPortalBytes(read a.Reader, root, requiredVersion string) error {
 	info, err := os.Lstat(root)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("invalid portal artifact root")
@@ -55,12 +55,16 @@ func verifyPortalBytes(read a.Reader, root string) error {
 		return err
 	}
 	seen := map[string]bool{}
+	foundRequired := false
 	versionPattern := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$`)
 	for _, row := range rows {
 		if !versionPattern.MatchString(row.Version) || seen[row.Version] || row.Path != "versions/"+row.Version+"/index.html" {
 			return fmt.Errorf("invalid portal version entry")
 		}
 		seen[row.Version] = true
+		if row.Version == requiredVersion && row.Status == "Verified" {
+			foundRequired = true
+		}
 		if row.Status == "Verified" {
 			for _, name := range []string{"index.html", "summary.json", "go_coverage.out"} {
 				if err = compare("versions/" + row.Version + "/" + name); err != nil {
@@ -68,6 +72,9 @@ func verifyPortalBytes(read a.Reader, root string) error {
 				}
 			}
 		}
+	}
+	if requiredVersion != "" && !foundRequired {
+		return fmt.Errorf("required release is not verified in portal")
 	}
 	return compare("versions.json")
 }

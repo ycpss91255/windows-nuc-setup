@@ -59,7 +59,7 @@ func TestPortalArtifactPublicBytes(t *testing.T) {
 				}
 				return b, nil
 			}
-			err := verifyPortalBytes(read, root)
+			err := verifyPortalBytes(read, root, "")
 			if (err == nil) != (kind == "valid") {
 				t.Fatalf("kind=%s error=%v", kind, err)
 			}
