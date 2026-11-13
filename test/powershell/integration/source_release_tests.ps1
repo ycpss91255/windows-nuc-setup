@@ -102,4 +102,32 @@ Refuse {Get-ReleaseNotes v1.2.3 ("## [v1.2.3]`n### Added`n- "+('x'*125001))} '�
 $current=([IO.File]::ReadAllText((Join-Path $root '.version'))).Trim()
 $currentNotes=Get-ReleaseNotes $current ([IO.File]::ReadAllText((Join-Path $root 'doc/changelog/changelog.md')))
 Assert ($currentNotes.Length -gt 0) '本儲存庫 .version 對應非空版本說明'
+function Test-DriverDownloadGuidance([string]$Text,[string]$Version,[string]$AssetName){
+ $section=[regex]::Match($Text,'(?ms)^### 準備獨立驅動包\s*$(.*?)(?=^### |\z)').Groups[1].Value
+ if(-not $section){return $false}
+ $fixed=@([regex]::Matches($section,'windows_driver_nuc8_v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?\.zip')|ForEach-Object {$_.Value})
+ if(@($fixed|Where-Object {$_ -cne $AssetName}).Count){return $false}
+ $releases=@([regex]::Matches($section,'v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?(?=\s+Release)')|ForEach-Object {$_.Value})
+ if(@($releases|Where-Object {$_ -cne $Version}).Count){return $false}
+ $urls=@([regex]::Matches($section,'/releases/(?:tag|download)/(v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?)')|ForEach-Object {$_.Groups[1].Value})
+ if(@($urls|Where-Object {$_ -cne $Version}).Count){return $false}
+ return $fixed.Count -gt 0 -or ($section.Contains('windows_driver_nuc8_<version>.zip') -and $section.Contains('version 包含 v'))
+}
+function Test-CurrentDriverGuidance([string]$Text,[string]$Version,[object[]]$Assets){
+ $nucAssets=@($Assets|Where-Object {$_.ProfileId -ceq 'nuc8i7hvk_hnk'})
+ foreach($asset in $nucAssets){if(-not (Test-DriverDownloadGuidance $Text $Version $asset.Name)){return $false}}
+ return $true
+}
+. (Join-Path $root 'script/release/driver_release_library.ps1')
+$currentAssets=@(Get-ReleaseDriverAssets -Path (Join-Path $root 'script/release/driver_release_assets.json') -Version $current)
+$readme=[IO.File]::ReadAllText((Join-Path $root 'readme.md'))
+$otherAsset=[pscustomobject]@{Name='windows_driver_other.zip';ProfileId='other_profile'}
+$nucAsset=[pscustomobject]@{Name=('windows_driver_nuc8_'+$current+'.zip');ProfileId='nuc8i7hvk_hnk'}
+Assert (Test-CurrentDriverGuidance $readme $current @($nucAsset,$otherAsset)) '其他機型資產不影響 NUC 下載指引'
+Assert (Test-CurrentDriverGuidance $readme $current @($otherAsset)) '版本未宣告 NUC 資產時不要求 NUC 指引'
+Assert (Test-CurrentDriverGuidance $readme $current @()) '版本不宣告任何驅動資產時不要求 NUC 指引'
+Assert (Test-CurrentDriverGuidance $readme $current $currentAssets) '已宣告 NUC 驅動的下載指引使用當前版或含 v 的版本模板'
+Assert (-not (Test-DriverDownloadGuidance "### 準備獨立驅動包`n下載 v0.0.1 Release 的 windows_driver_nuc8_v0.0.1.zip`n### 下一節`n" $current $nucAsset.Name)) '驅動下載區指向其他固定版本必須拒絕'
+Assert (-not (Test-DriverDownloadGuidance "### 準備獨立驅動包`nwindows_driver_nuc8_<version>.zip，version 包含 v；https://github.com/ycpss91255/windows_setup/releases/tag/v0.0.1`n### 下一節`n" $current $nucAsset.Name)) '驅動下載區指向其他固定版本 URL 必須拒絕'
+Assert (Test-DriverDownloadGuidance "### 準備獨立驅動包`nwindows_driver_nuc8_<version>.zip，version 包含 v`n### 下一節`n" $current $nucAsset.Name) '含 v 的版本模板為有效下載指引'
 Write-Host ('ALL PASS: '+$script:count+' release assertions; only temporary fixture repository changed.')
