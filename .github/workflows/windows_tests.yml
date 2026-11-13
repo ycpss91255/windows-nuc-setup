@@ -417,12 +417,9 @@ jobs:
           COVERAGE_RESULT: ${{ needs.coverage-aggregation.result }}
         run: |
           . .\script\test\ci_tasks.ps1
+          . .\script\test\ci_quality_summary.ps1
           $states=@{Tests=$env:TEST_RESULT;Requirements=$env:REQUIREMENTS_RESULT;Docker=$env:DOCKER_RESULT;Payload=$env:OOBE_PAYLOAD_RESULT;PowerShellCoverage=$env:POWERSHELL_COVERAGE_RESULT;Coverage=$env:COVERAGE_RESULT}
-          if(@($states.Values | Where-Object {$_ -cne 'success'}).Count){
-            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 -Value '## 品質檢查失敗或未完成'
-            foreach($key in @($states.Keys | Sort-Object)){Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 -Value ("- ${key}: $($states[$key])")}
-            if($env:COVERAGE_RESULT -cne 'success'){Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 -Value '**未提供完整量測。**'}
-          }
+          Write-CIQualityFailureSummary -States $states -SummaryPath $env:GITHUB_STEP_SUMMARY
           Assert-CIResults $states
 
   release:

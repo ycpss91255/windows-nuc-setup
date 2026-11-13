@@ -22,3 +22,11 @@ function Invoke-CIShardTimed {
   try {Add-Content -LiteralPath $SummaryPath -Encoding UTF8 -Value ("## PowerShell 分片 $ShardIndex`n`n分片量測階段耗時：$([Math]::Round($timer.Elapsed.TotalSeconds,1)) 秒；結果：$state。") } catch {if($completed){throw}}
  }
 }
+function Write-CIQualityFailureSummary {
+ param([Parameter(Mandatory=$true)][hashtable]$States,[Parameter(Mandatory=$true)][string]$SummaryPath)
+ if(@($States.Values | Where-Object {$_ -cne 'success'}).Count){
+  Add-Content -LiteralPath $SummaryPath -Encoding UTF8 -Value '## 品質檢查失敗或未完成'
+  foreach($key in @($States.Keys | Sort-Object)){Add-Content -LiteralPath $SummaryPath -Encoding UTF8 -Value ("- ${key}: $($States[$key])")}
+  if($States.Coverage -cne 'success'){Add-Content -LiteralPath $SummaryPath -Encoding UTF8 -Value '**未提供完整量測。**'}
+ }
+}
