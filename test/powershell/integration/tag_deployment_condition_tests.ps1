@@ -28,3 +28,4 @@ foreach($c in @(
  @{Event='workflow_dispatch';Ref='refs/heads/feature';Deploy='success';Expected=$false;Name='manual feature'},
  @{Event='push';Ref='refs/heads/feature';Deploy='success';Expected=$false;Name='feature branch'}
 )){Assert ((Evaluate $c.Event $c.Ref $c.Deploy) -eq $c.Expected) ('deployment condition: '+$c.Name)}
+Assert ($job.Contains('quality-portal-${{ github.run_id }}-${{ github.run_attempt }}') -and $job.Contains('--portal-dir')) 'main 公開驗收必須讀取同次同 attempt 入口產物'
