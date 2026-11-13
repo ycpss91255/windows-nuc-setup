@@ -10,7 +10,7 @@ import (
 
 func TestPortalArtifactPublicBytes(t *testing.T) {
 	const catalog = `[{"Version":"v0.2.5","Status":"Verified","Path":"versions/v0.2.5/index.html"},{"Version":"v0.2.0","Status":"Unknown","Path":"versions/v0.2.0/index.html"}]`
-	for _, kind := range []string{"valid", "required_verified", "required_missing", "required_unknown", "stale_catalog", "stale_page", "stale_summary", "stale_profile", "missing_public", "missing_local", "duplicate", "bad_version", "bad_path", "symlink"} {
+	for _, kind := range []string{"valid", "required_verified", "required_missing", "required_unknown", "stale_catalog", "stale_page", "stale_summary", "stale_profile", "missing_public", "missing_local", "duplicate", "bad_version", "bad_path", "bad_status", "symlink"} {
 		t.Run(kind, func(t *testing.T) {
 			root := t.TempDir()
 			files := map[string][]byte{"versions.json": []byte(catalog), "versions/v0.2.5/index.html": []byte("verified version page"), "versions/v0.2.5/summary.json": []byte("tag report summary"), "versions/v0.2.5/go_coverage.out": []byte("tag profile")}
@@ -25,6 +25,9 @@ func TestPortalArtifactPublicBytes(t *testing.T) {
 			}
 			if kind == "required_unknown" {
 				files["versions.json"] = []byte(`[{"Version":"v0.2.5","Status":"Unknown","Path":"versions/v0.2.5/index.html"}]`)
+			}
+			if kind == "bad_status" {
+				files["versions.json"] = []byte(`[{"Version":"v0.2.5","Status":"Unexpected","Path":"versions/v0.2.5/index.html"}]`)
 			}
 			for name, data := range files {
 				path := filepath.Join(root, filepath.FromSlash(name))
