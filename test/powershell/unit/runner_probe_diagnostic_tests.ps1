@@ -9,3 +9,14 @@ $names=@(Get-RunnerProbeDiagnostic -Phase 'query' -HasPid $true -Message 'Docker
 Assert (($names -join '|') -eq 'probe diagnostic phase=query|probe diagnostic pid=present|probe diagnostic category=process-deadline') '辨識已知階段 PID 與受控 deadline 類別'
 $names=@(Get-RunnerProbeDiagnostic -Phase 'private C:\secret' -HasPid $false -Message 'secret C:\private')
 Assert (($names -join '|') -eq 'probe diagnostic phase=unknown|probe diagnostic pid=absent|probe diagnostic category=unknown') '未知內容不得進入公開診斷'
+Assert ($null -ne (Get-Command Get-RunnerProbeNativeKind -ErrorAction SilentlyContinue)) '首次原生呼叫提供受限內部例外分類'
+foreach($case in @(
+ @{Message='runner-process-deadline-cleaned';Expected='process-cleaned'},
+ @{Message='runner-process-deadline';Expected='process-deadline'},
+ @{Message='runner-output-deadline';Expected='output-deadline'}
+)) {Assert ((Get-RunnerProbeNativeKind ([TimeoutException]::new($case.Message))) -ceq $case.Expected) ('固定 timeout 類別 '+$case.Expected)}
+Assert ((Get-RunnerProbeNativeKind ([Exception]::new('Runner prerequisite process cleanup failed.'))) -ceq 'cleanup-unconfirmed') '確認清理失敗分類'
+Assert ((Get-RunnerProbeNativeKind ([Exception]::new('runner-process-deadline-cleaned'))) -ceq 'unknown') '錯誤型別不能偽造已清理訊號'
+Assert ((Get-RunnerProbeNativeKind ([Exception]::new('C:\private\secret'))) -ceq 'unknown') '未知例外不輸出私人內容'
+$names=@(Get-RunnerProbeDiagnostic -Phase 'probe' -HasPid $true -Message 'private' -NativeKind 'private C:\secret' -NativeElapsedMilliseconds 123)
+Assert ($names -contains 'probe diagnostic native_kind=unknown' -and $names -contains 'probe diagnostic native_elapsed_ms=123' -and ($names -join '|') -notmatch 'private|secret') '僅輸出受控分類與實際計時整數'
