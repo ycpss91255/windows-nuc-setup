@@ -58,7 +58,7 @@ func verifyPortalBytes(read a.Reader, root, requiredVersion string) error {
 	foundRequired := false
 	versionPattern := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$`)
 	for _, row := range rows {
-		if !versionPattern.MatchString(row.Version) || seen[row.Version] || row.Path != "versions/"+row.Version+"/index.html" {
+		if !versionPattern.MatchString(row.Version) || seen[row.Version] || row.Path != "versions/"+row.Version+"/index.html" || (row.Status != "Verified" && row.Status != "Unknown" && row.Status != "Invalid") {
 			return fmt.Errorf("invalid portal version entry")
 		}
 		seen[row.Version] = true
