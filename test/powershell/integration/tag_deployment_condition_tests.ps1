@@ -10,6 +10,7 @@ function Evaluate([string]$Event,[string]$Ref,[string]$Deployment){
  $expr=$expr.Replace('always()', '$true')
  $expr=$expr.Replace("startsWith(github.ref, 'refs/tags/v')", $(if($Ref.StartsWith('refs/tags/v')){'$true'}else{'$false'}))
  $expr=$expr.Replace("github.event_name == 'push'", $(if($Event -ceq 'push'){'$true'}else{'$false'}))
+ $expr=$expr.Replace("github.event_name == 'workflow_dispatch'", $(if($Event -ceq 'workflow_dispatch'){'$true'}else{'$false'}))
  $expr=$expr.Replace("github.ref == 'refs/heads/main'", $(if($Ref -ceq 'refs/heads/main'){'$true'}else{'$false'}))
  $expr=$expr.Replace("needs.publish-reports.result == 'success'", $(if($Deployment -ceq 'success'){'$true'}else{'$false'}))
  $expr=$expr.Replace('&&','-and').Replace('||','-or')
@@ -21,6 +22,9 @@ foreach($c in @(
  @{Event='push';Ref='refs/tags/v0.2.4';Deploy='success';Expected=$true;Name='tag success'},
  @{Event='push';Ref='refs/tags/v0.2.4';Deploy='failure';Expected=$false;Name='tag failed deploy'},
  @{Event='pull_request';Ref='refs/tags/v0.2.4';Deploy='success';Expected=$false;Name='PR tag-like ref'},
- @{Event='workflow_dispatch';Ref='refs/heads/main';Deploy='success';Expected=$false;Name='manual main'},
+ @{Event='workflow_dispatch';Ref='refs/heads/main';Deploy='success';Expected=$true;Name='manual main'},
+ @{Event='workflow_dispatch';Ref='refs/heads/main';Deploy='failure';Expected=$false;Name='manual main failed deployment'},
+ @{Event='workflow_dispatch';Ref='refs/tags/v0.2.5';Deploy='success';Expected=$false;Name='manual tag'},
+ @{Event='workflow_dispatch';Ref='refs/heads/feature';Deploy='success';Expected=$false;Name='manual feature'},
  @{Event='push';Ref='refs/heads/feature';Deploy='success';Expected=$false;Name='feature branch'}
 )){Assert ((Evaluate $c.Event $c.Ref $c.Deploy) -eq $c.Expected) ('deployment condition: '+$c.Name)}
