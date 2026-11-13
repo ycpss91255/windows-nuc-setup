@@ -29,3 +29,5 @@ foreach($c in @(
  @{Event='push';Ref='refs/heads/feature';Deploy='success';Expected=$false;Name='feature branch'}
 )){Assert ((Evaluate $c.Event $c.Ref $c.Deploy) -eq $c.Expected) ('deployment condition: '+$c.Name)}
 Assert ($job.Contains('quality-portal-${{ github.run_id }}-${{ github.run_attempt }}') -and $job.Contains('--portal-dir')) 'main 公開驗收必須讀取同次同 attempt 入口產物'
+$latestStep=[regex]::Match($job,'(?ms)^      - name: 取得不可變最新版本\s*$(.*?)(?=^      - name:|\z)').Groups[1].Value
+Assert ($latestStep.Contains("github.event_name == 'workflow_dispatch'") -and $latestStep.Contains("github.ref == 'refs/heads/main'") -and $latestStep.Contains('/releases/latest') -and $job.Contains('--latest-release-metadata')) '僅手動 main 以獨立 latest API 要求不可變最新版'
