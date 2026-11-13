@@ -413,7 +413,7 @@ jobs:
 
   release:
     name: 發布 GitHub 來源版本
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     needs: [ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 10
@@ -485,7 +485,7 @@ jobs:
 
   build-portal:
     name: 建立 main 與不可變版本品質索引
-    if: always() && needs.ci-rollup.result == 'success' && github.event_name == 'push' && (github.ref == 'refs/heads/main' || (startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
+    if: always() && needs.ci-rollup.result == 'success' && ((github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && needs.release.result == 'success'))
     needs: [coverage-aggregation, requirements-gate, docker-tests, release, ci-rollup]
     runs-on: windows-2022
     timeout-minutes: 15
@@ -523,10 +523,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           EVENT_REF: ${{ github.ref }}
+          EVENT_NAME: ${{ github.event_name }}
           CURRENT_RUN: ${{ github.run_id }}
+          CURRENT_ATTEMPT: ${{ github.run_attempt }}
         run: |
           . .\script\test\ci_tasks.ps1
-          $parameters = Get-CIPortalParameters -Repository $env:GH_REPO -OutputDirectory "$env:RUNNER_TEMP\portal-inputs" -EventRef $env:EVENT_REF -RunId $env:CURRENT_RUN
+          $parameters = Get-CIPortalParameters -Repository $env:GH_REPO -OutputDirectory "$env:RUNNER_TEMP\portal-inputs" -EventRef $env:EVENT_REF -RunId $env:CURRENT_RUN -EventName $env:EVENT_NAME -RunAttempt ([int]$env:CURRENT_ATTEMPT)
           $inputs = .\script\report\get_portal_inputs.ps1 @parameters
           .\script\report\build_portal.ps1 -CatalogPath $inputs.CatalogPath -MainSnapshotPath $inputs.MainSnapshotPath -OutputDirectory "$env:RUNNER_TEMP\quality-portal" -RequireGoCoverage
       - name: 保存去識別 portal 供 Linux 部署
@@ -570,11 +572,12 @@ jobs:
   verify-deployment:
     name: 公開部署需求驗收
     needs: [publish-reports]
-    if: always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && needs.publish-reports.result == 'success'
+    if: always() && ((github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))) && needs.publish-reports.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 7
     permissions:
       contents: read
+      actions: read
     steps:
       - name: 取得本次驗收程式與 README
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -585,13 +588,27 @@ jobs:
         with:
           go-version: '1.27.3'
           cache: false
+      - name: 取得同次已驗證入口產物
+        if: github.ref == 'refs/heads/main'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: quality-portal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verified-portal
+      - name: 取得不可變最新版本
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$RELEASE_REPO/releases/latest" > "$RUNNER_TEMP/latest-release.json"
       - name: 匿名核對公開網站與本次來源
         if: github.ref == 'refs/heads/main'
         env:
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LATEST_RELEASE_METADATA: ${{ github.event_name == 'workflow_dispatch' && format('{0}/latest-release.json', runner.temp) || '' }}
         run: |
-          go run ./script/test/verify_deployment --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL"
+          go run ./script/test/verify_deployment --base-url https://ycpss91255.github.io/windows_setup/ --readme readme.md --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --portal-dir "$RUNNER_TEMP/verified-portal" --latest-release-metadata "$LATEST_RELEASE_METADATA"
 
       - name: 匿名核對公開版本與不可變證據
         if: startsWith(github.ref, 'refs/tags/v')
