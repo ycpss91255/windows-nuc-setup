@@ -234,10 +234,7 @@ func run(args []string, out io.Writer, now time.Time) error {
 			_, e = fmt.Fprintln(out, "預覽：", p)
 			return e
 		}
-		if beforeDeleteHook != nil {
-			beforeDeleteHook()
-		}
-		return os.RemoveAll(p)
+		return safeDelete(root, name, m.ID, now)
 	default:
 		return errors.New("unknown command")
 	}

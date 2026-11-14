@@ -202,7 +202,9 @@ func TestDeleteRejectsReplacementAfterValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	var swapErr error
+	called := false
 	beforeDeleteHook = func() {
+		called = true
 		if swapErr = os.Rename(path, filepath.Join(root, "moved")); swapErr != nil {
 			return
 		}
@@ -210,6 +212,9 @@ func TestDeleteRejectsReplacementAfterValidation(t *testing.T) {
 	}
 	defer func() { beforeDeleteHook = nil }()
 	err := run([]string{"clean", root, "item", "--delete"}, &out, now)
+	if !called {
+		t.Fatalf("delete hook not reached: %v", err)
+	}
 	if swapErr == nil {
 		if err == nil {
 			t.Error("replacement accepted during deletion")
