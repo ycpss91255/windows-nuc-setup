@@ -3,11 +3,11 @@ $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
 . (Join-Path $root 'script/docker/container_health.ps1')
+. (Join-Path $root 'script/test/ci_tasks.ps1')
 $script:called=0
 function Assert-CIRequiredTools {param([switch]$Managed) $script:called++;if(-not $Managed){throw 'managed tool check required'}}
 Assert (Test-ContainerToolHealth) 'successful tool responses yield healthy'
 Assert ($script:called -eq 1) 'probe checks all managed prerequisites'
-. (Join-Path $root 'script/test/ci_tasks.ps1')
 function Assert-CIRequiredTools {param([switch]$Managed) if(-not $Managed){throw 'managed tool check required'}}
 $temp=Join-Path $env:TEMP ('health_cmd_'+[guid]::NewGuid().ToString('N'))
 $oldPath=$env:PATH
