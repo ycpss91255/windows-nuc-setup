@@ -1,6 +1,8 @@
 package actions_timing
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -65,5 +67,20 @@ func TestRejectsExtraEmptyPage(t *testing.T) {
 	x.Pages = append(x.Pages, Page{PageNumber: 2, PerPage: 2, TotalCount: 2, Jobs: []Job{}})
 	if _, err := Analyze(x); err == nil {
 		t.Fatal("accepted extra page beyond declared total")
+	}
+}
+
+func TestRejectsContradictoryJobHeadFromAPI(t *testing.T) {
+	x := fixture()
+	raw, err := json.Marshal(x.Pages[0].Jobs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = bytes.Replace(raw, []byte(`{"id":`), []byte(`{"head_sha":"`+strings.Repeat("c", 40)+`","id":`), 1)
+	if err = json.Unmarshal(raw, &x.Pages[0].Jobs[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = Analyze(x); err == nil {
+		t.Fatal("accepted job API head inconsistent with run metadata")
 	}
 }
