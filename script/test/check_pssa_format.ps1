@@ -8,8 +8,9 @@ $actual=[Convert]::ToBase64String((New-Object Security.Cryptography.SHA512Manage
 if($actual -cne $expected){throw '格式檢查套件 SHA512 不符。'}
 $root=[IO.Path]::GetFullPath($SourceRoot)
 $files=@('modules/native/managed_source_library.ps1')
-$temp=Join-Path ([IO.Path]::GetTempPath()) ('pssa_format_'+[guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $temp -ErrorAction Stop|Out-Null
+. (Join-Path $PSScriptRoot 'pssa_safety.ps1')
+$owner=New-PssaOwnedTemp
+$temp=$owner.Path
 try{
  Add-Type -AssemblyName System.IO.Compression.FileSystem
  [IO.Compression.ZipFile]::ExtractToDirectory([IO.Path]::GetFullPath($PackagePath),$temp)
@@ -24,13 +25,10 @@ try{
    if((Get-Module PSScriptAnalyzer).Version -ne [version]'1.24.0'){throw '格式檢查套件版本不符。'}
    @(Invoke-ScriptAnalyzer -Path $target -Settings $configuration)
   }
-  try{
-   $diagnostics=@(Receive-Job -Job $job -Wait -ErrorAction Stop)
-   if($job.State -ne 'Completed'){throw '格式檢查程序失敗。'}
-   if($diagnostics.Count){$diagnostics|ForEach-Object {Write-Host ($relative+':'+$_.Line+' '+$_.RuleName)};throw '格式檢查未通過。'}
-  } finally {Remove-Job -Job $job -Force -ErrorAction SilentlyContinue}
+  $diagnostics=@(Receive-PssaBoundedJob -Job $job)
+  if($diagnostics.Count){$diagnostics|ForEach-Object {Write-Host ($relative+':'+$_.Line+' '+$_.RuleName)};throw '格式檢查未通過。'}
  }
  Write-Host ('格式檢查通過（限定 '+$files.Count+' 檔）。')
 } finally {
- Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction Stop
+ Remove-PssaOwnedTemp -Handle $owner
 }

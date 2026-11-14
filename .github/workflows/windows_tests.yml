@@ -33,6 +33,7 @@ jobs:
         with:
           persist-credentials: false
       - name: 準備固定的 PowerShell 格式檢查套件
+        timeout-minutes: 3
         shell: powershell
         run: |
           . .\script\docker\install_managed_tools.ps1
