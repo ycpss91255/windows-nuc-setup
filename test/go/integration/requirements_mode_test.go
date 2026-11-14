@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	c "windows_setup/script/test/repo_coverage"
 )
 
 func TestRequirementsGateTestsOnlyDoesNotRequireGoCoverageInventory(t *testing.T) {
@@ -56,7 +58,11 @@ func TestRequirementsGateTestsOnlyDoesNotRequireGoCoverageInventory(t *testing.T
 	args = append(args[:2], args[3:]...)
 	cmd = exec.Command("go", args...)
 	cmd.Dir = root
-	if b, e := cmd.CombinedOutput(); e == nil || !strings.Contains(string(b), "runtime") {
-		t.Fatalf("default gate must require runtime: %v %s", e, b)
+	expected := "runtime"
+	if identity.RepoCoverage != nil && identity.RepoCoverage.SchemaVersion == c.RuntimeSchemaVersion {
+		expected = "coverage inventory omitted or added owned source"
+	}
+	if b, e := cmd.CombinedOutput(); e == nil || !strings.Contains(string(b), expected) {
+		t.Fatalf("default gate must reject incompatible runtime evidence: %v %s", e, b)
 	}
 }
