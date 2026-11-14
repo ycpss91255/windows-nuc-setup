@@ -3,7 +3,9 @@ $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 . (Join-Path $root 'modules/debloat/debloat_library.ps1')
 function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Value}|ConvertTo-Json -Compress));if(-not $Value){throw $Name}}
-$fixture=Join-Path ([IO.Path]::GetTempPath()) ('debloat_log_'+[guid]::NewGuid().ToString('N'))
+$ownedTemp=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')
+$fixture=[IO.Path]::GetFullPath((Join-Path $ownedTemp ('debloat_log_'+[guid]::NewGuid().ToString('N'))))
+if(-not $fixture.StartsWith($ownedTemp+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'fixture 超出 TEMP 範圍'}
 $module=Join-Path $fixture 'readonly_module';$report=Join-Path $fixture 'machine/NUC8-Setup/Debloat-Result.json'
 [void][IO.Directory]::CreateDirectory($module)
 [IO.File]::WriteAllText((Join-Path $module 'debloat_apps.txt'),'Fixture.App')
@@ -23,17 +25,14 @@ try {
  function Invoke-SetupDebloatOneDrive {param($ModuleRoot) $script:oneDriveCalls++}
  function Get-AppxPackage {param([switch]$AllUsers)}
  function Get-AppxProvisionedPackage {param([switch]$Online)}
- $script:code=0;$script:logPath='';$script:nativeCalls=0;$script:requireDataPath=$false
- $upstream=[IO.File]::ReadAllText((Join-Path $root 'modules/debloat/win11debloat/Win11Debloat.ps1'))
- $match=[regex]::Match($upstream,'(?s)# Log script output to .+?(?=\r?\n# When Group Policy)')
- if(-not $match.Success){throw 'upstream transcript contract missing'}
- $transcript=[scriptblock]::Create($match.Value)
- function Start-Transcript {param($Path,[switch]$Append,[switch]$IncludeInvocationHeader,[switch]$Force) $script:logPath=$Path;[IO.File]::WriteAllText($Path,'safe transcript fixture')}
+ $script:code=0;$script:logPath='';$script:nativeCalls=0;$script:requireDataPath=$false;$script:throwNative=$false
  function Invoke-SetupDebloatNative {param($Arguments)
-  $script:nativeCalls++;if($script:requireDataPath -and [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)){throw 'upstream would write user data into readonly module'};$index=[array]::IndexOf($Arguments,'-LogPath');if($index -lt 0){throw 'missing LogPath'}
-  $LogPath=$Arguments[$index+1]
-  $script:DefaultLogPath=Join-Path $ModuleRoot 'unexpected.log'
-  & $transcript
+  $script:nativeCalls++;if($script:requireDataPath -and $env:LOCALAPPDATA -cne (Split-Path -Parent $report)){throw 'upstream data root is not the per-machine fixture'};$index=[array]::IndexOf($Arguments,'-LogPath');if($index -lt 0){throw 'missing LogPath'}
+  if($script:throwNative){throw 'fixture native exception'}
+  $directory=$Arguments[$index+1]
+  if(-not (Test-Path -LiteralPath $directory -PathType Container)){throw 'LogPath must be an existing directory'}
+  $script:logPath=Join-Path $directory 'Win11Debloat.log'
+  [IO.File]::WriteAllText($script:logPath,'simulated native transcript')
   return $script:code
  }
  $result=Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report
@@ -49,7 +48,11 @@ try {
   $env:LOCALAPPDATA='';$script:requireDataPath=$true;$script:code=0
   $fallback=Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report
   Assert ($fallback.Success -and [string]::IsNullOrEmpty($env:LOCALAPPDATA)) '缺少 LOCALAPPDATA 時提供安全資料根並還原原環境'
- } finally {$env:LOCALAPPDATA=$previousLocal;$script:requireDataPath=$false}
+  $script:throwNative=$true;$failed=$false
+  try{Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report|Out-Null}catch{$failed=$_.Exception.Message -match 'fixture native exception'}
+  Assert ($failed -and [string]::IsNullOrEmpty($env:LOCALAPPDATA)) '原生例外會傳播且還原缺失的 LOCALAPPDATA'
+  $script:throwNative=$false
+ } finally {$env:LOCALAPPDATA=$previousLocal;$script:requireDataPath=$false;$script:throwNative=$false}
  $badParent=Join-Path $fixture 'not_a_directory';[IO.File]::WriteAllText($badParent,'fixture')
  $calls=$script:nativeCalls;$oneDrive=$script:oneDriveCalls;$failed=$false
  try{Invoke-SetupDebloat -ModuleRoot $module -ReportPath (Join-Path $badParent 'result.json')|Out-Null}catch{$failed=$true}
@@ -58,5 +61,7 @@ try {
  Assert (($before -join "`n") -ceq ($after -join "`n")) '模組目錄沒有新增任何檔案'
 } finally {
  Set-Acl -LiteralPath $module -AclObject $originalAcl
- Remove-Item -LiteralPath $fixture -Recurse -Force
+ $resolved=[IO.Path]::GetFullPath((Resolve-Path -LiteralPath $fixture).ProviderPath)
+ if(-not $resolved.Equals($fixture,[StringComparison]::OrdinalIgnoreCase) -or -not $resolved.StartsWith($ownedTemp+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw '拒絕清理非自有 TEMP fixture'}
+ Remove-Item -LiteralPath $resolved -Recurse -Force
 }
