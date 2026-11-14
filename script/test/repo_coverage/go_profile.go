@@ -126,9 +126,49 @@ func NormalizeGo(profiles [][]byte, sources map[string][]byte, module string) (R
 	}
 	for name, source := range parsed {
 		var invalid error
+		communications := map[ast.Stmt]*ast.CommClause{}
+		ast.Inspect(source.file, func(node ast.Node) bool {
+			if clause, ok := node.(*ast.CommClause); ok && clause.Comm != nil {
+				communications[clause.Comm] = clause
+			}
+			return true
+		})
 		ast.Inspect(source.file, func(node ast.Node) bool {
 			if invalid != nil {
 				return false
+			}
+			if stmt, ok := node.(ast.Stmt); ok && communications[stmt] != nil {
+				clause := communications[stmt]
+				entry := source.set.Position(clause.Colon + 1)
+				pos := entry
+				if len(clause.Body) > 0 {
+					pos = source.set.Position(clause.Body[0].Pos())
+				}
+				var selected *goBlock
+				for _, block := range blocks {
+					b := block
+					if b.file != name || before(b.start, entry) {
+						continue
+					}
+					if len(clause.Body) == 0 {
+						if b.statements != 0 || b.start.Line != pos.Line || b.start.Column != pos.Column || b.end.Line != pos.Line || b.end.Column != pos.Column {
+							continue
+						}
+					} else if b.statements == 0 || before(pos, b.start) || !before(pos, b.end) {
+						continue
+					}
+					if selected == nil || before(selected.start, b.start) {
+						selected = &b
+					}
+				}
+				if selected == nil {
+					invalid = fmt.Errorf("Go select clause entry omitted by compiler baseline: %s:%d", name, source.set.Position(stmt.Pos()).Line)
+					return false
+				}
+				line := source.set.Position(stmt.Pos()).Line
+				prior, seen := r.Files[name][line]
+				r.Files[name][line] = selected.hit && (!seen || prior)
+				return true
 			}
 			if !executableStatement(node) {
 				return true
