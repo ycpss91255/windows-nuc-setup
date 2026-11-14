@@ -42,4 +42,8 @@ func TestRuntimeEvidenceRejectsHistoricalAndAlteredScope(t *testing.T) {
 	if _, err = rc.ValidateRuntimeEvidence(fresh.Summary, fresh.Inventory, fresh.XML, strings.Repeat("c", 40), identity.RunUrl); err == nil {
 		t.Error("altered identity accepted")
 	}
+	inv.Sources[0].Path = "core/hidden.go"
+	if _, err = rc.CreateRuntimeEvidence(inv, []rc.Report{report}, identity); err == nil {
+		t.Error("out-of-scope filename accepted as PowerShell")
+	}
 }
