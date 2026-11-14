@@ -55,7 +55,9 @@ func parseShardOptions(name string, args []string, out io.Writer) (shardCLIOptio
 	}
 	if name == "powershell-shard-pack" {
 		f.StringVar(&o.evidence, "evidence-dir", "", "validated safe raw export")
-		f.StringVar(&o.timingInput, "timing-input-dir", "", "private timing receipts")
+	}
+	if name == "powershell-shard-pack" || name == "powershell-shard-merge" {
+		f.StringVar(&o.timingInput, "timing-input-dir", "", "timing receipts")
 		f.StringVar(&o.timingOutput, "timing-output-dir", "", "fresh timing output")
 	}
 	if name == "powershell-shard-merge" {
@@ -473,6 +475,63 @@ func powershellShardMerge(args []string, out io.Writer) error {
 	}
 	if _, _, _, err = trustedShardCatalog(o); err != nil {
 		return err
+	}
+	if o.timingInput != "" {
+		timingDestination, e := freshShardOutput(o.timingOutput, root, o.timingInput, o.input, destination)
+		if e != nil {
+			return e
+		}
+		timingEntries, e := os.ReadDir(o.timingInput)
+		if e != nil || len(timingEntries) != len(entries) {
+			return fmt.Errorf("incomplete timing artifacts")
+		}
+		var contexts []rc.PowerShellWorkerContext
+		var receipts []timingReceipt
+		for _, entry := range entries {
+			dir := filepath.Join(o.input, entry.Name())
+			b, e := readShardFile(dir, "shard.json")
+			if e != nil {
+				return e
+			}
+			var m rc.PowerShellShardManifest
+			if e = decodeShardManifest(b, &m); e != nil {
+				return e
+			}
+			for _, worker := range m.Workers {
+				b, e = readShardFile(dir, worker.Evidence)
+				if e != nil {
+					return e
+				}
+				var native struct{ Context *rc.PowerShellWorkerContext }
+				if e = json.Unmarshal(b, &native); e != nil || native.Context == nil {
+					return fmt.Errorf("missing worker context")
+				}
+				contexts = append(contexts, *native.Context)
+			}
+			timingDir := filepath.Join(o.timingInput, entry.Name())
+			info, e := os.Lstat(timingDir)
+			if e != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+				return fmt.Errorf("invalid timing artifact directory")
+			}
+			b, e = readShardRegular(filepath.Join(timingDir, "timing.json"))
+			if e != nil {
+				return e
+			}
+			var shardReceipts []timingReceipt
+			if e = decodeShardManifest(b, &shardReceipts); e != nil {
+				return e
+			}
+			receipts = append(receipts, shardReceipts...)
+		}
+		if e = validateTimingRoster(contexts, receipts); e != nil {
+			return e
+		}
+		if e = os.Mkdir(timingDestination, 0700); e != nil {
+			return e
+		}
+		if e = writeShardJSON(filepath.Join(timingDestination, "timing.json"), receipts); e != nil {
+			return e
+		}
 	}
 	names := []string{}
 	for name := range files {
