@@ -237,3 +237,16 @@ func TestNonterminalKnownTimestampsStillRequireValidOrderAndRange(t *testing.T) 
 		})
 	}
 }
+
+func TestMissingStartStillRejectsKnownCreatedAfterCompleted(t *testing.T) {
+	x := fixture()
+	j := &x.Pages[0].Jobs[0]
+	j.Status = "in_progress"
+	j.Conclusion = ""
+	j.CreatedAt = ptr("2026-11-14T00:00:08Z")
+	j.StartedAt = nil
+	j.CompletedAt = ptr("2026-11-14T00:00:03Z")
+	if _, err := Analyze(x); err == nil {
+		t.Fatal("accepted completed before created when start missing")
+	}
+}
