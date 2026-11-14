@@ -5,8 +5,9 @@ $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tes
 $script:count=0
 function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw ('FAIL: '+$Name)};$script:count++}
 function Test-RollupFailure([string]$Message,[string]$Name){return $Message -ceq ('必要工作失敗、取消或跳過：'+$Name)}
-$rollup=[regex]::Match($workflow,'(?ms)^  ci-rollup:\r?\n(?<body>.*?)^  release:').Groups['body'].Value
-$scriptText=([regex]::Match($rollup,'(?ms)        run: \|\r?\n(?<body>.*)$').Groups['body'].Value -replace '(?m)^          ','').Trim()
+$rollup=[regex]::Match($workflow,'(?ms)^  ci-rollup:[^\S\r\n]*\r?\n(?<body>.*?)(?=^  [A-Za-z_][A-Za-z0-9_-]*:[^\S\r\n]*$)').Groups['body'].Value
+$scriptText=([regex]::Match($rollup,'(?m)^        run: \|[^\S\r\n]*\r?\n(?<body>(?:^          [^\r\n]*\r?\n)+)').Groups['body'].Value -replace '(?m)^          ','').Trim()
+Assert ($rollup -notmatch '(?m)^  cache-diagnostic-' -and $scriptText -notmatch '(?m)^  cache-diagnostic-') 'OOBE rollup 測試不得擷取後續診斷 job'
 $priorCoverageResult=$env:COVERAGE_RESULT
 $priorSummaryPath=$env:GITHUB_STEP_SUMMARY
 $summaryPath=Join-Path ([IO.Path]::GetTempPath()) ('oobe_rollup_summary_'+[guid]::NewGuid().ToString('N')+'.md')

@@ -726,6 +726,8 @@ CI 將工具映像建置與完整容器測試分成兩個有界階段（60／35 
 
 維護工具以 Go 為主要實作語言；Windows 原生設定與 PowerShell 5.1 測試保留 PowerShell，一般使用者執行設定不需要 Go。根目錄 `go.mod` 僅管理 `script/test` 工具與 `test/go` 案例，沒有改變交付程式的依賴方向。HTML5 解析使用固定版本的官方 `golang.org/x/net/html`，其餘驗收使用標準庫；必要上游原碼及授權保存在 `vendor`，離線容器不下載模組。
 
+維護者可在 Actions 的 `workflow_dispatch` 明確選擇 `cache_diagnostic`；預設關閉。此選項先完成既有同次完整測試及 `ci-rollup`，再以僅 `go build` 建立獨立建置快取，依冷、暖、暖、冷順序執行四次診斷，每次仍重跑完整 Go 測試與需求驗證。暖樣本各自從本 run／attempt 的唯一 key 還原，測試後快取不再保存；不借用 coverage 或測試結果。`cache-diagnostic-<run_id>-<attempt>` 附件保留每階段時間七天，Actions job 與 step 時間、快取 hit 和 prime 大小須另行查看，排隊以 job 時間資料與執行時間分開分析。樣本在同一 runner 依序執行，作業系統層快取與負載仍可能影響結果；需多次執行觀察，不能由單次資料保證收益。診斷結果不加入正式 coverage、報表或 Pages，也不改變正式工作的快取設定。
+
 直接執行 Go 測試時，在完整 checkout 根目錄使用 `go test -mod=vendor -count=1 ./...`，並將 `WINDOWS_SETUP_ARTIFACT_DIR` 指向 PS5.1 產生的 public 報告、`WINDOWS_SETUP_PORTAL_FIXTURE_DIR` 指向 `script/test/create_portal_fixture.ps1` 產生的 portal 目錄。兩者缺少即失敗，不以跳過掩蓋缺證據；上述 Docker `test` 入口會自動準備這些輸入。Go 單元及整合測試包含原有 21 項驗收契約與新增解析／命令列邊界案例，結果獨立於 PS5.1 報表數量。
 
 容器映像提供 Windows PowerShell 5.1、固定版本且核對雜湊的 MinGit 與 Go 1.27.3。一般本機未設定 GitHub 執行來源時，PS5.1 仍測試目前真實 checkout，保留其 Clean／Dirty 狀態；Go 需求合約使用另外明確標示 Synthetic 的暫存樣本，不改寫或冒充本機正式報告。本機模式不產生已通過 80% 的 CI 覆蓋率證據。CI 則必須以本次真實報告驗收；正式發布另要求整體自有程式碼量測完整，並以原始覆蓋行數通過精確 80% 門檻；GitHub 提交、儲存庫、執行 ID、ref 類型與 ref 名稱這五項只要部分存在或格式錯誤就停止，不會降級成合成證據通過。

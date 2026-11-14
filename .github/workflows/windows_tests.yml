@@ -8,6 +8,12 @@ on:
   pull_request:
   merge_group:
   workflow_dispatch:
+    inputs:
+      cache_diagnostic:
+        description: '執行獨立 Go 建置快取 A/B 診斷'
+        required: false
+        type: boolean
+        default: false
 
 env:
   GOTOOLCHAIN: local
@@ -422,6 +428,129 @@ jobs:
           $states=@{Tests=$env:TEST_RESULT;Requirements=$env:REQUIREMENTS_RESULT;Docker=$env:DOCKER_RESULT;Payload=$env:OOBE_PAYLOAD_RESULT;PowerShellCoverage=$env:POWERSHELL_COVERAGE_RESULT;Coverage=$env:COVERAGE_RESULT}
           Write-CIQualityFailureSummary -States $states -SummaryPath $env:GITHUB_STEP_SUMMARY
           Assert-CIResults $states
+
+  cache-diagnostic-prime:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.cache_diagnostic }}
+    needs: [ci-rollup]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 取得本次來源
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 準備固定 Go 工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 驗證來源並只建立建置快取
+        env:
+          GOCACHE: ${{ runner.temp }}/cache_restore
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          test ! -e "$GOCACHE"
+          go build -mod=vendor ./...
+          du -sb "$GOCACHE"
+      - name: 保存本次隔離建置快取
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ${{ runner.temp }}/cache_restore
+          key: diag-go-1.27.3-${{ github.sha }}-${{ hashFiles('go.mod', 'go.sum', 'vendor/**') }}-${{ github.run_id }}-${{ github.run_attempt }}-end
+
+  cache-diagnostic-samples:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.cache_diagnostic }}
+    needs: [ci-rollup, cache-diagnostic-prime]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: 取得本次來源
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: 準備固定 Go 工具鏈
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 下載同次原生中介資料
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: native-stage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/diagnostic-native
+      - name: 下載同次完整報告
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/diagnostic-report
+      - name: 下載同次合成首頁樣本
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: requirements-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/diagnostic-fixture
+      - name: 驗證來源並建立獨立診斷工具
+        env:
+          GOCACHE: ${{ runner.temp }}/cache_tool
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          go build -mod=vendor -o "$RUNNER_TEMP/cache_diagnostic" ./script/test/cache_diagnostic
+          test ! -e "$RUNNER_TEMP/cache_restore"
+          mkdir "$RUNNER_TEMP/cache_diagnostic_results"
+      - name: 冷樣本 cold_1
+        env:
+          GOCACHE: ${{ runner.temp }}/cache_cold_1
+        run: |
+          test ! -e "$GOCACHE"
+          "$RUNNER_TEMP/cache_diagnostic" --native "$RUNNER_TEMP/diagnostic-native/report" --report "$RUNNER_TEMP/diagnostic-report" --fixture "$RUNNER_TEMP/diagnostic-fixture" --root "$GITHUB_WORKSPACE" --sha "$GITHUB_SHA" --run-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sample cold_1 --output "$RUNNER_TEMP/cache_diagnostic_results/cold_1.json"
+      - name: 還原暖樣本 warm_1 快取
+        id: diagnostic_restore_1
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ${{ runner.temp }}/cache_restore
+          key: diag-go-1.27.3-${{ github.sha }}-${{ hashFiles('go.mod', 'go.sum', 'vendor/**') }}-${{ github.run_id }}-${{ github.run_attempt }}-end
+          fail-on-cache-miss: true
+      - name: 暖樣本 warm_1
+        env:
+          GOCACHE: ${{ runner.temp }}/cache_restore
+          CACHE_HIT: ${{ steps.diagnostic_restore_1.outputs.cache-hit }}
+        run: |
+          echo "cache_hit=$CACHE_HIT"
+          test "$CACHE_HIT" = true
+          "$RUNNER_TEMP/cache_diagnostic" --native "$RUNNER_TEMP/diagnostic-native/report" --report "$RUNNER_TEMP/diagnostic-report" --fixture "$RUNNER_TEMP/diagnostic-fixture" --root "$GITHUB_WORKSPACE" --sha "$GITHUB_SHA" --run-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sample warm_1 --output "$RUNNER_TEMP/cache_diagnostic_results/warm_1.json"
+      - name: 隔離已使用快取
+        run: |
+          test ! -e "$RUNNER_TEMP/cache_warm_used_1"
+          mv "$RUNNER_TEMP/cache_restore" "$RUNNER_TEMP/cache_warm_used_1"
+      - name: 還原暖樣本 warm_2 快取
+        id: diagnostic_restore_2
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ${{ runner.temp }}/cache_restore
+          key: diag-go-1.27.3-${{ github.sha }}-${{ hashFiles('go.mod', 'go.sum', 'vendor/**') }}-${{ github.run_id }}-${{ github.run_attempt }}-end
+          fail-on-cache-miss: true
+      - name: 暖樣本 warm_2
+        env:
+          GOCACHE: ${{ runner.temp }}/cache_restore
+          CACHE_HIT: ${{ steps.diagnostic_restore_2.outputs.cache-hit }}
+        run: |
+          echo "cache_hit=$CACHE_HIT"
+          test "$CACHE_HIT" = true
+          "$RUNNER_TEMP/cache_diagnostic" --native "$RUNNER_TEMP/diagnostic-native/report" --report "$RUNNER_TEMP/diagnostic-report" --fixture "$RUNNER_TEMP/diagnostic-fixture" --root "$GITHUB_WORKSPACE" --sha "$GITHUB_SHA" --run-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sample warm_2 --output "$RUNNER_TEMP/cache_diagnostic_results/warm_2.json"
+      - name: 冷樣本 cold_2
+        env:
+          GOCACHE: ${{ runner.temp }}/cache_cold_2
+        run: |
+          test ! -e "$GOCACHE"
+          "$RUNNER_TEMP/cache_diagnostic" --native "$RUNNER_TEMP/diagnostic-native/report" --report "$RUNNER_TEMP/diagnostic-report" --fixture "$RUNNER_TEMP/diagnostic-fixture" --root "$GITHUB_WORKSPACE" --sha "$GITHUB_SHA" --run-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sample cold_2 --output "$RUNNER_TEMP/cache_diagnostic_results/cold_2.json"
+      - name: 保存同次診斷時間七天
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cache-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cache_diagnostic_results/
+          retention-days: 7
+          if-no-files-found: error
 
   release:
     name: 發布 GitHub 來源版本
