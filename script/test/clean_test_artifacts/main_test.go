@@ -147,3 +147,38 @@ func TestCopiedMarkerDoesNotAuthorizeAnotherDirectory(t *testing.T) {
 		t.Fatal("unowned data removed", err)
 	}
 }
+
+func TestReplacedItemWithSameNameDoesNotInheritOwnership(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "owned")
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}} {
+		if err := run(a, &out, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	original := filepath.Join(root, "item")
+	marker, err := os.ReadFile(filepath.Join(original, itemMarker))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(original, filepath.Join(root, "moved")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(original, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(original, itemMarker), marker, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(original, "keep"), []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"clean", root, "item", "--delete"}, &out, now); err == nil {
+		t.Fatal("replacement inherited ownership")
+	}
+	if _, err := os.Stat(filepath.Join(original, "keep")); err != nil {
+		t.Fatal("replacement removed", err)
+	}
+}
