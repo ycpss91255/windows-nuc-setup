@@ -194,6 +194,9 @@ func safeDelete(root, name, expectedID string, now time.Time) (result error) {
 		if e != nil {
 			return fmt.Errorf("enumerate: %w", e)
 		}
+		if afterEnumerateHook != nil {
+			afterEnumerateHook()
+		}
 		for _, child := range children {
 			if dir == p && child.Name() == itemMarker {
 				continue
