@@ -55,15 +55,15 @@ func TestActualCheckoutSource(t *testing.T) {
 		}
 	}
 	authority := filepath.Join(d, "authority.json")
-	writeAuthority := func(ref, sha string) {
+	writeAuthority := func(ref, baseSHA, sha string) {
 		t.Helper()
-		v := map[string]any{"number": 1, "state": "open", "base": map[string]any{"ref": ref, "repo": map[string]string{"full_name": "fixture/repo"}}, "head": map[string]string{"sha": sha}}
+		v := map[string]any{"number": 1, "state": "open", "base": map[string]any{"ref": ref, "sha": baseSHA, "repo": map[string]string{"full_name": "fixture/repo"}}, "head": map[string]string{"sha": sha}}
 		b, _ := json.Marshal(v)
 		if err := os.WriteFile(authority, b, 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	writeAuthority("main", head)
+	writeAuthority("main", base, head)
 	cases := []struct {
 		name, checkout, runSHA, eventBase, eventHead, expectedBase, expectedHead string
 		ok                                                                       bool
@@ -92,19 +92,28 @@ func TestActualCheckoutSource(t *testing.T) {
 			}
 		}
 	})
+	t.Run("main advanced after event", func(t *testing.T) {
+		git("checkout", "--detach", "-q", actual)
+		writeEvent(base, head)
+		writeAuthority("main", head, head)
+		args := []string{"-authority", authority, "-repo", d, "-event", event, "-checkout", actual, "-run-sha", actual, "-base", base, "-head", head}
+		if err := run(args); err == nil {
+			t.Fatal("stale integration accepted after main advanced")
+		}
+	})
 	t.Run("retargeted live PR", func(t *testing.T) {
 		writeEvent(base, head)
-		writeAuthority("other", head)
+		writeAuthority("other", base, head)
 		if err := authorityCheck(event, authority); err == nil {
 			t.Fatal("retarget accepted")
 		}
-		writeAuthority("main", head)
+		writeAuthority("main", base, head)
 	})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			git("checkout", "--detach", "-q", tc.checkout)
 			writeEvent(tc.eventBase, tc.eventHead)
-			writeAuthority("main", tc.eventHead)
+			writeAuthority("main", tc.eventBase, tc.eventHead)
 			if err := check(d, event, tc.checkout, tc.runSHA, tc.expectedBase, tc.expectedHead); (err == nil) != tc.ok {
 				t.Fatalf("direct check: want success=%v, got %v", tc.ok, err)
 			}
