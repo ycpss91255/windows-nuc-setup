@@ -112,3 +112,20 @@ func TestDecodeRequiresExternalExpectedIdentityAndRejectsAmbiguousJSON(t *testin
 		t.Fatal("accepted trailing JSON")
 	}
 }
+
+func TestDecodeRejectsNullJobHeadWhenPresent(t *testing.T) {
+	x := fixture()
+	wire := struct {
+		Run   Run    `json:"run"`
+		Pages []Page `json:"pages"`
+	}{x.Run, x.Pages}
+	data, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = bytes.Replace(data, []byte(`"id":10`), []byte(`"head_sha":null,"id":10`), 1)
+	expected := Expected{Repository: x.Repository, RunID: x.RunID, Attempt: x.Attempt, HeadSHA: x.HeadSHA}
+	if _, err = Decode(data, expected); err == nil {
+		t.Fatal("accepted explicit null job head")
+	}
+}
