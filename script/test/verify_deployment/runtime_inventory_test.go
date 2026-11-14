@@ -37,3 +37,22 @@ func TestPublishedRuntimeInventoryUsesRuntimeScope(t *testing.T) {
 		t.Fatal("changed source accepted")
 	}
 }
+
+func TestReleaseProfileRequirementMatchesValidatedScope(t *testing.T) {
+	runtime := &c.Evidence{SchemaVersion: c.RuntimeSchemaVersion, Metric: c.RuntimeMetric, Scope: c.RuntimeScope}
+	if required, err := releaseRequiresGoProfile(runtime, &verifiedBundle{CoverageScope: c.RuntimeScope}); err != nil || required {
+		t.Fatalf("runtime bundle: %v %v", required, err)
+	}
+	if _, err := releaseRequiresGoProfile(runtime, &verifiedBundle{}); err == nil {
+		t.Fatal("legacy receipt accepted as runtime")
+	}
+	if _, err := releaseRequiresGoProfile(runtime, nil); err == nil {
+		t.Fatal("raw release accepted as runtime")
+	}
+	if required, err := releaseRequiresGoProfile(&c.Evidence{}, &verifiedBundle{}); err != nil || !required {
+		t.Fatalf("legacy bundle: %v %v", required, err)
+	}
+	if _, err := releaseRequiresGoProfile(&c.Evidence{}, &verifiedBundle{CoverageScope: c.RuntimeScope}); err == nil {
+		t.Fatal("runtime receipt accepted as legacy")
+	}
+}
