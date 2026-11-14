@@ -7,6 +7,7 @@ function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name
 function Test-RollupFailure([string]$Message,[string]$Name){return $Message -ceq ('必要工作失敗、取消或跳過：'+$Name)}
 $rollup=[regex]::Match($workflow,'(?ms)^  ci-rollup:\r?\n(?<body>.*?)^  release:').Groups['body'].Value
 $scriptText=([regex]::Match($rollup,'(?ms)        run: \|\r?\n(?<body>.*)$').Groups['body'].Value -replace '(?m)^          ','').Trim()
+Assert ($rollup -notmatch '(?m)^  cache-diagnostic-' -and $scriptText -notmatch '(?m)^  cache-diagnostic-') 'OOBE rollup 測試不得擷取後續診斷 job'
 $priorCoverageResult=$env:COVERAGE_RESULT
 $priorSummaryPath=$env:GITHUB_STEP_SUMMARY
 $summaryPath=Join-Path ([IO.Path]::GetTempPath()) ('oobe_rollup_summary_'+[guid]::NewGuid().ToString('N')+'.md')
