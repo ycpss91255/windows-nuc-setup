@@ -195,3 +195,27 @@ func TestRunRejectsUnsafeZIP(t *testing.T) {
 		t.Fatalf("escape exists: %v", err)
 	}
 }
+
+func TestRunRejectsInvalidArgumentsAndMissingToken(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		args  []string
+		token string
+	}{
+		{"invalid identity", []string{"--repo", "invalid"}, "token"},
+		{"missing token", []string{"--repo", "example/repo", "--run", "123", "--attempt", "1", "--id", "456", "--digest", "sha256:" + strings.Repeat("a", 64), "--dest", "out"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			oldFlags, oldArgs := flag.CommandLine, os.Args
+			defer func() { flag.CommandLine = oldFlags; os.Args = oldArgs }()
+			flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+			flag.CommandLine.SetOutput(io.Discard)
+			os.Args = append([]string{"artifact_download"}, tc.args...)
+			t.Setenv("GH_TOKEN", tc.token)
+			t.Setenv("GITHUB_TOKEN", "")
+			if err := run(); err == nil {
+				t.Fatal("invalid request accepted")
+			}
+		})
+	}
+}
