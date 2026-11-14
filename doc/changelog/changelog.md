@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed（修正）
+
+- Actions 的隔離測試摘要正確顯示繁體中文與執行紀錄連結。
+
 ### Added（新增）
 
 - Actions 摘要顯示測試、覆蓋率及各 PowerShell 分片量測階段耗時。

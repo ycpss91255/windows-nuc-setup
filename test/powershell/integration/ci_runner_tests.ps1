@@ -42,6 +42,11 @@ try{
  $r=Run 'dirty' 'Integration'
  Assert ($r.SourceState -eq 'Dirty' -and $r.RefName -eq 'feature/test' -and $r.RunUrl -eq 'https://github.com/fixture/project/actions/runs/123' -and $r.Environment -like 'Windows container*') '真 dirty 與 CI 來源資訊保留'
  Assert ((Get-Item -LiteralPath $env:GITHUB_STEP_SUMMARY).Length -gt 0) '真 step summary 已寫入'
+ $utf8=[Text.UTF8Encoding]::new($false,$true)
+ $generated=[IO.File]::ReadAllText((Join-Path $temp 'dirty/public/summary.md'),$utf8).Replace("`r`n","`n").TrimEnd("`r","`n")
+ $step=[IO.File]::ReadAllText($env:GITHUB_STEP_SUMMARY,$utf8).TrimStart([char]0xfeff).Replace("`r`n","`n").TrimEnd("`r","`n")
+ Assert ($generated.Contains('整體程式碼覆蓋率') -and $generated.Contains('[GitHub Actions 執行紀錄]')) '原始 UTF-8 報表包含真繁體中文與連結'
+ Assert ($step -ceq $generated) '真 UTF-8 摘要接線保留繁體中文與執行紀錄連結'
  foreach($case in @(@{Name='native';Body=$pass+"`nexit 7";Code=7},@{Name='false';Body='Write-Output ''@@ASSERT@@{"Name":"negative","Passed":false}''';Code=1},@{Name='malformed';Body='Write-Output ''@@ASSERT@@{"Name":"bad","Passed":"true"}''';Code=1},@{Name='empty';Body='Write-Output ''no assertions''';Code=1})){
   Put 'test/powershell/unit/first_tests.ps1' $case.Body
   $r=Run $case.Name 'Unit' 'CI 測試未通過'

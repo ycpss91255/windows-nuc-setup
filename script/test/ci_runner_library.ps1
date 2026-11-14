@@ -74,7 +74,7 @@ if(Test-Path $changelogPath){
  $changes=@($section -split '\r?\n'|Where-Object {$_ -match '^\s*-\s+\S'}|ForEach-Object {$_ -replace '^\s*-\s+',''})
 }
 $null=Write-TestReports -Version $version -Environment $environment -RefType $refType -RefName $refName -Changes $changes -Commit $commit -SourceState $sourceState -Checks @($results.ToArray()) -OutputDirectory $publicDirectory -Layer $Layer -RunUrl $runUrl
-if($env:GITHUB_STEP_SUMMARY){Get-Content (Join-Path $publicDirectory 'summary.md')|Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding UTF8}
+if($env:GITHUB_STEP_SUMMARY){Get-Content (Join-Path $publicDirectory 'summary.md') -Encoding UTF8|Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding UTF8}
 if(-not $success){throw 'CI 測試未通過；請查看短期保留的測試報告。'}
 Write-Host '所選單元與隔離整合測試通過。'
 }
