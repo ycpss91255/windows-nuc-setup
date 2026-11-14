@@ -23,7 +23,19 @@ try{
  Assert ($timedOut -and -not (Get-Job -Id $id -ErrorAction SilentlyContinue)) '逾時停止並移除本次工作'
  $file=Join-Path $temp 'modules/native/managed_source_library.ps1'
  Copy-Item -LiteralPath (Join-Path $root 'modules/native/managed_source_library.ps1') -Destination $file
- function Check($Archive){$old=$ErrorActionPreference;try{$ErrorActionPreference='Continue'; & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $checker -SourceRoot $temp -PackagePath $Archive *> (Join-Path $temp 'private.log');return $LASTEXITCODE}finally{$ErrorActionPreference=$old}}
+ function Check($Archive){
+  $old=$ErrorActionPreference
+  $previous=Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+  $previousValue=if($null -ne $previous){$previous.Value}else{$null}
+  try{
+   $ErrorActionPreference='Continue'
+   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $checker -SourceRoot $temp -PackagePath $Archive *> (Join-Path $temp 'private.log')
+   return $LASTEXITCODE
+  } finally {
+   $ErrorActionPreference=$old
+   if($null -eq $previous){Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue}else{$global:LASTEXITCODE=$previousValue}
+  }
+ }
  Assert ((Check (Join-Path $temp 'missing.zip')) -ne 0) '缺少固定套件拒絕且不回退'
  $bad=Join-Path $temp 'bad.zip';[IO.File]::WriteAllText($bad,'corrupt fixture')
  Assert ((Check $bad) -ne 0) '錯誤 SHA512 的套件拒絕'
