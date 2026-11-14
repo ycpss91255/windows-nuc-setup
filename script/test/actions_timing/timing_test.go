@@ -250,3 +250,26 @@ func TestMissingStartStillRejectsKnownCreatedAfterCompleted(t *testing.T) {
 		t.Fatal("accepted completed before created when start missing")
 	}
 }
+
+func TestDecodeRejectsUnicodeFoldedDuplicateSteps(t *testing.T) {
+	x := fixture()
+	wire := struct {
+		Run   Run    `json:"run"`
+		Pages []Page `json:"pages"`
+	}{x.Run, x.Pages}
+	data, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := Expected{Repository: x.Repository, RunID: x.RunID, Attempt: x.Attempt, HeadSHA: x.HeadSHA}
+	if _, err = Decode(data, expected); err != nil {
+		t.Fatalf("valid baseline rejected: %v", err)
+	}
+	bad := bytes.Replace(data, []byte(`"steps":[]`), []byte(`"steps":[],"\u017fteps":null`), 1)
+	if bytes.Equal(bad, data) {
+		t.Fatal("fixture did not inject alias")
+	}
+	if _, err = Decode(bad, expected); err == nil {
+		t.Fatal("accepted Unicode-folded duplicate steps overriding required inventory")
+	}
+}
