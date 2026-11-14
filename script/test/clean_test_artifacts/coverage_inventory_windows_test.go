@@ -26,7 +26,7 @@ func TestWindowsProfileContainsAllOwnedEngineSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	profile := filepath.Join(t.TempDir(), "engine.cover")
-	cmd := exec.Command(goExe, "test", "-cover", "-coverprofile="+profile, "-run", "^TestOwnedArtifactsRequireSelectionCompletionAndExpiry$", ".")
+	cmd := exec.Command(goExe, "test", "-count=1", "-cover", "-coverprofile="+profile, "-run", "^TestOwnedArtifactsRequireSelectionCompletionAndExpiry$", ".")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("compiler coverage run: %v: %s", err, output)
 	}
