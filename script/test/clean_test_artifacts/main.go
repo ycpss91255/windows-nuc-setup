@@ -51,6 +51,17 @@ func plainPath(p string) (string, error) {
 func safeName(s string) bool {
 	return s != "" && s != "." && s != ".." && filepath.Base(s) == s && !strings.ContainsAny(s, `/\:`)
 }
+func requireTempChild(path string) error {
+	temp, err := plainPath(os.TempDir())
+	if err != nil {
+		return fmt.Errorf("invalid TEMP: %w", err)
+	}
+	rel, err := filepath.Rel(temp, path)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return errors.New("root outside TEMP")
+	}
+	return nil
+}
 func regular(path string) error {
 	i, e := os.Lstat(path)
 	if e != nil {
@@ -64,6 +75,9 @@ func regular(path string) error {
 func validateRoot(p string) (string, error) {
 	root, e := plainPath(p)
 	if e != nil {
+		return "", e
+	}
+	if e = requireTempChild(root); e != nil {
 		return "", e
 	}
 	i, e := os.Lstat(root)
@@ -160,6 +174,9 @@ func run(args []string, out io.Writer, now time.Time) error {
 			return e
 		}
 		abs = filepath.Join(parent, filepath.Base(abs))
+		if e = requireTempChild(abs); e != nil {
+			return e
+		}
 		return createOwnedDirectory(abs, "", true)
 	}
 	root, e := validateRoot(args[1])
