@@ -170,9 +170,7 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		host := strings.ToLower(req.URL.Hostname())
-		trusted := host == "api.github.com" || strings.HasSuffix(host, ".actions.githubusercontent.com") || strings.HasSuffix(host, ".blob.core.windows.net")
-		if len(via) > 5 || req.URL.Scheme != "https" || req.URL.User != nil || !trusted {
+		if len(via) > 5 || !strings.HasSuffix(via[0].URL.Path, "/zip") || req.URL.Scheme != "https" || req.URL.User != nil || req.URL.Hostname() == "" {
 			return errors.New("unsafe artifact redirect")
 		}
 		req.Header.Del("Authorization")
