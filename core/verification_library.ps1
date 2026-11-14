@@ -6,6 +6,13 @@ function Invoke-SetupDriverFreshVerification {
  if($results.Count -ne 1 -or $results[0].Success -isnot [bool] -or $results[0].VerificationRunId -cne $VerificationRunId -or $results[0].Computer -cne [Environment]::MachineName -or $results[0].UserSID -cne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value){throw '驅動結果不是本輪、同機、同帳號的可信結果。'}
  return $results[0]
 }
+function Complete-SetupVerificationResult {
+ param($Checks,$Hardware,$VerificationRunId)
+$result=[ordered]@{VerificationRunId=$VerificationRunId;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;Computer=$env:COMPUTERNAME;VerifiedAt=(Get-Date).ToString('o');HardwareProfile=$hardware;SkippedCount=@($checks|Where-Object Status -eq Skipped).Count;Passed=(Test-SetupChecksPassed -Checks @($checks.ToArray()));Checks=@($checks.ToArray());Notes=@('本工具只驗證，不安裝更新或重新套用偏好。','自動登入是否真的成功，以及工作列實際圖示，仍需在下次登入後觀察。','Windows 啟用由使用者另外處理。')}
+$result|ConvertTo-Json -Depth 6|Set-Content (Resolve-NucPath 'Verification-Result.json') -Encoding UTF8
+Write-Host ('驗證紀錄：'+(Resolve-NucPath 'Verification-Result.json'))
+if(-not $result.Passed){throw '驗證未全部通過；已寫入 Verification-Result.json。'}
+}
 function Invoke-SetupVerification {
  param([Parameter(Mandatory=$true)]$Hardware,[string]$DriverPackagePath,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9-]{36}$')][string]$VerificationRunId)
@@ -127,8 +134,5 @@ try{ & (Resolve-NucPath 'remove_one_drive.ps1') -VerifyOnly|Out-Null;Add-Check '
 try{ & (Resolve-NucPath 'apply_explorer_settings.ps1') -VerifyOnly|Out-Null;Add-Check '檔案總管隱藏檔即時狀態' $true 'Shell 狀態與登錄值均為顯示' }catch{Add-Check '檔案總管隱藏檔即時狀態' $false $_.Exception.Message}
 $provisioned=@(Get-AppxProvisionedPackage -Online|Where-Object DisplayName -in $apps|Select-Object -ExpandProperty DisplayName)
 Add-Check '新帳號預載 App 清理' ($provisioned.Count -eq 0) ($provisioned -join ', ')
-$result=[ordered]@{VerificationRunId=$VerificationRunId;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;Computer=$env:COMPUTERNAME;VerifiedAt=(Get-Date).ToString('o');HardwareProfile=$hardware;SkippedCount=@($checks|Where-Object Status -eq Skipped).Count;Passed=(Test-SetupChecksPassed -Checks @($checks.ToArray()));Checks=@($checks.ToArray());Notes=@('本工具只驗證，不安裝更新或重新套用偏好。','自動登入是否真的成功，以及工作列實際圖示，仍需在下次登入後觀察。','Windows 啟用由使用者另外處理。')}
-$result|ConvertTo-Json -Depth 6|Set-Content (Resolve-NucPath 'Verification-Result.json') -Encoding UTF8
-Write-Host ('驗證紀錄：'+(Resolve-NucPath 'Verification-Result.json'))
-if(-not $result.Passed){throw '驗證未全部通過；已寫入 Verification-Result.json。'}
+Complete-SetupVerificationResult -Checks $checks -Hardware $hardware -VerificationRunId $VerificationRunId
 }
