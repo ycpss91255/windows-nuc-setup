@@ -268,6 +268,40 @@ func TestConcurrentChildCreationPreservesNewData(t *testing.T) {
 	}
 }
 
+func TestReceiptSurvivesMarkerRestoreFailure(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "owned")
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}} {
+		if e := run(a, &out, now); e != nil {
+			t.Fatal(e)
+		}
+	}
+	p := filepath.Join(root, "item")
+	var newErr, restoreErr error
+	beforeDeleteHook = func() { newErr = os.WriteFile(filepath.Join(p, "new"), []byte("new"), 0600) }
+	beforeRestoreHook = func() { restoreErr = os.WriteFile(filepath.Join(p, itemMarker), []byte("unknown"), 0600) }
+	defer func() { beforeDeleteHook = nil; beforeRestoreHook = nil }()
+	err := run([]string{"clean", root, "item", "--delete"}, &out, now)
+	if newErr != nil || restoreErr != nil || err == nil || !strings.Contains(err.Error(), "restore ownership marker") {
+		t.Fatalf("fixture or expected restore failure: new=%v replacement=%v clean=%v", newErr, restoreErr, err)
+	}
+	receipts, e := filepath.Glob(filepath.Join(root, ".windows_setup_cleanup_recovery_*"))
+	if e != nil || len(receipts) != 1 {
+		t.Fatalf("missing receipt: %v %v", receipts, e)
+	}
+	data, e := os.ReadFile(receipts[0])
+	if e != nil || !bytes.Contains(data, []byte(`"name":"item"`)) {
+		t.Fatalf("invalid receipt: %s %v", data, e)
+	}
+	if data, e = os.ReadFile(filepath.Join(p, "new")); e != nil || string(data) != "new" {
+		t.Fatalf("new data lost: %q %v", data, e)
+	}
+	if data, e = os.ReadFile(filepath.Join(p, itemMarker)); e != nil || string(data) != "unknown" {
+		t.Fatalf("unknown marker overwritten: %q %v", data, e)
+	}
+}
+
 func TestEnumeratedChildReplacementIsNotDeleted(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "owned")

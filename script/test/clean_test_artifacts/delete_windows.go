@@ -258,6 +258,9 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 		if result == nil || !markerRemoved {
 			return
 		}
+		if beforeRestoreHook != nil {
+			beforeRestoreHook()
+		}
 		f, err := os.OpenFile(filepath.Join(p, itemMarker), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err == nil {
 			_, err = f.Write(b)

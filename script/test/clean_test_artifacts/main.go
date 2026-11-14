@@ -135,6 +135,7 @@ var beforeDeleteHook func()
 var afterMarkerReadHook func()
 var afterEnumerateHook func()
 var identityTestHook func(string, string) string
+var beforeRestoreHook func()
 
 func run(args []string, out io.Writer, now time.Time) error {
 	if len(args) < 2 {
