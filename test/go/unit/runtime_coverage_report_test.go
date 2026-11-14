@@ -1,0 +1,49 @@
+package unit_test
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+
+	a "windows_setup/script/test/acceptance"
+	rc "windows_setup/script/test/repo_coverage"
+)
+
+func TestRuntimeCoverageReportAcceptsNewScopeAndPreservesHistory(t *testing.T) {
+	id := rc.Identity{Commit: strings.Repeat("a", 40), RunUrl: "https://github.com/example/repo/actions/runs/1", MeasuredAt: "2026-01-01T00:00:00Z", SourceState: "Clean"}
+	name := "core/a.ps1"
+	inv := rc.Inventory{Sources: []rc.Source{{Path: name, Language: "powershell", SHA256: strings.Repeat("b", 64), ExpectedLines: []int{1}}}}
+	report := rc.Report{SchemaVersion: 1, Metric: rc.Metric, Files: map[string]map[int]bool{name: {1: true}}}
+	for _, modern := range []bool{false, true} {
+		var artifacts rc.Artifacts
+		var err error
+		if modern {
+			artifacts, err = rc.CreateRuntimeEvidence(inv, []rc.Report{report}, id)
+		} else {
+			artifacts, err = rc.CreateEvidence(inv, []rc.Report{report}, id)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc any
+		if err = json.Unmarshal(artifacts.Summary, &doc); err != nil {
+			t.Fatal(err)
+		}
+		summary, err := json.Marshal(map[string]any{"RepoCoverage": doc})
+		if err != nil {
+			t.Fatal(err)
+		}
+		files := map[string][]byte{"repo_coverage.json": artifacts.Summary, "coverage_inventory.json": artifacts.Inventory, "coverage.xml": artifacts.XML}
+		read := func(n string) ([]byte, error) {
+			b, ok := files[n]
+			if !ok {
+				return nil, fmt.Errorf("missing")
+			}
+			return b, nil
+		}
+		if _, err = a.ValidateRepoCoverageReport(read, summary, id.Commit, id.RunUrl, false); err != nil {
+			t.Errorf("modern=%v valid report rejected: %v", modern, err)
+		}
+	}
+}

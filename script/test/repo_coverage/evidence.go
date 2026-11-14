@@ -17,6 +17,7 @@ type Identity struct{ Commit, RunUrl, MeasuredAt, SourceState string }
 type Evidence struct {
 	SchemaVersion int
 	Metric        string
+	Scope         string `json:",omitempty"`
 	Identity
 	InventorySHA256, NormalizedSHA256 string
 	Result                            Result
@@ -176,7 +177,7 @@ func ValidateEvidence(summary, inventoryData, xmlData []byte, commit, run string
 	if err := validateIdentity(evidence.Identity); err != nil {
 		return evidence, err
 	}
-	if evidence.Commit != commit || evidence.RunUrl != run || evidence.SchemaVersion != SchemaVersion || evidence.Metric != Metric {
+	if evidence.Commit != commit || evidence.RunUrl != run || evidence.SchemaVersion != SchemaVersion || evidence.Metric != Metric || evidence.Scope != "" {
 		return evidence, fmt.Errorf("coverage identity or metric mismatch")
 	}
 	if evidence.InventorySHA256 != digest(inventoryData) || evidence.NormalizedSHA256 != digest(xmlData) {
