@@ -25,6 +25,7 @@ func collect(args []string, out io.Writer) error {
 	pe := f.String("powershell-evidence", "", "PowerShell 原始 worker 證據")
 	ce := f.String("cmd-evidence", "", "CMD 原始 probe 證據")
 	me := f.String("managed-evidence", "", "Microsoft managed 原生合併證據")
+	runtimeScope := f.Bool("runtime", false, "產生 PowerShell／C# runtime 範圍證據")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
@@ -70,6 +71,24 @@ func collect(args []string, out io.Writer) error {
 	inv, err := rc.ScanInventory(source)
 	if err != nil {
 		return err
+	}
+	var target rc.Inventory
+	if *runtimeScope {
+		target, err = rc.ScanRuntimeInventory(source)
+		if err != nil {
+			return err
+		}
+		if len(target.Blockers) != 0 {
+			return fmt.Errorf("runtime source inventory blocked: %v", target.Blockers)
+		}
+		for _, s := range target.Sources {
+			if s.Language == "powershell" && *pe == "" {
+				return fmt.Errorf("runtime PowerShell evidence required")
+			}
+			if s.Language == "csharp" && *me == "" {
+				return fmt.Errorf("runtime C# evidence required")
+			}
+		}
 	}
 	reports := []rc.Report{}
 	catalogs := []rc.Catalog{}
@@ -170,16 +189,48 @@ func collect(args []string, out io.Writer) error {
 		reports = append(reports, report)
 		catalogs = append(catalogs, lines...)
 	}
+	if *runtimeScope {
+		allowed := map[string]bool{}
+		for _, s := range target.Sources {
+			allowed[s.Path] = true
+		}
+		for i := range reports {
+			for name := range reports[i].Files {
+				if !allowed[name] {
+					delete(reports[i].Files, name)
+				}
+			}
+		}
+		kept := catalogs[:0]
+		for _, c := range catalogs {
+			if allowed[c.Path] {
+				kept = append(kept, c)
+			}
+		}
+		catalogs = kept
+		inv = target
+	}
 	inv, err = rc.BindCatalogs(inv, catalogs)
 	if err != nil {
 		return err
 	}
-	artifacts, err := rc.CreateEvidence(inv, reports, rc.Identity{Commit: *sha, RunUrl: *runURL, MeasuredAt: time.Now().UTC().Format(time.RFC3339), SourceState: "Clean"})
+	identity := rc.Identity{Commit: *sha, RunUrl: *runURL, MeasuredAt: time.Now().UTC().Format(time.RFC3339), SourceState: "Clean"}
+	var artifacts rc.Artifacts
+	if *runtimeScope {
+		artifacts, err = rc.CreateRuntimeEvidence(inv, reports, identity)
+	} else {
+		artifacts, err = rc.CreateEvidence(inv, reports, identity)
+	}
 	if err != nil {
 		return err
 	}
 	// Recheck the live source roster after reading raw evidence, before publishing.
-	if err := rc.ValidateInventory(source, artifacts.Inventory); err != nil {
+	if *runtimeScope {
+		err = rc.ValidateRuntimeInventory(source, artifacts.Inventory)
+	} else {
+		err = rc.ValidateInventory(source, artifacts.Inventory)
+	}
+	if err != nil {
 		return err
 	}
 	if err := os.Mkdir(output, 0700); err != nil {
