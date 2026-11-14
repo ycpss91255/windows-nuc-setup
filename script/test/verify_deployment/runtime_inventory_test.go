@@ -56,3 +56,14 @@ func TestReleaseProfileRequirementMatchesValidatedScope(t *testing.T) {
 		t.Fatal("runtime receipt accepted as legacy")
 	}
 }
+
+func TestCurrentDeploymentRequiresRuntimeScope(t *testing.T) {
+	if err := requireCurrentRuntimeCoverage(&c.Evidence{SchemaVersion: c.RuntimeSchemaVersion, Metric: c.RuntimeMetric, Scope: c.RuntimeScope}); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range []*c.Evidence{nil, {SchemaVersion: 1, Metric: c.Metric}, {SchemaVersion: c.RuntimeSchemaVersion, Metric: c.RuntimeMetric, Scope: "other"}} {
+		if err := requireCurrentRuntimeCoverage(e); err == nil {
+			t.Fatal("non-runtime current coverage accepted")
+		}
+	}
+}

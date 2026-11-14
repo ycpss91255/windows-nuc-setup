@@ -18,6 +18,13 @@ import (
 
 var deploymentSleep = time.Sleep
 
+func requireCurrentRuntimeCoverage(e *c.Evidence) error {
+	if e == nil || e.SchemaVersion != c.RuntimeSchemaVersion || e.Metric != c.RuntimeMetric || e.Scope != c.RuntimeScope {
+		return fmt.Errorf("current deployment requires runtime PowerShell/C# coverage")
+	}
+	return nil
+}
+
 func validatePublishedInventory(evidence *c.Evidence, root string, inventory []byte) error {
 	if evidence == nil {
 		return fmt.Errorf("missing coverage evidence")
@@ -63,11 +70,11 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	files, e := a.OwnedGoFiles(".")
-	if e != nil {
-		return e
-	}
 	if *mode == "release" {
+		files, e := a.OwnedGoFiles(".")
+		if e != nil {
+			return e
+		}
 		if *portalDir != "" || *latestMetadata != "" {
 			return fmt.Errorf("portal artifact is only valid in branch mode")
 		}
@@ -136,14 +143,14 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		if err = requireCurrentRuntimeCoverage(measured); err != nil {
+			return err
+		}
 		inventory, err := reportReader("coverage_inventory.json")
 		if err != nil {
 			return err
 		}
 		if err = validatePublishedInventory(measured, ".", inventory); err != nil {
-			return err
-		}
-		if err = a.ValidateGoCoverageReport(reportReader, files, *sha, *run, false); err != nil {
 			return err
 		}
 		if *portalDir != "" {
@@ -186,7 +193,7 @@ func run() error {
 	if svg.XMLName.Local != "svg" || svg.XMLName.Space != "http://www.w3.org/2000/svg" {
 		return fmt.Errorf("R05 GitHub CI 徽章不是SVG")
 	}
-	summary := fmt.Sprintf("## 公開部署需求驗收通過\n\n- 本次 main 提交：`%s`\n- 報告執行：%s\n- 首頁、測試報告、整體徽章與三份永久覆蓋率證據可讀，來源清單與本次checkout一致。\n- 整體可執行行覆蓋率：%.1f%%（%d/%d），完整量測且精確八成門檻通過。\n", r.Commit, r.RunUrl, *measured.Result.Percent, measured.Result.Covered, measured.Result.Executable)
+	summary := fmt.Sprintf("## 公開部署需求驗收通過\n\n- 本次 main 提交：`%s`\n- 報告執行：%s\n- 首頁、測試報告、runtime 徽章與三份覆蓋率證據可讀，來源清單與本次 checkout 一致。\n- PowerShell/C# runtime 可執行行覆蓋率：%.1f%%（%d/%d），完整量測且精確八成門檻通過；不含 CMD 與 Go。\n", r.Commit, r.RunUrl, *measured.Result.Percent, measured.Result.Covered, measured.Result.Executable)
 	languages := []string{}
 	for language := range measured.Result.Languages {
 		languages = append(languages, language)
