@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 )
 
 type Expected struct {
@@ -13,6 +14,20 @@ type Expected struct {
 	RunID                int64
 	Attempt              int
 	HeadSHA, CheckoutSHA string
+}
+
+// foldField uses the complete Unicode simple-fold cycle, matching the
+// case-insensitive field matching used by encoding/json (including long s and Kelvin sign).
+func foldField(s string) string {
+	return strings.Map(func(r rune) rune {
+		min := r
+		for next := unicode.SimpleFold(r); next != r; next = unicode.SimpleFold(next) {
+			if next < min {
+				min = next
+			}
+		}
+		return min
+	}, s)
 }
 
 func (j *Job) UnmarshalJSON(data []byte) error {
@@ -25,7 +40,7 @@ func (j *Job) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("missing job steps inventory")
 	}
 	for name, raw := range fields {
-		if strings.EqualFold(name, "head_sha") && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		if foldField(name) == foldField("head_sha") && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			return fmt.Errorf("job head cannot be null when supplied")
 		}
 	}
@@ -87,7 +102,7 @@ func Decode(data []byte, expected Expected) (Output, error) {
 					return e
 				}
 				name, ok := key.(string)
-				fold := strings.ToLower(name)
+				fold := foldField(name)
 				if !ok || seen[fold] {
 					return fmt.Errorf("duplicate JSON field")
 				}

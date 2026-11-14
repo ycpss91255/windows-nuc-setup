@@ -272,4 +272,11 @@ func TestDecodeRejectsUnicodeFoldedDuplicateSteps(t *testing.T) {
 	if _, err = Decode(bad, expected); err == nil {
 		t.Fatal("accepted Unicode-folded duplicate steps overriding required inventory")
 	}
+	kelvin := bytes.Replace(data, []byte(`{"run":`), []byte(`{"K":1,"\u212a":2,"run":`), 1)
+	if bytes.Equal(kelvin, data) {
+		t.Fatal("fixture did not inject Kelvin alias")
+	}
+	if _, err = Decode(kelvin, expected); err == nil {
+		t.Fatal("accepted Kelvin-folded duplicate")
+	}
 }
