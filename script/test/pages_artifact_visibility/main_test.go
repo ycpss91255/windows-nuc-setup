@@ -23,6 +23,7 @@ func TestVisibilityPreflight(t *testing.T) {
 	}{
 		{"visible", "valid", "valid", true, 1},
 		{"runtime eventually visible", "valid", "later", true, 2},
+		{"runtime omitted list then visible", "valid", "omitted", true, 2},
 		{"runtime missing deadline", "valid", "missing", false, 0},
 		{"runtime duplicate", "valid", "duplicate", false, 1},
 		{"runtime wrong id", "valid", "wrong", false, 1},
@@ -65,6 +66,10 @@ func TestVisibilityPreflight(t *testing.T) {
 			defer rest.Close()
 			runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				n := atomic.AddInt32(&runtimeCalls, 1)
+				if tc.runtimeMode == "omitted" && n == 1 {
+					fmt.Fprint(w, `{}`)
+					return
+				}
 				if r.URL.Path != "/twirp/github.actions.results.api.v1.ArtifactService/ListArtifacts" {
 					t.Error("wrong runtime path")
 				}
