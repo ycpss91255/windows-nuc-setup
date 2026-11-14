@@ -122,11 +122,7 @@ $moduleLiteral="'"+(Split-Path (Join-Path $root $relative) -Parent).Replace("'",
 Assert ($script:capturedGuiCall.RunId -ceq $VerificationRunId -and $script:capturedGuiCall.VerifyOnly -and $script:capturedGuiCall.IconMode -ceq 'Verify') 'Icons public entry carries exact fresh ID and finite verification mode'
 Assert ($script:capturedGuiCall.Worker -and $script:capturedGuiCall.Root -ieq $root -and $script:capturedGuiCall.Role -ceq 'Icons') 'Icons Worker delegates current invoking SID to same private scoped controller'
 # Execute the actual Verify-Only finalization and AfterRestart acceptance tail.
-$verifyTokens=$null;$verifyErrors=$null
-$verifyAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/verification_library.ps1'),[ref]$verifyTokens,[ref]$verifyErrors)
-$verifyFunction=$verifyAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-SetupVerification'},$true)
-$verifyStarted=$false
-$verifyTail=(@(foreach($statement in $verifyFunction.Body.EndBlock.Statements){if($statement.Extent.Text.StartsWith('$result=[ordered]')){$verifyStarted=$true};if($verifyStarted){$statement.Extent.Text}}) -join "`r`n")
+$verificationLibrary=Join-Path $root 'core/verification_library.ps1'
 $afterSource=[IO.File]::ReadAllText((Join-Path $root 'core/after_restart_library.ps1'))
 $tokens=$null;$parseErrors=$null;$afterAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'core/after_restart_library.ps1'),[ref]$tokens,[ref]$parseErrors)
 $afterFunction=$afterAst.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Invoke-SetupAfterRestart'},$true)
@@ -141,10 +137,22 @@ $hardware=[pscustomobject]@{Name='Fixture'}
 $checks=New-Object Collections.Generic.List[object]
 $checks.Add([pscustomobject]@{Name='fixture-check';Status='Failed';Passed=$false})
 function Test-SetupChecksPassed {param($Checks);return $false}
-function Resolve-NucPath([string]$Name){Join-Path $PSScriptRoot $Name}
+function Resolve-NucPath([string]$Name){if($Name -cne 'Verification-Result.json'){throw 'unexpected report path'};Join-Path $PSScriptRoot $Name}
+function Get-ItemProperty {throw 'fixture forbids registry access'}
+function Set-ItemProperty {throw 'fixture forbids registry access'}
+function Get-CimInstance {throw 'fixture forbids system queries'}
+function Get-Service {throw 'fixture forbids service access'}
+function Set-Service {throw 'fixture forbids service access'}
+function Start-Service {throw 'fixture forbids service access'}
+function Get-NetFirewallRule {throw 'fixture forbids firewall access'}
+function Set-NetFirewallRule {throw 'fixture forbids firewall access'}
+function New-NetFirewallRule {throw 'fixture forbids firewall access'}
+function Get-AppxPackage {throw 'fixture forbids Appx access'}
+function Get-AppxProvisionedPackage {throw 'fixture forbids Appx access'}
+function Start-Process {throw 'fixture forbids process start'}
 '@
  $verifier=Join-Path $dir 'verify_only.ps1'
- [IO.File]::WriteAllText($verifier,$verifyPrefix+"`n"+$verifyTail,[Text.UTF8Encoding]::new($true))
+ [IO.File]::WriteAllText($verifier,$verifyPrefix+"`n. '"+$verificationLibrary.Replace("'","''")+"'`nComplete-SetupVerificationResult -Checks `$checks -Hardware `$hardware -VerificationRunId `$VerificationRunId",[Text.UTF8Encoding]::new($true))
  if($mode -eq 'stale-success'){
   [IO.File]::WriteAllText($verifier,"param([string]`$VerificationRunId)`nthrow 'fixture could not run'",[Text.UTF8Encoding]::new($true))
   @{Passed=$true;Checks=@();VerificationRunId='old-run';Computer=$env:COMPUTERNAME;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}|ConvertTo-Json|Set-Content (Join-Path $dir 'Verification-Result.json') -Encoding UTF8
