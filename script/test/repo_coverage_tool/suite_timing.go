@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -121,4 +122,11 @@ func decodeTiming(data []byte, target any) error {
 		return err
 	}
 	return decodeShardManifest(data, target)
+}
+
+func assertStableTimingInput(validatedManifest, currentManifest, worker []byte, expectedHash string) error {
+	if !bytes.Equal(validatedManifest, currentManifest) || fmt.Sprintf("%x", sha256.Sum256(worker)) != expectedHash {
+		return fmt.Errorf("validated shard changed during timing verification")
+	}
+	return nil
 }

@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
- "crypto/sha256"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -170,10 +170,20 @@ func TestTimingMergeRejectsIncompleteOrCrossAttemptArtifacts(t *testing.T) {
 }
 
 func TestTimingRejectsChangedValidatedShardBytes(t *testing.T) {
- manifest:=[]byte(`{"shard":"original"}`); worker:=[]byte(`{"worker":"original"}`)
- hash:=fmt.Sprintf("%x",sha256.Sum256(worker))
- if err:=assertStableTimingInput(manifest,manifest,worker,hash);err!=nil{t.Fatal(err)}
- for _,v:=range []struct{manifest,worker []byte; hash string}{
-  {[]byte(`{"shard":"changed"}`),worker,hash}, {manifest,[]byte(`{"worker":"changed"}`),hash}, {manifest,worker,"bad"},
- } {if err:=assertStableTimingInput(manifest,v.manifest,v.worker,v.hash);err==nil{t.Fatal("accepted changed validated evidence")}}
+	manifest := []byte(`{"shard":"original"}`)
+	worker := []byte(`{"worker":"original"}`)
+	hash := fmt.Sprintf("%x", sha256.Sum256(worker))
+	if err := assertStableTimingInput(manifest, manifest, worker, hash); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []struct {
+		manifest, worker []byte
+		hash             string
+	}{
+		{[]byte(`{"shard":"changed"}`), worker, hash}, {manifest, []byte(`{"worker":"changed"}`), hash}, {manifest, worker, "bad"},
+	} {
+		if err := assertStableTimingInput(manifest, v.manifest, v.worker, v.hash); err == nil {
+			t.Fatal("accepted changed validated evidence")
+		}
+	}
 }
