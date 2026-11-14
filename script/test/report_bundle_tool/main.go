@@ -678,7 +678,7 @@ func verify(args []string) error {
 		if historical {
 			origin = "immutable_archive_manifest"
 		}
-		return writeVerifiedOutput(outputDir, archiveBytes, files, o, origin)
+		return writeVerifiedOutput(outputDir, archiveBytes, files, o, origin, m.Scope)
 	}
 	return nil
 }
@@ -692,7 +692,7 @@ func sameOutputParent(parent, resolved, platform string) bool {
 }
 
 // writeVerifiedOutput only publishes bytes after every archive and report check passes.
-func writeVerifiedOutput(output string, archive []byte, files map[string][]byte, o options, origin string) error {
+func writeVerifiedOutput(output string, archive []byte, files map[string][]byte, o options, origin, scope string) error {
 	if _, err := os.Lstat(output); err == nil || !os.IsNotExist(err) {
 		return errors.New("output must not exist")
 	}
@@ -740,7 +740,8 @@ func writeVerifiedOutput(output string, archive []byte, files map[string][]byte,
 		RunAttempt    int    `json:"run_attempt"`
 		SummarySHA256 string `json:"summary_sha256"`
 		ProfileSHA256 string `json:"profile_sha256,omitempty"`
-	}{origin, hex.EncodeToString(digest[:]), int64(len(archive)), o.version, o.commit, o.run, o.attempt, hex.EncodeToString(summary[:]), profileHash}
+		CoverageScope string `json:"coverage_scope,omitempty"`
+	}{origin, hex.EncodeToString(digest[:]), int64(len(archive)), o.version, o.commit, o.run, o.attempt, hex.EncodeToString(summary[:]), profileHash, scope}
 	data, err := json.Marshal(metadata)
 	if err != nil {
 		return err

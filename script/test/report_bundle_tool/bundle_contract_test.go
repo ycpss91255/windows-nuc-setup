@@ -851,6 +851,17 @@ func TestRuntimeReleaseReportDoesNotRequireGoCoverage(t *testing.T) {
 	if err := verify([]string{"--archive", archive, "--source-root", source, "--version", "v0.1.0", "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", verified}); err != nil {
 		t.Fatalf("runtime bundle verify: %v", err)
 	}
+	receipt, err := os.ReadFile(filepath.Join(verified, "verified.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(receipt, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if fields["coverage_scope"] != c.RuntimeScope || fields["profile_sha256"] != nil {
+		t.Fatalf("runtime receipt must identify its scope and omit Go profile: %s", receipt)
+	}
 }
 func TestOutputParentComparisonRespectsPlatform(t *testing.T) {
 	if sameOutputParent("/tmp/A", "/tmp/a", "linux") {
