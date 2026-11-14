@@ -173,6 +173,29 @@ func TestCreatedDirectoryReplacementDoesNotOverwriteMarker(t *testing.T) {
 	}
 }
 
+func TestCreationLocksAncestorAgainstReplacement(t *testing.T) {
+	parent := t.TempDir()
+	ancestor := filepath.Join(parent, "ancestor")
+	if e := os.Mkdir(ancestor, 0700); e != nil {
+		t.Fatal(e)
+	}
+	root := filepath.Join(ancestor, "owned")
+	var out bytes.Buffer
+	called := false
+	var renameErr error
+	afterCreateDirectoryHook = func(string) { called = true; renameErr = os.Rename(ancestor, filepath.Join(parent, "moved")) }
+	defer func() { afterCreateDirectoryHook = nil }()
+	if e := run([]string{"init", root}, &out, time.Now()); e != nil {
+		t.Fatal(e)
+	}
+	if !called || renameErr == nil {
+		t.Fatalf("ancestor replacement was not blocked: called=%v error=%v", called, renameErr)
+	}
+	if b, e := os.ReadFile(filepath.Join(root, rootMarker)); e != nil || string(b) != rootContent {
+		t.Fatalf("root marker invalid: %q %v", b, e)
+	}
+}
+
 func TestRejectExistingRootTraversalAndFutureExpiry(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "owned")
