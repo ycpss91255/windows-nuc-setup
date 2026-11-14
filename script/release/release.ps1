@@ -7,7 +7,7 @@ function Get-ReleaseVersion([string]$Version) {
 function Get-ReleaseDownloadGuide([string]$Version) {
  $null=Get-ReleaseVersion $Version
  $guide="## $Version 下載與使用`n`n- 通用工具：下載 Source code ZIP，依 README 另行取得 Microsoft 官方 Autologon；來源 ZIP 不含 Autologon。`n- 測試報表：在 Assets 下載本版本報表 ZIP。"
- if($Version -ceq 'v0.2.5'){$guide+="`n- 可選驅動：Assets 的 NUC8 驅動包適用 NUC8i7HVK／NUC8i7HNK，主機板 HVB／HNB。"}
+ if($Version -ceq 'v0.2.5'){$guide+="`n- 可選驅動：Assets 的 NUC8 驅動包適用 NUC8i7HVK／NUC8i7HNK，主機板 NUC8i7HVB／NUC8i7HNB。"}
  return $guide
 }
 function Assert-ReleaseDownloadGuide([string]$Version,[string]$Notes) {
