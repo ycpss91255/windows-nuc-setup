@@ -832,6 +832,26 @@ Pages 部署後匿名讀取首頁、main 報表、JSON／Markdown／JUnit、整�
 
 每個問題／功能先實際執行紅燈測試並在 PR 記錄命令、預期原因、實際輸出與退出碼；測試與修正同一綠色提交，重構另成綠色提交。每個提交以獨立 detached 快照驗證；純文件不偽造紅燈。最終必要 CI 通過後只以 merge commit 合併；舊歷史不重寫。以 `git log --first-parent` 看主線 PR 總覽，以 `git log` 看完整歷史。完整契約見 [維護規範](agents.md)，維護者偏好另見 [工作方式](doc/maintainer_workflow.md)。
 
+### 自有測試暫存的預覽與清理
+
+維護者可用 Go 執行 `go run ./script/test/clean_test_artifacts` 管理本工具新建的拋棄式測試資料夾。先在 Go `os.TempDir()` 所取得的目前程序暫存目錄之下，以 `init <新根目錄>` 建立不存在的專用根目錄，再用 `create <根目錄> <名稱>` 建立單項。僅在資料確定可拋棄、無續跑或私人證據需求後，以 `finish <根目錄> <名稱> <RFC3339到期時間>` 標記完成。`clean <根目錄> <名稱>` 預設只列出候選項目，尚未驗證完成清單或控制代碼，不能保證實際刪除可成功；明確加上 `--delete` 時才進行完整核對並刪除選定且已到期的單項。以下範例使用一般使用者身分：
+
+完成時工具保留原始所有權標記，另外獨占建立清單，鎖定各項目並記錄相對路徑、識別、大小及 SHA-256；清理前重新核對完整清單。完成後新增或修改項目會拒絕刪除，具名資料流與重解析點亦不支援。清單標記上限為 64 KiB，超過時完成會失敗；此維護工具僅能在 Windows 編譯及執行。
+
+刪除不是交易：失敗前已刪除的子項不會還原。首次刪除前工具在專用根目錄寫入並呼叫檔案同步的復原收據，成功刪完整單項後才移除；失敗時保留收據供識別，並嘗試恢復單項標記。收據本身不授權刪除資料，也不會自動續清。請停止其他寫入，依收據和錯誤訊息人工檢查剩餘資料；處理完畢前保留收據，不要認領未知資料。儲存裝置錯誤可能使收據寫入或同步失敗，此時不會開始刪除。
+
+```powershell
+$artifactTemp = [System.IO.Path]::GetTempPath()
+$artifactRoot = Join-Path $artifactTemp "disposable_test_root"
+go run ./script/test/clean_test_artifacts init $artifactRoot
+go run ./script/test/clean_test_artifacts create $artifactRoot sample
+go run ./script/test/clean_test_artifacts finish $artifactRoot sample 2026-01-01T00:00:00Z
+go run ./script/test/clean_test_artifacts clean $artifactRoot sample
+go run ./script/test/clean_test_artifacts clean $artifactRoot sample --delete
+```
+
+Windows 暫存路徑可能優先採用 `TMP` 而非 `TEMP`；SYSTEM 程序的暫存路徑可能不同。工具支援暫存根的 8.3 短名稱，會檢查各祖先並以控制代碼核對目錄身分；重解析點仍會拒絕。請使用執行清理的同一身分及環境。檔案同步不保證突然斷電後目錄項目一定持久存在；收據不提供自動回復或續清。此工具不掃描系統 TEMP，也不認領或清理舊的 `windows-setup-*` 目錄。請勿把正式程式碼、未提交工作、私人資料或需保留的證據放入拋棄式目錄。工具會比對列舉及開啟時的檔案識別，並以控制代碼鎖定已開啟項目；檔案識別可能重用，操作期間仍應停止其他程序修改目錄。工具拒絕含連結或重解析點的路徑及項目。Go 是維護工具需求，不是一般 Windows 執行環境的需求。
+
 ### 提交訊息輔助檢查
 
 維護者可選擇安裝 `commit-msg` hook；需要 Git、Go 1.27.3 及提交時可用的 Go 執行環境。在本儲存庫根目錄執行 `powershell -File script/test/commitlint/install.ps1`；指定其他目標可加 `-Repository <路徑>`。安裝尊重 Git 的 hooks 路徑，若已有 `commit-msg` 便停止，不覆蓋原檔。移除時請先確認內容，再自行刪除安裝的 hook。hook 參照此工作樹中的工具來源，移動或刪除工作樹後須重新安裝。
