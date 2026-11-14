@@ -67,3 +67,13 @@ func TestCurrentDeploymentRequiresRuntimeScope(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimeReleaseDoesNotRequireGoCoverageInventory(t *testing.T) {
+	root := t.TempDir()
+	if _, err := releaseGoFiles(root, &verifiedBundle{CoverageScope: c.RuntimeScope}); err != nil {
+		t.Fatalf("runtime release required Go coverage inventory: %v", err)
+	}
+	if _, err := releaseGoFiles(root, &verifiedBundle{}); err == nil {
+		t.Fatal("legacy release skipped Go inventory")
+	}
+}

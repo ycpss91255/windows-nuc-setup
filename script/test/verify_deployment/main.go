@@ -18,6 +18,13 @@ import (
 
 var deploymentSleep = time.Sleep
 
+func releaseGoFiles(root string, bundle *verifiedBundle) ([]string, error) {
+	if bundle != nil && bundle.CoverageScope == c.RuntimeScope {
+		return nil, nil
+	}
+	return a.OwnedGoFiles(root)
+}
+
 func requireCurrentRuntimeCoverage(e *c.Evidence) error {
 	if e == nil || e.SchemaVersion != c.RuntimeSchemaVersion || e.Metric != c.RuntimeMetric || e.Scope != c.RuntimeScope {
 		return fmt.Errorf("current deployment requires runtime PowerShell/C# coverage")
@@ -71,10 +78,6 @@ func run() error {
 		return e
 	}
 	if *mode == "release" {
-		files, e := a.OwnedGoFiles(".")
-		if e != nil {
-			return e
-		}
 		if *portalDir != "" || *latestMetadata != "" {
 			return fmt.Errorf("portal artifact is only valid in branch mode")
 		}
@@ -93,6 +96,10 @@ func run() error {
 			return fmt.Errorf("repository requires report download")
 		}
 		bundle, err := prepareReleaseBundle(data, *tag, *sha, *run, *attempt, *bundleTool, *archive)
+		if err != nil {
+			return err
+		}
+		files, err := releaseGoFiles(".", bundle)
 		if err != nil {
 			return err
 		}
