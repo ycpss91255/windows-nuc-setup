@@ -342,6 +342,58 @@ func TestFinishedManifestRejectsChangedAndUnknownFiles(t *testing.T) {
 	}
 }
 
+func TestManifestRejectsReplacementWithSimulatedReusedID(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "owned")
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}} {
+		if e := run(a, &out, now); e != nil {
+			t.Fatal(e)
+		}
+	}
+	child := filepath.Join(root, "item", "child")
+	if e := os.WriteFile(child, []byte("original"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e := run([]string{"finish", root, "item", "2026-01-02T00:00:00Z"}, &out, now); e != nil {
+		t.Fatal(e)
+	}
+	meta, e := readMetadata(filepath.Join(root, "item"))
+	if e != nil || len(meta.Manifest) != 1 {
+		t.Fatalf("manifest: %v %v", meta, e)
+	}
+	originalID := meta.Manifest[0].ID
+	called := false
+	var swapErr error
+	afterEnumerateHook = func() {
+		if called {
+			return
+		}
+		called = true
+		swapErr = os.Rename(child, filepath.Join(root, "moved"))
+		if swapErr == nil {
+			swapErr = os.WriteFile(child, []byte("new data"), 0600)
+		}
+	}
+	identityTestHook = func(path, actual string) string {
+		if path == child {
+			return originalID
+		}
+		return actual
+	}
+	defer func() { afterEnumerateHook = nil; identityTestHook = nil }()
+	err := run([]string{"clean", root, "item", "--delete"}, &out, now)
+	if !called || swapErr != nil {
+		t.Fatalf("replacement failed: %v %v", called, swapErr)
+	}
+	if err == nil || !strings.Contains(err.Error(), "manifest entry changed") {
+		t.Fatalf("expected manifest content rejection with simulated reused ID: %v", err)
+	}
+	if b, e := os.ReadFile(child); e != nil || string(b) != "new data" {
+		t.Fatalf("replacement lost: %q %v", b, e)
+	}
+}
+
 func TestConcurrentChildReplacementCannotEscape(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "owned")

@@ -269,6 +269,9 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 			if e != nil {
 				return e
 			}
+			if identityTestHook != nil {
+				childID = identityTestHook(q, childID)
+			}
 			if !strings.HasSuffix(childID, fmt.Sprintf(":%016x", child.id)) {
 				syscall.CloseHandle(ent.h)
 				return errors.New("enumerated child identity changed")
