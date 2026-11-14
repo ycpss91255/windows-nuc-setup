@@ -120,6 +120,9 @@ func writeMetadata(p string, m metadata) error {
 	}
 	return os.WriteFile(filepath.Join(p, itemMarker), b, 0600)
 }
+
+var beforeDeleteHook func()
+
 func run(args []string, out io.Writer, now time.Time) error {
 	if len(args) < 2 {
 		return errors.New("usage: init ROOT | create ROOT NAME | finish ROOT NAME EXPIRY | clean ROOT NAME [--delete]")
@@ -230,6 +233,9 @@ func run(args []string, out io.Writer, now time.Time) error {
 		if len(args) == 3 {
 			_, e = fmt.Fprintln(out, "預覽：", p)
 			return e
+		}
+		if beforeDeleteHook != nil {
+			beforeDeleteHook()
 		}
 		return os.RemoveAll(p)
 	default:
