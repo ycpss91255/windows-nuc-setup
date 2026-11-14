@@ -29,6 +29,7 @@ func TestActualCheckoutSource(t *testing.T) {
 	git("add", "file")
 	git("commit", "-qm", "base")
 	base := git("rev-parse", "HEAD")
+	t.Setenv("PREFLIGHT_MAIN_SHA", base)
 	os.WriteFile(filepath.Join(d, "file"), []byte("head"), 0600)
 	git("commit", "-qam", "head")
 	head := git("rev-parse", "HEAD")
@@ -144,6 +145,16 @@ func TestRejectStaleMainRef(t *testing.T) {
 	}
 	if err := os.WriteFile(authority, authorityData, 0600); err != nil {
 		t.Fatal(err)
+	}
+	for _, sha := range []string{"", "invalid", liveMain} {
+		t.Setenv("PREFLIGHT_MAIN_SHA", sha)
+		if err := authorityCheck(event, authority); err == nil {
+			t.Fatalf("accepted invalid or stale main ref %q", sha)
+		}
+	}
+	t.Setenv("PREFLIGHT_MAIN_SHA", base)
+	if err := authorityCheck(event, authority); err != nil {
+		t.Fatalf("rejected matching main ref: %v", err)
 	}
 	t.Setenv("PREFLIGHT_MAIN_SHA", liveMain)
 	if err := authorityCheck(event, authority); err == nil {
