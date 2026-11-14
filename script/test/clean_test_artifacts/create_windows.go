@@ -76,7 +76,7 @@ func createRelativeDirectory(parent syscall.Handle, name string) (syscall.Handle
 	return h, nil
 }
 
-func createOwnedDirectory(path, name string, root bool) error {
+func createOwnedDirectory(path, name string, root bool, anchor tempAnchor) error {
 	parent := filepath.Dir(path)
 	vol := filepath.VolumeName(parent)
 	current := vol + string(os.PathSeparator)
@@ -109,6 +109,9 @@ func createOwnedDirectory(path, name string, root bool) error {
 				return e
 			}
 		}
+	}
+	if e := verifyTempAnchor(anchor); e != nil {
+		return e
 	}
 	if !root {
 		mark, _, e := openLocked(filepath.Join(parent, rootMarker), true)

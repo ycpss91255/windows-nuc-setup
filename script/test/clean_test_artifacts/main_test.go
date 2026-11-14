@@ -150,6 +150,57 @@ func TestConfiguredTempShortAliasSupportsOwnedRoot(t *testing.T) {
 	}
 }
 
+func TestConfiguredTempReparseIsRejected(t *testing.T) {
+	parent := t.TempDir()
+	target, alias := filepath.Join(parent, "target"), filepath.Join(parent, "alias")
+	if err := os.Mkdir(target, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, alias); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	t.Setenv("TMP", alias)
+	t.Setenv("TEMP", alias)
+	var out bytes.Buffer
+	if err := run([]string{"init", filepath.Join(alias, "owned")}, &out, time.Now()); err == nil {
+		t.Fatal("reparse TEMP accepted")
+	}
+	if _, err := os.Stat(filepath.Join(target, "owned")); !os.IsNotExist(err) {
+		t.Fatalf("created through reparse: %v", err)
+	}
+}
+
+func TestTempReplacementBeforeAncestorLockRejected(t *testing.T) {
+	parent := t.TempDir()
+	base := filepath.Join(parent, "base")
+	if err := os.Mkdir(base, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMP", base)
+	t.Setenv("TEMP", base)
+	var out bytes.Buffer
+	var swapErr error
+	called := false
+	beforeTempLockTestHook = func() {
+		called = true
+		swapErr = os.Rename(base, filepath.Join(parent, "moved"))
+		if swapErr == nil {
+			swapErr = os.Mkdir(base, 0700)
+		}
+	}
+	defer func() { beforeTempLockTestHook = nil }()
+	err := run([]string{"init", filepath.Join(base, "owned")}, &out, time.Now())
+	if !called || swapErr != nil {
+		t.Fatalf("swap not performed: %v %v", called, swapErr)
+	}
+	if err == nil {
+		t.Fatal("replacement TEMP accepted")
+	}
+	if _, statErr := os.Stat(filepath.Join(base, "owned")); !os.IsNotExist(statErr) {
+		t.Fatalf("created inside replaced TEMP: %v", statErr)
+	}
+}
+
 func TestOwnedArtifactsRequireSelectionCompletionAndExpiry(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "owned")

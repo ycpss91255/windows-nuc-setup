@@ -51,16 +51,30 @@ func plainPath(p string) (string, error) {
 func safeName(s string) bool {
 	return s != "" && s != "." && s != ".." && filepath.Base(s) == s && !strings.ContainsAny(s, `/\:`)
 }
-func requireTempChild(path string) error {
-	temp, err := plainPath(os.TempDir())
+
+type tempAnchor struct{ path, id string }
+
+func normalizeTempRoot(path string) (string, tempAnchor, error) {
+	var anchor tempAnchor
+	raw, err := filepath.Abs(os.TempDir())
 	if err != nil {
-		return fmt.Errorf("invalid TEMP: %w", err)
+		return "", anchor, err
 	}
-	rel, err := filepath.Rel(temp, path)
-	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return errors.New("root outside TEMP")
+	anchor.path, anchor.id, err = canonicalTemp(raw)
+	if err != nil {
+		return "", anchor, fmt.Errorf("invalid TEMP: %w", err)
 	}
-	return nil
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return "", anchor, err
+	}
+	for _, base := range []string{raw, anchor.path} {
+		rel, e := filepath.Rel(base, path)
+		if e == nil && rel != "." && rel != ".." && !filepath.IsAbs(rel) && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return filepath.Join(anchor.path, rel), anchor, nil
+		}
+	}
+	return "", anchor, errors.New("root outside TEMP")
 }
 func regular(path string) error {
 	i, e := os.Lstat(path)
@@ -72,30 +86,31 @@ func regular(path string) error {
 	}
 	return nil
 }
-func validateRoot(p string) (string, error) {
-	root, e := plainPath(p)
+func validateRoot(p string) (string, tempAnchor, error) {
+	root, anchor, e := normalizeTempRoot(p)
 	if e != nil {
-		return "", e
+		return "", anchor, e
 	}
-	if e = requireTempChild(root); e != nil {
-		return "", e
+	root, e = plainPath(root)
+	if e != nil {
+		return "", anchor, e
 	}
 	i, e := os.Lstat(root)
 	if e != nil {
-		return "", e
+		return "", anchor, e
 	}
 	if !i.IsDir() || i.Mode()&os.ModeSymlink != 0 {
-		return "", errors.New("invalid root")
+		return "", anchor, errors.New("invalid root")
 	}
 	m := filepath.Join(root, rootMarker)
 	if e = regular(m); e != nil {
-		return "", e
+		return "", anchor, e
 	}
 	b, e := os.ReadFile(m)
 	if e != nil || string(b) != rootContent {
-		return "", errors.New("invalid root marker")
+		return "", anchor, errors.New("invalid root marker")
 	}
-	return root, nil
+	return root, anchor, nil
 }
 func item(root, name string) (string, error) {
 	if !safeName(name) {
@@ -156,6 +171,7 @@ var beforeRestoreHook func()
 var afterCreateDirectoryHook func(string)
 var finishWriteTestHook func() error
 var nativeCreateTestHook func()
+var beforeTempLockTestHook func()
 
 func run(args []string, out io.Writer, now time.Time) error {
 	if len(args) < 2 {
@@ -165,7 +181,7 @@ func run(args []string, out io.Writer, now time.Time) error {
 		if len(args) != 2 {
 			return errors.New("invalid init arguments")
 		}
-		abs, e := filepath.Abs(args[1])
+		abs, anchor, e := normalizeTempRoot(args[1])
 		if e != nil {
 			return e
 		}
@@ -174,12 +190,12 @@ func run(args []string, out io.Writer, now time.Time) error {
 			return e
 		}
 		abs = filepath.Join(parent, filepath.Base(abs))
-		if e = requireTempChild(abs); e != nil {
-			return e
+		if beforeTempLockTestHook != nil {
+			beforeTempLockTestHook()
 		}
-		return createOwnedDirectory(abs, "", true)
+		return createOwnedDirectory(abs, "", true, anchor)
 	}
-	root, e := validateRoot(args[1])
+	root, anchor, e := validateRoot(args[1])
 	if e != nil {
 		return e
 	}
@@ -194,7 +210,7 @@ func run(args []string, out io.Writer, now time.Time) error {
 		if len(args) != 3 {
 			return errors.New("invalid create arguments")
 		}
-		return createOwnedDirectory(filepath.Join(root, name), name, false)
+		return createOwnedDirectory(filepath.Join(root, name), name, false, anchor)
 	}
 	p, e := item(root, name)
 	if e != nil {
@@ -223,7 +239,7 @@ func run(args []string, out io.Writer, now time.Time) error {
 		if e != nil {
 			return e
 		}
-		return safeFinish(root, name, id, expiry.UTC().Format(time.RFC3339))
+		return safeFinish(root, name, id, expiry.UTC().Format(time.RFC3339), anchor)
 	case "clean":
 		if len(args) != 3 && !(len(args) == 4 && args[3] == "--delete") {
 			return errors.New("invalid clean arguments")
@@ -263,7 +279,7 @@ func run(args []string, out io.Writer, now time.Time) error {
 			_, e = fmt.Fprintln(out, "候選預覽（尚未核對清單與控制代碼）：", p)
 			return e
 		}
-		return safeDelete(root, name, m.ID, now)
+		return safeDelete(root, name, m.ID, now, anchor)
 	default:
 		return errors.New("unknown command")
 	}

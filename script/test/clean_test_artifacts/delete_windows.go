@@ -150,13 +150,13 @@ func readLocked(h syscall.Handle) ([]byte, error) {
 	return buf[:n], nil
 }
 
-func safeDelete(root, name, expectedID string, now time.Time) error {
-	return safeProcess(root, name, expectedID, now, "")
+func safeDelete(root, name, expectedID string, now time.Time, anchor tempAnchor) error {
+	return safeProcess(root, name, expectedID, now, "", anchor)
 }
-func safeFinish(root, name, expectedID, expiry string) error {
-	return safeProcess(root, name, expectedID, time.Time{}, expiry)
+func safeFinish(root, name, expectedID, expiry string, anchor tempAnchor) error {
+	return safeProcess(root, name, expectedID, time.Time{}, expiry, anchor)
 }
-func safeProcess(root, name, expectedID string, now time.Time, finish string) (result error) {
+func safeProcess(root, name, expectedID string, now time.Time, finish string, temp tempAnchor) (result error) {
 	abs, e := filepath.Abs(root)
 	if e != nil {
 		return e
@@ -191,6 +191,9 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 			return errors.New("ancestor not directory")
 		}
 		ancestors = append(ancestors, x)
+	}
+	if e = verifyTempAnchor(temp); e != nil {
+		return e
 	}
 	anchor, e := os.OpenRoot(abs)
 	if e != nil {
