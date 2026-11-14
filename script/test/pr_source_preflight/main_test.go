@@ -217,7 +217,7 @@ func workflowShell(gitExecPath string) (string, error) {
 	if bash, err := exec.LookPath("bash"); err == nil {
 		return bash, nil
 	}
-	bash := `C:\Program Files\Git\bin\bash.exe`
+	bash := filepath.Clean(filepath.Join(gitExecPath, "..", "..", "..", "usr", "bin", "sh.exe"))
 	if _, err := os.Stat(bash); err != nil {
 		return "", err
 	}
