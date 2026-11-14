@@ -19,7 +19,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 . (Join-Path (Split-Path $PSScriptRoot -Parent) 'modules\init\provisioning_library.ps1')
 $null=Invoke-InitWindowsCheckpoint -StageRoot (Join-Path $env:ProgramData 'windows_setup_init')
 & (Resolve-NucPath 'test_setup_prerequisites.ps1') -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer
-if(($hardware.DriverProfileId -or $hardware.IsNuc8) -and $DriverPackagePath){$hardware|Add-Member -NotePropertyName DriverSelection -NotePropertyValue (New-SetupDriverSelection -PackageRoot $script:NucPackageRoot -DriverPackagePath $DriverPackagePath) -Force}
+Set-SetupDriverContinuation -Hardware $hardware -PackageRoot $script:NucPackageRoot -DriverPackagePath $DriverPackagePath
 if($UserName -ine $env:USERNAME){throw '自動登入帳號必須與目前執行帳號相同。'}
 . (Resolve-NucPath 'configuration_library.ps1')
 try { Invoke-SetupConfiguration -Hardware $hardware -UserName $UserName -AutoLogonPassword $AutoLogonPassword -DriverPackagePath $DriverPackagePath -ConfirmedBoard $ConfirmedBoard -ConfirmationComputer $ConfirmationComputer -NonInteractive:$NonInteractive } finally { $AutoLogonPassword=$null }

@@ -242,3 +242,8 @@ function Select-SetupDriverRequest {
  if(-not $DriverPackagePath){$ConfirmedBoard='';$ConfirmationComputer='';$hardware=Get-SetupHardwareProfile}
  [pscustomobject]@{Hardware=$hardware;DriverPackagePath=$DriverPackagePath;ConfirmedBoard=$ConfirmedBoard;ConfirmationComputer=$ConfirmationComputer}
 }
+
+function Set-SetupDriverContinuation {
+ param([Parameter(Mandatory=$true)]$Hardware,[Parameter(Mandatory=$true)][string]$PackageRoot,[string]$DriverPackagePath)
+ if(($Hardware.DriverProfileId -or $Hardware.IsNuc8) -and $DriverPackagePath){$Hardware|Add-Member -NotePropertyName DriverSelection -NotePropertyValue (New-SetupDriverSelection -PackageRoot $PackageRoot -DriverPackagePath $DriverPackagePath) -Force}
+}
