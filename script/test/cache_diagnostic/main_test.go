@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -75,5 +77,73 @@ func TestDiagnosticRequiresCompleteIdentityAndOnlyWritesSuccess(t *testing.T) {
 	}
 	if err := runDiagnostic(cfg, func(command) error { return nil }); err == nil {
 		t.Fatal("overwrote existing sample")
+	}
+}
+
+func TestRealDiagnosticCLIExecutesFreshCommandsAndStopsOnFailure(t *testing.T) {
+	root, err := filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	fakeSource := filepath.Join(dir, "fake.go")
+	fakeGo := filepath.Join(dir, "go.exe")
+	if runtime.GOOS != "windows" {
+		fakeGo = filepath.Join(dir, "go")
+	}
+	source := `package main
+import("fmt";"os";"strings")
+func main(){f,e:=os.OpenFile(os.Getenv("FAKE_LOG"),os.O_CREATE|os.O_APPEND|os.O_WRONLY,0600);if e!=nil{os.Exit(2)};fmt.Fprintln(f,strings.Join(os.Args[1:]," ")+" | "+os.Getenv("WINDOWS_SETUP_ARTIFACT_DIR"));f.Close();if os.Getenv("FAKE_FAIL")!="" && strings.Contains(strings.Join(os.Args[1:]," "),"./..."){os.Exit(7)}}`
+	if err = os.WriteFile(fakeSource, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	goexe := filepath.Join(runtime.GOROOT(), "bin", "go")
+	if runtime.GOOS == "windows" {
+		goexe += ".exe"
+	}
+	binary := filepath.Join(dir, "diagnostic.exe")
+	if runtime.GOOS != "windows" {
+		binary = filepath.Join(dir, "diagnostic")
+	}
+	for _, args := range [][]string{{"build", "-o", fakeGo, fakeSource}, {"build", "-mod=vendor", "-cover", "-coverpkg=./script/test/...", "-o", binary, "./script/test/cache_diagnostic"}} {
+		cmd := exec.Command(goexe, args...)
+		cmd.Dir = root
+		if b, e := cmd.CombinedOutput(); e != nil {
+			t.Fatalf("fixture build: %v %s", e, b)
+		}
+	}
+	cover := os.Getenv("WINDOWS_SETUP_CLI_COVERAGE_DIR")
+	if cover == "" {
+		cover = t.TempDir()
+	}
+	for _, fail := range []bool{false, true} {
+		log := filepath.Join(t.TempDir(), "calls.log")
+		out := filepath.Join(t.TempDir(), "sample.json")
+		args := []string{"--native", "native", "--report", "report", "--fixture", "fixture", "--root", root, "--sha", strings.Repeat("a", 40), "--run-url", "https://github.com/example/repo/actions/runs/123", "--attempt", "1", "--sample", "cold_1", "--output", out}
+		cmd := exec.Command(binary, args...)
+		cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"), "GOCOVERDIR="+cover, "FAKE_LOG="+log)
+		if fail {
+			cmd.Env = append(cmd.Env, "FAKE_FAIL=1")
+		}
+		b, e := cmd.CombinedOutput()
+		if (e == nil) == fail {
+			t.Fatalf("unexpected exit %v %s", e, b)
+		}
+		calls, e := os.ReadFile(log)
+		if e != nil {
+			t.Fatal(e)
+		}
+		lines := strings.Split(strings.TrimSpace(string(calls)), "\n")
+		expected := 4
+		if fail {
+			expected = 2
+		}
+		if len(lines) != expected || !strings.Contains(lines[0], "test -count=1 ./test/go/integration") || !strings.Contains(lines[0], " | native") || !strings.Contains(lines[1], "test -count=1 ./... | report") {
+			t.Fatalf("unexpected calls: %s", calls)
+		}
+		_, e = os.Stat(out)
+		if (e == nil) == fail {
+			t.Fatalf("unexpected sample output: %v", e)
+		}
 	}
 }
