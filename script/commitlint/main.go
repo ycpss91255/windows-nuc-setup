@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,9 +16,18 @@ var privatePath = regexp.MustCompile(`(?i)(?:[a-z]:[\\/](?:users|documents and s
 var credential = regexp.MustCompile(`(?i)(?:password|passwd|token|api[_-]?key|secret)\s*[:=]\s*[^\s]{8,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----`)
 
 func lint(path string) error {
-	b, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("無法讀取提交訊息")
+	}
+	defer f.Close()
+	const maxMessageBytes = 64 * 1024
+	b, err := io.ReadAll(io.LimitReader(f, maxMessageBytes+1))
+	if err != nil {
+		return fmt.Errorf("無法讀取提交訊息")
+	}
+	if len(b) > maxMessageBytes {
+		return fmt.Errorf("提交訊息過大")
 	}
 	msg := string(b)
 	lines := strings.Split(msg, "\n")
