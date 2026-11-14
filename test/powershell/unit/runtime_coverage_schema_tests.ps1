@@ -18,6 +18,6 @@ try {
  Assert-RepoCoverageArtifacts -Report $report -Directory $temp -CoverageToolPath $tool -RequireComplete
  Assert ([IO.File]::ReadAllText($capture).Contains('--runtime')) 'Runtime verifier mode is required'
 } finally {$env:RUNTIME_SCHEMA_ARGS=$previous}
-$coverage.Scope='all-owned' 
+$coverage.Scope='all-owned'
 $rejected=$false;try{Assert-RepoCoverage -Coverage $coverage}catch{$rejected=$true}
 Assert $rejected 'Altered scope rejected'
