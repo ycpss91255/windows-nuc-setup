@@ -33,7 +33,12 @@ $wrongMessage='';try{& ([scriptblock]::Create($wrongScript))}catch{$wrongMessage
 Assert ((Test-RollupFailure $wrongMessage 'PowerShellCoverage') -and -not (Test-RollupFailure $wrongMessage 'Coverage')) 'wrong PowerShellCoverage failure cannot satisfy Coverage check'
 }finally{$env:COVERAGE_RESULT=$priorCoverageResult;$env:GITHUB_STEP_SUMMARY=$priorSummaryPath;if(Test-Path -LiteralPath $summaryPath){[IO.File]::Delete($summaryPath)}}
 $job=[regex]::Match($workflow,'(?ms)^  oobe_payload_inspection:\r?\n(?<body>.*?)(?=^  [a-z][a-z_-]+:)').Groups['body'].Value
-Assert ($job -match 'runs-on: windows-2022' -and $job -notmatch '(?m)^    needs:') 'payload inspection runs independently on Windows'
+function Test-PayloadJobDependencies([string]$Job){return $Job -match '(?m)^    runs-on: windows-2022\s*$' -and [regex]::Matches($Job,'(?m)^    needs:').Count -eq 1 -and $Job -match '(?m)^    needs: \[source-preflight\]\s*$'}
+Assert (Test-PayloadJobDependencies $job) 'payload inspection runs on Windows after source preflight only'
+foreach($expensive in @('isolated-tests','docker-tests','powershell-coverage','coverage-aggregation')){
+ $wrongJob=$job.Replace('needs: [source-preflight]',('needs: [source-preflight, '+$expensive+']'))
+ Assert (-not (Test-PayloadJobDependencies $wrongJob)) ('payload inspection rejects extra expensive dependency: '+$expensive)
+}
 Assert ($job.Contains('verify_oobe_payload.ps1') -and $job.Contains('payload_baseline.json') -and $job.Contains('if: always()') -and $job.Contains('retention-days: 7')) 'CI invokes real reader with reviewed baseline and preserves failure evidence seven days'
 Assert ($job -match '(?s)name:.*?三檔來源與實際雜湊\r?\n\s+shell: powershell\r?\n\s+run: \|\r?\n\s+.*provisioning_source_tests\.ps1' -and $job -match '(?s)id: payload\r?\n\s+if: always\(\)') 'CI names real source verification accurately and preserves independent native WIM inspection'
 Assert ($rollup.Contains('oobe_payload_inspection') -and $rollup.Contains('needs.oobe_payload_inspection.result')) 'rollup dependency and result refer to real payload job'

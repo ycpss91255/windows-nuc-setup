@@ -6,6 +6,7 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   merge_group:
   workflow_dispatch:
 
@@ -17,13 +18,47 @@ env:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: windows-tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  source-preflight:
+    name: PR 來源前置核對
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 取得此事件的實際快照
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 準備固定 Go 工具鏈
+        if: github.event_name == 'pull_request'
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: 取得目前 PR 身分並核對事件來源
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$RUNNER_TEMP/pr-authority.json"
+          PREFLIGHT_MAIN_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          export PREFLIGHT_MAIN_SHA
+          go run ./script/test/pr_source_preflight -repo . -event "$GITHUB_EVENT_PATH" -authority "$RUNNER_TEMP/pr-authority.json" -checkout "$(git rev-parse HEAD)" -run-sha "$GITHUB_SHA" -base "$EVENT_BASE" -head "$EVENT_HEAD"
+
   oobe_payload_inspection:
+    needs: [source-preflight]
     name: 設定包唯讀內容驗證
     runs-on: windows-2022
     timeout-minutes: 5
@@ -74,6 +109,7 @@ jobs:
           if-no-files-found: warn
 
   powershell-coverage:
+    needs: [source-preflight]
     name: PowerShell 全源量測分片 ${{ matrix.shard }}
     runs-on: windows-2022
     timeout-minutes: 60
@@ -125,6 +161,7 @@ jobs:
           if-no-files-found: error
 
   isolated-tests:
+    needs: [source-preflight]
     runs-on: windows-2022
     timeout-minutes: 90
     defaults:
@@ -336,6 +373,7 @@ jobs:
           go run ./script/test/repo_coverage_tool verify --artifact-dir acceptance-artifact --source-root . --expected-sha "$EXPECTED_SHA" --expected-run-url "$EXPECTED_RUN_URL" --require-complete --minimum-percent 80
 
   docker-tests:
+    needs: [source-preflight]
     name: docker-tests
     runs-on: windows-2022
     timeout-minutes: 125
