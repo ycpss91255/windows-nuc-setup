@@ -153,3 +153,45 @@ func TestRunRejectsInvalidIdentityAndTerminalDownloadErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestRunRejectsUnsafeZIP(t *testing.T) {
+	var b bytes.Buffer
+	z := zip.NewWriter(&b)
+	w, _ := z.Create("../escape")
+	_, _ = w.Write([]byte("unsafe"))
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data := b.Bytes()
+	sum := sha256.Sum256(data)
+	digest := fmt.Sprintf("sha256:%x", sum)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/zip") {
+			_, _ = w.Write(data)
+			return
+		}
+		fmt.Fprintf(w, `{"id":456,"name":"windows-test-reports-123-1","digest":%q,"size_in_bytes":%d,"expired":false,"workflow_run":{"id":123}}`, digest, len(data))
+	}))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = fixtureTransport{u, server.Client().Transport}
+	defer func() { http.DefaultTransport = oldTransport }()
+	oldFlags, oldArgs := flag.CommandLine, os.Args
+	defer func() { flag.CommandLine = oldFlags; os.Args = oldArgs }()
+	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flag.CommandLine.SetOutput(io.Discard)
+	parent := t.TempDir()
+	dest := filepath.Join(parent, "result")
+	os.Args = []string{"artifact_download", "--repo", "example/repo", "--run", "123", "--attempt", "1", "--id", "456", "--digest", digest, "--dest", dest}
+	t.Setenv("GH_TOKEN", "fixture-token")
+	if err := run(); err == nil {
+		t.Fatal("unsafe archive accepted")
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Fatalf("destination exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(parent, "escape")); !os.IsNotExist(err) {
+		t.Fatalf("escape exists: %v", err)
+	}
+}
