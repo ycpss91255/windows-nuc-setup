@@ -10,6 +10,7 @@ $rollup=[regex]::Match($workflow,'(?ms)^  ci-rollup:\s*\r?\n(.*?)(?=^  release:)
 Assert ($rollup -match 'if: always\(\)' -and $rollup -match 'needs: \[isolated-tests, requirements-gate, docker-tests, oobe_payload_inspection, powershell-coverage, coverage-aggregation\]') 'rollup 在失敗時仍取得必要工作的狀態'
 $step=[regex]::Match($rollup,'(?ms)^      - name: 確認全部必要測試成功\s*\r?\n.*?^        run: \|\s*\r?\n((?:^          .*\r?\n)+)').Groups[1].Value
 Assert ([bool]$step) '擷取實際 rollup 步驟'
+Assert ($rollup -notmatch '(?m)^  cache-diagnostic-' -and $step -notmatch '(?m)^  cache-diagnostic-') 'rollup 與擷取的 PowerShell 區塊不得包含後續獨立診斷 job'
 $script=[scriptblock]::Create(($step -replace '(?m)^          ',''))
 $temp=Join-Path $env:TEMP ('ci_summary_rollup_'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
 try {
