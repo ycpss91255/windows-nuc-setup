@@ -164,13 +164,76 @@ func TestCompilerSelectCommunicationsDoNotHideCaseBodies(t *testing.T) {
 		t.Fatal(err)
 	}
 	lines := report.Files[path]
-	if len(lines) != 3 || !lines[3] || !lines[5] || lines[7] {
+	if len(lines) != 4 || !lines[3] || !lines[4] || !lines[5] || lines[7] {
 		t.Fatalf("unexpected line coverage: %+v", lines)
-	}
-	if _, ok := lines[4]; ok {
-		t.Fatal("select communication counted separately")
 	}
 	if _, ok := lines[7]; !ok {
 		t.Fatal("uncovered default body missing")
+	}
+}
+
+func TestCompilerSelectClauseEntriesStayInLineCoverage(t *testing.T) {
+	source := "package branchfixture\nfunc Choose(first, second <-chan int) int {\n select {\n case <-first:\n  return 1\n case <-second:\n default:\n  return 0\n }\n return 2\n}\n"
+	for _, tc := range []struct {
+		name, setup                           string
+		first, second, body, otherwise, after bool
+	}{
+		{"first selected", "a:=make(chan int,1);a<-1;Choose(a,nil)", true, false, true, false, false},
+		{"empty second selected", "b:=make(chan int,1);b<-1;Choose(nil,b)", false, true, false, false, true},
+		{"default selected", "Choose(nil,nil)", false, false, false, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			dir := filepath.Join(root, "script", "test", "branch_fixture")
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			inputs := map[string]string{filepath.Join(root, "go.mod"): "module windows_setup\n\ngo 1.27.3\n", filepath.Join(dir, "branch.go"): source, filepath.Join(dir, "branch_test.go"): "package branchfixture\nimport \"testing\"\nfunc TestChoose(t *testing.T) { " + tc.setup + " }\n"}
+			for p, s := range inputs {
+				if err := os.WriteFile(p, []byte(s), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("GOTOOLCHAIN", "local")
+			t.Setenv("GOPROXY", "off")
+			t.Setenv("GOSUMDB", "off")
+			t.Setenv("GOWORK", "off")
+			t.Setenv("GOFLAGS", "-mod=mod")
+			out := filepath.Join(root, "coverage.out")
+			goexe := filepath.Join(runtime.GOROOT(), "bin", "go")
+			if runtime.GOOS == "windows" {
+				goexe += ".exe"
+			}
+			cmd := exec.Command(goexe, "test", "-count=1", "-coverprofile="+out, "./script/test/branch_fixture")
+			cmd.Dir = root
+			if b, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("compiler fixture: %v\n%s", err, b)
+			}
+			raw, err := os.ReadFile(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := "script/test/branch_fixture/branch.go"
+			sources := map[string][]byte{path: []byte(source)}
+			report, _, err := rc.NormalizeGo([][]byte{raw}, sources, "windows_setup")
+			if err != nil {
+				t.Fatalf("real compiler profile: %v\n%s", err, raw)
+			}
+			lines := report.Files[path]
+			for line, want := range map[int]bool{3: true, 4: tc.first, 5: tc.body, 6: tc.second, 8: tc.otherwise, 10: tc.after} {
+				got, ok := lines[line]
+				if !ok || got != want {
+					t.Errorf("line %d got=%t present=%t want=%t", line, got, ok, want)
+				}
+			}
+			pattern := regexp.MustCompile(`(?m)^windows_setup/script/test/branch_fixture/branch\.go:6\.[0-9]+,6\.[0-9]+ 0 [0-9]+\n`)
+			if !pattern.Match(raw) {
+				t.Fatalf("missing real empty-case counter: %s", raw)
+			}
+			without := pattern.ReplaceAll(raw, nil)
+			if _, _, err = rc.NormalizeGo([][]byte{without}, sources, "windows_setup"); err == nil {
+				t.Fatal("missing clause entry counter accepted")
+			}
+		})
 	}
 }
