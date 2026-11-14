@@ -31,7 +31,8 @@ elseif($Module -eq 'Apply-HostsSync'){
  if($VerifyOnly){$options.VerifyOnly=$true}elseif($SyncOnly){$options.SyncOnly=$true}
  & $path @options
 }elseif($Module -eq 'Apply-StartMenuSettings'){
- & $path -VerifyOnly:$VerifyOnly -ApplyPolicy:($ApplyPolicy -and -not $VerifyOnly) -NonInteractive:$NonInteractive
+ . (Resolve-NucPath 'start_menu_dispatch.ps1')
+ Invoke-SetupStartMenuDispatch -Path $path -VerifyOnly:$VerifyOnly -ApplyPolicy:$ApplyPolicy -NonInteractive:$NonInteractive
 }elseif($Module -eq 'Install-Drivers'){
  & $path -VerifyOnly:$VerifyOnly @driverArguments
 }elseif($VerifyOnly){

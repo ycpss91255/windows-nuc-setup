@@ -87,6 +87,11 @@ Move-Item -LiteralPath $verificationHelper -Destination ($verificationHelper+'.f
 $missingHelperRejected=$false
 try{& (Join-Path $genericPackage 'core\test_setup_prerequisites.ps1') -PackageOnly -HardwareProfile Generic}catch{$missingHelperRejected=$_.Exception.Message -match 'verification.ps1'}finally{Move-Item -LiteralPath ($verificationHelper+'.fixture-backup') -Destination $verificationHelper}
 Assert $missingHelperRejected '缺少 Verification helper 的套件不得通過 PackageOnly'
+$dispatchHelper=Join-Path $genericPackage 'core/start_menu_dispatch.ps1'
+[IO.File]::Move($dispatchHelper,($dispatchHelper+'.fixture-backup'))
+$missingDispatchRejected=$false
+try{& (Join-Path $genericPackage 'core/test_setup_prerequisites.ps1') -PackageOnly -HardwareProfile Generic}catch{$missingDispatchRejected=$_.Exception.Message -match 'start_menu_dispatch.ps1'}finally{[IO.File]::Move(($dispatchHelper+'.fixture-backup'),$dispatchHelper)}
+Assert $missingDispatchRejected 'PackageOnly rejects missing Start dispatch boundary'
 Assert (-not(Test-Path (Join-Path $genericPackage 'modules\drivers\Payload'))) '通用 PackageOnly 完整檢查成功且未建立或要求 NUC payload'
 $caught=$false;try{& (Join-Path $genericPackage 'core\test_setup_prerequisites.ps1') -PackageOnly -HardwareProfile NUC8 -DriverPackagePath (Join-Path $fixture 'missing')}catch{$caught=$true}
 Assert $caught '相同無驅動包指定 NUC8 仍拒絕'
