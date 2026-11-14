@@ -216,6 +216,7 @@ func validateMetadata(body io.Reader, id, runID string, attempt int, digest stri
 		ID       int64  `json:"id"`
 		Name     string `json:"name"`
 		Digest   string `json:"digest"`
+		Size     *int64 `json:"size_in_bytes"`
 		Expired  *bool  `json:"expired"`
 		Workflow struct {
 			ID int64 `json:"id"`
@@ -226,7 +227,7 @@ func validateMetadata(body io.Reader, id, runID string, attempt int, digest stri
 	}
 	expectedID, _ := strconv.ParseInt(id, 10, 64)
 	expectedRun, _ := strconv.ParseInt(runID, 10, 64)
-	if meta.ID != expectedID || meta.Workflow.ID != expectedRun || meta.Name != "windows-test-reports-"+runID+"-"+strconv.Itoa(attempt) || meta.Expired == nil || *meta.Expired || meta.Digest != digest {
+	if meta.ID != expectedID || meta.Workflow.ID != expectedRun || meta.Name != "windows-test-reports-"+runID+"-"+strconv.Itoa(attempt) || meta.Expired == nil || *meta.Expired || meta.Digest != digest || meta.Size == nil || *meta.Size <= 0 || *meta.Size > maxArchive {
 		return errors.New("artifact source or digest mismatch")
 	}
 	return nil

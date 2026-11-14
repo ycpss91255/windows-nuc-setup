@@ -47,7 +47,7 @@ func TestRunDownloadsOfficialRedirectWithoutToken(t *testing.T) {
 		calls++
 		switch r.URL.Path {
 		case "/repos/example/repo/actions/artifacts/456":
-			fmt.Fprintf(w, `{"id":456,"name":"windows-test-reports-123-1","digest":%q,"expired":false,"workflow_run":{"id":123}}`, digest)
+			fmt.Fprintf(w, `{"id":456,"name":"windows-test-reports-123-1","digest":%q,"size_in_bytes":100,"expired":false,"workflow_run":{"id":123}}`, digest)
 		case "/repos/example/repo/actions/artifacts/456/zip":
 			http.Redirect(w, r, "https://storage.example.test/content", http.StatusFound)
 		case "/content":

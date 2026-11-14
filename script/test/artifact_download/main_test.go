@@ -78,12 +78,12 @@ func TestMetadataIdentity(t *testing.T) {
 		name, payload string
 		ok            bool
 	}{
-		{"correct", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:abc","expired":false,"workflow_run":{"id":123}}`, true},
-		{"wrong id", `{"id":457,"name":"windows-test-reports-123-1","digest":"sha256:abc","expired":false,"workflow_run":{"id":123}}`, false},
-		{"wrong run", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:abc","expired":false,"workflow_run":{"id":124}}`, false},
-		{"wrong attempt", `{"id":456,"name":"windows-test-reports-123-2","digest":"sha256:abc","expired":false,"workflow_run":{"id":123}}`, false},
-		{"wrong digest", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:def","expired":false,"workflow_run":{"id":123}}`, false},
-		{"expired", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:abc","expired":true,"workflow_run":{"id":123}}`, false},
+		{"correct", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:abc","size_in_bytes":100,"expired":false,"workflow_run":{"id":123}}`, true},
+		{"wrong id", `{"id":457,"name":"windows-test-reports-123-1","digest":"sha256:abc","size_in_bytes":100,"expired":false,"workflow_run":{"id":123}}`, false},
+		{"wrong run", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:abc","size_in_bytes":100,"expired":false,"workflow_run":{"id":124}}`, false},
+		{"wrong attempt", `{"id":456,"name":"windows-test-reports-123-2","digest":"sha256:abc","size_in_bytes":100,"expired":false,"workflow_run":{"id":123}}`, false},
+		{"wrong digest", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:def","size_in_bytes":100,"expired":false,"workflow_run":{"id":123}}`, false},
+		{"expired", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:abc","size_in_bytes":100,"expired":true,"workflow_run":{"id":123}}`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := validateMetadata(strings.NewReader(tc.payload), "456", "123", 1, digest)
