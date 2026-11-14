@@ -72,6 +72,7 @@ type prIdentity struct {
 	State  string `json:"state"`
 	Base   struct {
 		Ref  string `json:"ref"`
+		SHA  string `json:"sha"`
 		Repo struct {
 			FullName string `json:"full_name"`
 		} `json:"repo"`
@@ -101,7 +102,7 @@ func authorityCheck(eventPath, authorityPath string) error {
 	if err = json.Unmarshal(a, &live); err != nil {
 		return err
 	}
-	if ev.PullRequest == nil || ev.Number <= 0 || ev.Number != ev.PullRequest.Number || ev.Number != live.Number || live.State != "open" || ev.PullRequest.Base.Ref != "main" || ev.PullRequest.Base.Repo.FullName == "" || ev.PullRequest.Base.Ref != live.Base.Ref || ev.PullRequest.Base.Repo.FullName != live.Base.Repo.FullName || !oid.MatchString(live.Head.SHA) || ev.PullRequest.Head.SHA != live.Head.SHA {
+	if ev.PullRequest == nil || ev.Number <= 0 || ev.Number != ev.PullRequest.Number || ev.Number != live.Number || live.State != "open" || ev.PullRequest.Base.Ref != "main" || ev.PullRequest.Base.Repo.FullName == "" || ev.PullRequest.Base.Ref != live.Base.Ref || ev.PullRequest.Base.Repo.FullName != live.Base.Repo.FullName || !oid.MatchString(live.Base.SHA) || ev.PullRequest.Base.SHA != live.Base.SHA || !oid.MatchString(live.Head.SHA) || ev.PullRequest.Head.SHA != live.Head.SHA {
 		return errors.New("live PR identity differs from event")
 	}
 	return nil
