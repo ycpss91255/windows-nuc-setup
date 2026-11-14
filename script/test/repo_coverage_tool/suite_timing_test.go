@@ -368,3 +368,28 @@ func TestTimingShardLimitRejectsInvalidRoster(t *testing.T) {
 		t.Fatalf("valid maximum roster: %d %v", limit, err)
 	}
 }
+
+func TestTimingRejectsUnicodeFoldedAliasOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	c := rc.PowerShellWorkerContext{Commit: strings.Repeat("a", 40), RunUrl: "https://github.com/example/repo/actions/runs/123", RunAttempt: 1, ShardIndex: 0, ShardCount: 1, GlobalIndex: 0, ProcessId: 10, TestFile: "test/suite.ps1", TestSHA256: strings.Repeat("b", 64), WrapperFile: "test/wrapper.ps1", WrapperSHA256: strings.Repeat("c", 64)}
+	receipt := timingReceipt{1, c, []timingPhase{{"worker_setup", 1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "worker_0.timing.json")
+	if err = os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = readWorkerTimings(dir, []rc.PowerShellWorkerContext{c}); err != nil {
+		t.Fatalf("valid baseline rejected: %v", err)
+	}
+	alias := []byte(`,"Pha\u017fes":[{"Name":"worker_setup","Milliseconds":99},{"Name":"pester_instrumentation_and_test","Milliseconds":98},{"Name":"serialization","Milliseconds":97}]}`)
+	bad := append(append([]byte{}, data[:len(data)-1]...), alias...)
+	if err = os.WriteFile(path, bad, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = readWorkerTimings(dir, []rc.PowerShellWorkerContext{c}); err == nil {
+		t.Fatal("accepted Unicode-folded alias overwriting valid phase measurements")
+	}
+}
