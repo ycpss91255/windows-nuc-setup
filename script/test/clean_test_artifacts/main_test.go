@@ -62,6 +62,53 @@ func TestOwnedArtifactsRequireSelectionCompletionAndExpiry(t *testing.T) {
 	}
 }
 
+func TestCreatedDirectoryReplacementDoesNotOverwriteMarker(t *testing.T) {
+	for _, action := range []string{"init", "create"} {
+		t.Run(action, func(t *testing.T) {
+			parent := t.TempDir()
+			root := filepath.Join(parent, "owned")
+			now := time.Now()
+			var out bytes.Buffer
+			if action == "create" {
+				if e := run([]string{"init", root}, &out, now); e != nil {
+					t.Fatal(e)
+				}
+			}
+			path, marker := root, rootMarker
+			args := []string{"init", root}
+			if action == "create" {
+				path, marker = filepath.Join(root, "item"), itemMarker
+				args = []string{"create", root, "item"}
+			}
+			var swapErr error
+			called := false
+			afterCreateDirectoryHook = func(p string) {
+				called = true
+				swapErr = os.Rename(p, p+"-moved")
+				if swapErr == nil {
+					swapErr = os.Mkdir(p, 0700)
+				}
+				if swapErr == nil {
+					swapErr = os.WriteFile(filepath.Join(p, marker), []byte("unowned"), 0600)
+				}
+			}
+			defer func() { afterCreateDirectoryHook = nil }()
+			err := run(args, &out, now)
+			if !called {
+				t.Fatalf("hook not reached: %v", err)
+			}
+			if swapErr == nil {
+				if err == nil {
+					t.Error("replacement accepted")
+				}
+				if b, e := os.ReadFile(filepath.Join(path, marker)); e != nil || string(b) != "unowned" {
+					t.Errorf("unowned marker changed: %q %v", b, e)
+				}
+			}
+		})
+	}
+}
+
 func TestRejectExistingRootTraversalAndFutureExpiry(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "owned")
