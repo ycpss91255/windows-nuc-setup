@@ -255,3 +255,46 @@ func TestConcurrentChildCreationPreservesNewData(t *testing.T) {
 		}
 	}
 }
+
+func TestConcurrentChildReplacementCannotEscape(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "owned")
+	outside := filepath.Join(parent, "outside")
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	if e := os.Mkdir(outside, 0700); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(filepath.Join(outside, "keep"), []byte("fixture"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}} {
+		if e := run(a, &out, now); e != nil {
+			t.Fatal(e)
+		}
+	}
+	child := filepath.Join(root, "item", "child")
+	if e := os.Mkdir(child, 0700); e != nil {
+		t.Fatal(e)
+	}
+	var swapErr error
+	called := false
+	beforeDeleteHook = func() {
+		called = true
+		swapErr = os.Rename(child, filepath.Join(root, "moved"))
+		if swapErr == nil {
+			swapErr = os.Symlink(outside, child)
+		}
+	}
+	defer func() { beforeDeleteHook = nil }()
+	err := run([]string{"clean", root, "item", "--delete"}, &out, now)
+	if !called {
+		t.Fatalf("hook not reached: %v", err)
+	}
+	if swapErr == nil && err == nil {
+		t.Error("accepted child reparse replacement")
+	}
+	if _, e := os.Stat(filepath.Join(outside, "keep")); e != nil {
+		t.Fatalf("outside fixture changed: %v", e)
+	}
+}
