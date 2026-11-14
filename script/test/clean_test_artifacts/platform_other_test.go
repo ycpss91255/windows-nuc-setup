@@ -27,13 +27,13 @@ func TestUnsupportedPlatformDoesNotCreateOrDelete(t *testing.T) {
 	if err := os.WriteFile(keep, []byte("fixture"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := safeDelete(root, "keep", "unused", time.Now()); err == nil {
+	if err := safeDelete(root, "keep", "unused", time.Now(), tempAnchor{}); err == nil {
 		t.Fatal("delete accepted on unsupported platform")
 	}
 	if got, err := os.ReadFile(keep); err != nil || string(got) != "fixture" {
 		t.Fatalf("fixture changed: %q %v", got, err)
 	}
-	if err := safeFinish(root, "keep", "unused", ""); err == nil {
+	if err := safeFinish(root, "keep", "unused", "", tempAnchor{}); err == nil {
 		t.Fatal("finish accepted on unsupported platform")
 	}
 }

@@ -4,8 +4,74 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"syscall"
 )
+
+func canonicalTemp(raw string) (string, string, error) {
+	current := filepath.VolumeName(raw) + string(os.PathSeparator)
+	parts := strings.Split(strings.TrimPrefix(raw, current), string(os.PathSeparator))
+	var held []lockedEntry
+	defer func() {
+		for i := len(held) - 1; i >= 0; i-- {
+			syscall.CloseHandle(held[i].h)
+		}
+	}()
+	var id string
+	lock := func(path string) error {
+		ent, identity, err := openLocked(path, false)
+		if err != nil {
+			return err
+		}
+		if !ent.dir {
+			syscall.CloseHandle(ent.h)
+			return fmt.Errorf("TEMP ancestor is not directory")
+		}
+		held = append(held, ent)
+		id = identity
+		return nil
+	}
+	if err := lock(current); err != nil {
+		return "", "", err
+	}
+	for _, part := range parts {
+		if part != "" {
+			current = filepath.Join(current, part)
+			if err := lock(current); err != nil {
+				return "", "", err
+			}
+		}
+	}
+	resolved, err := filepath.EvalSymlinks(raw)
+	if err != nil {
+		return "", "", err
+	}
+	resolved, err = plainPath(resolved)
+	if err != nil {
+		return "", "", err
+	}
+	resolvedID, err := directoryIdentity(resolved)
+	if err != nil {
+		return "", "", err
+	}
+	if id != resolvedID {
+		return "", "", fmt.Errorf("TEMP identity changed")
+	}
+	return resolved, id, nil
+}
+
+func verifyTempAnchor(anchor tempAnchor) error {
+	id, err := directoryIdentity(anchor.path)
+	if err != nil {
+		return err
+	}
+	if id != anchor.id {
+		return fmt.Errorf("TEMP identity changed")
+	}
+	return nil
+}
 
 func directoryIdentity(path string) (string, error) {
 	p, e := syscall.UTF16PtrFromString(path)

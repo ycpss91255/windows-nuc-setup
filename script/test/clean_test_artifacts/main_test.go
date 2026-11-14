@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func TestNativeCreateRejectsIncompleteResults(t *testing.T) {
@@ -113,6 +114,90 @@ func TestInitRejectsOutsideConfiguredTemp(t *testing.T) {
 	}
 	if _, e := os.Stat(outside); !os.IsNotExist(e) {
 		t.Fatalf("outside path created: %v", e)
+	}
+}
+
+func TestConfiguredTempShortAliasSupportsOwnedRoot(t *testing.T) {
+	parent := t.TempDir()
+	base := filepath.Join(parent, "long temporary directory")
+	if err := os.Mkdir(base, 0700); err != nil {
+		t.Fatal(err)
+	}
+	ptr, err := syscall.UTF16PtrFromString(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buffer := make([]uint16, 32768)
+	proc := syscall.NewLazyDLL("kernel32.dll").NewProc("GetShortPathNameW")
+	n, _, callErr := proc.Call(uintptr(unsafe.Pointer(ptr)), uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))
+	if n == 0 || n >= uintptr(len(buffer)) {
+		t.Fatalf("short path query failed: %v", callErr)
+	}
+	short := syscall.UTF16ToString(buffer[:n])
+	if strings.EqualFold(short, base) {
+		t.Skip("volume does not provide a distinct short alias")
+	}
+	t.Setenv("TMP", short)
+	t.Setenv("TEMP", short)
+	var out bytes.Buffer
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	for _, root := range []string{filepath.Join(base, "long_root"), filepath.Join(short, "short_root")} {
+		for _, args := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}, {"clean", root, "item", "--delete"}} {
+			if err := run(args, &out, now); err != nil {
+				t.Fatalf("%s failed under short TEMP: %v", args[0], err)
+			}
+		}
+	}
+}
+
+func TestConfiguredTempReparseIsRejected(t *testing.T) {
+	parent := t.TempDir()
+	target, alias := filepath.Join(parent, "target"), filepath.Join(parent, "alias")
+	if err := os.Mkdir(target, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, alias); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	t.Setenv("TMP", alias)
+	t.Setenv("TEMP", alias)
+	var out bytes.Buffer
+	if err := run([]string{"init", filepath.Join(alias, "owned")}, &out, time.Now()); err == nil {
+		t.Fatal("reparse TEMP accepted")
+	}
+	if _, err := os.Stat(filepath.Join(target, "owned")); !os.IsNotExist(err) {
+		t.Fatalf("created through reparse: %v", err)
+	}
+}
+
+func TestTempReplacementBeforeAncestorLockRejected(t *testing.T) {
+	parent := t.TempDir()
+	base := filepath.Join(parent, "base")
+	if err := os.Mkdir(base, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMP", base)
+	t.Setenv("TEMP", base)
+	var out bytes.Buffer
+	var swapErr error
+	called := false
+	beforeTempLockTestHook = func() {
+		called = true
+		swapErr = os.Rename(base, filepath.Join(parent, "moved"))
+		if swapErr == nil {
+			swapErr = os.Mkdir(base, 0700)
+		}
+	}
+	defer func() { beforeTempLockTestHook = nil }()
+	err := run([]string{"init", filepath.Join(base, "owned")}, &out, time.Now())
+	if !called || swapErr != nil {
+		t.Fatalf("swap not performed: %v %v", called, swapErr)
+	}
+	if err == nil {
+		t.Fatal("replacement TEMP accepted")
+	}
+	if _, statErr := os.Stat(filepath.Join(base, "owned")); !os.IsNotExist(statErr) {
+		t.Fatalf("created inside replaced TEMP: %v", statErr)
 	}
 }
 
