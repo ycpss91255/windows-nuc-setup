@@ -39,6 +39,9 @@ func TestCacheDiagnosticWorkflowIsOptInAndKeepsEvidenceFresh(t *testing.T) {
 	if !(strings.Index(samples, "cold_1") < strings.Index(samples, "warm_1") && strings.Index(samples, "warm_1") < strings.Index(samples, "warm_2") && strings.Index(samples, "warm_2") < strings.Index(samples, "cold_2")) {
 		t.Error("samples must alternate ABBA")
 	}
+	if !strings.Contains(samples, `test ! -e "$RUNNER_TEMP/cache_restore"`) || strings.Count(samples, `test ! -e "$GOCACHE"`) != 2 {
+		t.Error("restore and cold caches must start absent")
+	}
 	if strings.Contains(coverageJob(workflow, "requirements-gate"), "actions/cache") || strings.Contains(coverageJob(workflow, "coverage-aggregation"), "actions/cache") {
 		t.Error("formal jobs must not enable cache")
 	}
