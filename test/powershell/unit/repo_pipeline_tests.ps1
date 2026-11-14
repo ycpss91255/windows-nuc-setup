@@ -14,7 +14,7 @@ try {
  $workers=@($script:calls|Where-Object {$_.Arguments -contains (Join-Path $root 'script/test/powershell_coverage.ps1')})
  Assert ($workers.Count -eq 1 -and $workers[0].Arguments -contains '-ThrottleLimit' -and $workers[0].Arguments[[Array]::IndexOf($workers[0].Arguments,'-ThrottleLimit')+1] -eq '2') '正式整體收集明確只開兩個worker而非預設序列'
  $collect=@($script:calls|Where-Object {$_.Arguments -contains 'collect'})
- Assert ($collect.Count -eq 1 -and ($collect[0].Arguments -contains '--runtime') -and ($collect[0].Arguments -notcontains '--go-evidence') -and ($collect[0].Arguments -contains '--powershell-evidence') -and ($collect[0].Arguments -contains '--cmd-evidence') -and ($collect[0].Arguments -contains '--managed-evidence')) 'runtime 聚合不依賴 Go 覆蓋率並保留 CMD 契約驗證'
+ Assert ($collect.Count -eq 1 -and ($collect[0].Arguments -contains '--runtime') -and ($collect[0].Arguments -notcontains '--go-evidence') -and ($collect[0].Arguments -contains '--powershell-evidence') -and ($collect[0].Arguments -notcontains '--cmd-evidence') -and ($collect[0].Arguments -contains '--managed-evidence') -and @($script:calls|Where-Object {$_.Arguments -contains 'cmd-measure'}).Count -eq 0) 'runtime 聚合不依賴 Go 或 CMD 覆蓋率'
  $verify=@($script:calls|Where-Object {$_.Arguments -contains 'verify'})
  Assert ($verify.Count -eq 1 -and ($verify[0].Arguments -contains '--runtime') -and ($verify[0].Arguments -contains '--require-complete') -and ($verify[0].Arguments -contains '--minimum-percent') -and ($verify[0].Arguments -contains '80')) '正式門檻要求完整與八成'
  Assert ($script:calls[-1].Arguments -contains (Join-Path $root 'script/test/attach_repo_coverage.ps1')) '通過門檻才附加正式報告'
