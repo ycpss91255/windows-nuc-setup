@@ -132,6 +132,9 @@ func safeDelete(root, name, expectedID string, now time.Time) error {
 	if e != nil || now.Before(expiry) {
 		return errors.New("item active or not expired")
 	}
+	if afterMarkerReadHook != nil {
+		afterMarkerReadHook()
+	}
 	var collect func(string) error
 	collect = func(dir string) error {
 		rel, e := filepath.Rel(p, dir)

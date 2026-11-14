@@ -122,6 +122,7 @@ func writeMetadata(p string, m metadata) error {
 }
 
 var beforeDeleteHook func()
+var afterMarkerReadHook func()
 
 func run(args []string, out io.Writer, now time.Time) error {
 	if len(args) < 2 {
