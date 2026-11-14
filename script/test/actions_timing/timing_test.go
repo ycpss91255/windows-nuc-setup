@@ -203,3 +203,37 @@ func TestRejectsUnrepresentableElapsedInsteadOfSaturating(t *testing.T) {
 		t.Fatal("accepted saturated 400-year elapsed as valid milliseconds")
 	}
 }
+
+func TestNonterminalKnownTimestampsStillRequireValidOrderAndRange(t *testing.T) {
+	cases := map[string]func(*Input){
+		"job_reverse": func(x *Input) {
+			j := &x.Pages[0].Jobs[0]
+			j.Status = "in_progress"
+			j.Conclusion = ""
+			j.CompletedAt = ptr("2026-11-13T23:59:59Z")
+		},
+		"step_reverse": func(x *Input) {
+			s := &x.Pages[0].Jobs[0].Steps[0]
+			s.Status = "in_progress"
+			s.Conclusion = ""
+			s.CompletedAt = ptr("2026-11-14T00:00:02Z")
+		},
+		"job_overflow": func(x *Input) {
+			j := &x.Pages[0].Jobs[0]
+			j.Status = "in_progress"
+			j.Conclusion = ""
+			j.CreatedAt = ptr("2000-01-01T00:00:00Z")
+			j.StartedAt = ptr("2000-01-01T00:00:00Z")
+			j.CompletedAt = ptr("2400-01-01T00:00:00Z")
+		},
+	}
+	for name, change := range cases {
+		t.Run(name, func(t *testing.T) {
+			x := fixture()
+			change(&x)
+			if _, err := Analyze(x); err == nil {
+				t.Fatal("accepted contradictory nonterminal timestamps")
+			}
+		})
+	}
+}
