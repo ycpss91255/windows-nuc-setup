@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func TestNativeCreateRejectsIncompleteResults(t *testing.T) {
@@ -113,6 +114,39 @@ func TestInitRejectsOutsideConfiguredTemp(t *testing.T) {
 	}
 	if _, e := os.Stat(outside); !os.IsNotExist(e) {
 		t.Fatalf("outside path created: %v", e)
+	}
+}
+
+func TestConfiguredTempShortAliasSupportsOwnedRoot(t *testing.T) {
+	parent := t.TempDir()
+	base := filepath.Join(parent, "long temporary directory")
+	if err := os.Mkdir(base, 0700); err != nil {
+		t.Fatal(err)
+	}
+	ptr, err := syscall.UTF16PtrFromString(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buffer := make([]uint16, 32768)
+	proc := syscall.NewLazyDLL("kernel32.dll").NewProc("GetShortPathNameW")
+	n, _, callErr := proc.Call(uintptr(unsafe.Pointer(ptr)), uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))
+	if n == 0 || n >= uintptr(len(buffer)) {
+		t.Fatalf("short path query failed: %v", callErr)
+	}
+	short := syscall.UTF16ToString(buffer[:n])
+	if strings.EqualFold(short, base) {
+		t.Skip("volume does not provide a distinct short alias")
+	}
+	t.Setenv("TMP", short)
+	t.Setenv("TEMP", short)
+	var out bytes.Buffer
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	for _, root := range []string{filepath.Join(base, "long_root"), filepath.Join(short, "short_root")} {
+		for _, args := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}, {"clean", root, "item", "--delete"}} {
+			if err := run(args, &out, now); err != nil {
+				t.Fatalf("%s failed under short TEMP: %v", args[0], err)
+			}
+		}
 	}
 }
 
