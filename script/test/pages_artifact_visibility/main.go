@@ -84,6 +84,9 @@ func getJSON(ctx context.Context, o options, method, endpoint, token string, bod
 	if err != nil || len(data) > maxResponse {
 		return errors.New("invalid visibility response size")
 	}
+	if trimmed := bytes.TrimSpace(data); len(trimmed) == 0 || trimmed[0] != '{' {
+		return errors.New("invalid visibility response")
+	}
 	if err = json.Unmarshal(data, out); err != nil {
 		return errors.New("invalid visibility response")
 	}
