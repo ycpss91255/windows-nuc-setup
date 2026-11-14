@@ -45,6 +45,17 @@ func TestCIRuntimeCoverageKeepsGoAndCMDTests(t *testing.T) {
 	if !strings.Contains(gate, "--require-runtime") || !strings.Contains(gate, "verify --runtime") {
 		t.Fatal("runtime evidence is not mandatory in CI")
 	}
+	docker := coverageJob(text, "docker-tests")
+	if !strings.Contains(docker, "'./script/test/requirements_gate','--tests-only'") {
+		t.Fatal("container host report must use tests-only validation")
+	}
+	container, err := os.ReadFile(filepath.Join("../../..", "script/docker/container_test.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(container), "'./script/test/requirements_gate','--tests-only'") {
+		t.Fatal("container inner report must use tests-only validation")
+	}
 }
 func TestCIWholeCoverageHasProducerAndStrictConsumers(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("../../..", ".github/workflows/windows_tests.yml"))

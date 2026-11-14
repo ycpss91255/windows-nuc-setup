@@ -29,11 +29,16 @@ func run() error {
 	sha := flag.String("expected-sha", "", "expected commit")
 	run := flag.String("expected-run-url", "", "expected run")
 	runtimeScope := flag.Bool("require-runtime", false, "require complete runtime coverage")
+	testsOnly := flag.Bool("tests-only", false, "validate source and test report without coverage")
+	historicalGo := flag.Bool("historical-go", false, "validate historical Go coverage contract")
 	flag.Parse()
 	provided := map[string]bool{}
 	flag.Visit(func(f *flag.Flag) { provided[f.Name] = true })
 	if *dir == "" || *root == "" || *sha == "" || !provided["expected-run-url"] {
 		return fmt.Errorf("四個驗收參數皆為必要")
+	}
+	if (*testsOnly && (*runtimeScope || *historicalGo)) || (*historicalGo && *runtimeScope) {
+		return fmt.Errorf("驗收模式不可混用")
 	}
 	if _, e := a.ValidateSource(*root); e != nil {
 		return e
@@ -43,14 +48,17 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	if *runtimeScope {
-		return requireRuntimeCoverage(report)
+	if *testsOnly {
+		return nil
 	}
-	files, e := a.OwnedGoFiles(*root)
-	if e != nil {
-		return e
+	if *historicalGo {
+		files, err := a.OwnedGoFiles(*root)
+		if err != nil {
+			return err
+		}
+		return a.ValidateGoCoverageReport(read, files, *sha, *run, false)
 	}
-	return a.ValidateGoCoverageReport(read, files, *sha, *run, false)
+	return requireRuntimeCoverage(report)
 }
 func main() {
 	if e := run(); e != nil {

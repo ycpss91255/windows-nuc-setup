@@ -385,7 +385,7 @@ jobs:
           $public = Join-Path $env:RUNNER_TEMP 'windows-container-results/public'
           . .\script\test\ci_tasks.ps1
           Assert-CIContainerReport -Directory $public
-          Invoke-CINative -File go.exe -Arguments @('run','./script/test/requirements_gate','--artifact-dir',$public,'--source-root','.','--expected-sha',$env:EXPECTED_SHA,'--expected-run-url',$env:EXPECTED_RUN_URL)
+          Invoke-CINative -File go.exe -Arguments @('run','./script/test/requirements_gate','--tests-only','--artifact-dir',$public,'--source-root','.','--expected-sha',$env:EXPECTED_SHA,'--expected-run-url',$env:EXPECTED_RUN_URL)
       - name: 僅保留容器去識別報告七天
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

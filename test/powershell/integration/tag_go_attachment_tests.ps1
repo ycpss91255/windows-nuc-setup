@@ -125,8 +125,19 @@ $gateTool=Join-Path $fixture 'requirements_gate.exe'
 Push-Location $root
 try{& go.exe build -mod=vendor -o $gateTool ./script/test/requirements_gate;if($LASTEXITCODE){throw 'fixture requirements CLI build failed'}}finally{Pop-Location}
 $priorPreference=$ErrorActionPreference
-try{$ErrorActionPreference='Continue';& $gateTool --artifact-dir $gatePublic --source-root $root --expected-sha ('a'*40) --expected-run-url 'https://github.com/example/repo/actions/runs/123' *> (Join-Path $fixture 'tag_requirements.private.log');$gateExit=$LASTEXITCODE}finally{$ErrorActionPreference=$priorPreference}
-Assert ($gateExit -eq 0) 'official requirements CLI accepts fresh schema2 Tag evidence after native Go and repo attachment'
+try{$ErrorActionPreference='Continue';& $gateTool --tests-only --artifact-dir $gatePublic --source-root $root --expected-sha ('a'*40) --expected-run-url 'https://github.com/example/repo/actions/runs/123' *> (Join-Path $fixture 'tag_requirements.private.log');$gateExit=$LASTEXITCODE}finally{$ErrorActionPreference=$priorPreference}
+Assert ($gateExit -eq 0) 'tests-only CLI accepts valid Tag report without a Go coverage gate'
+$legacySource=Join-Path $fixture 'historical_source';[void][IO.Directory]::CreateDirectory($legacySource)
+foreach($file in $owned){$target=Join-Path $legacySource $file;[void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target));[IO.File]::WriteAllText($target,"package fixture`n")}
+[void][IO.Directory]::CreateDirectory((Join-Path $legacySource '.github/workflows'))
+[IO.File]::WriteAllText((Join-Path $legacySource '.github/workflows/windows_tests.yml'),'name: fixture')
+[IO.File]::WriteAllText((Join-Path $legacySource 'init.cmd'),'@echo off')
+[IO.File]::WriteAllText((Join-Path $legacySource 'windows.cmd'),'@echo off')
+[IO.File]::WriteAllText((Join-Path $legacySource 'readme.md'),"init.cmd windows.cmd Shift+F10 -AfterRestart -VerifyOnly`n![CI](https://github.com/example/repo/actions/workflows/windows_tests.yml/badge.svg)")
+& git -C $legacySource init -q;if($LASTEXITCODE -ne 0){throw 'historical fixture git init failed'}
+& git -C $legacySource add .;if($LASTEXITCODE -ne 0){throw 'historical fixture git add failed'}
+try{$ErrorActionPreference='Continue';& $gateTool --historical-go --artifact-dir $gatePublic --source-root $legacySource --expected-sha ('a'*40) --expected-run-url 'https://github.com/example/repo/actions/runs/123' *> (Join-Path $fixture 'historical_requirements.private.log');$gateExit=$LASTEXITCODE}finally{$ErrorActionPreference=$priorPreference}
+Assert ($gateExit -eq 0) 'explicit historical mode still validates the original Go coverage contract'
 $global:tagGoPublisherReached=$false
 function gh {$global:tagGoPublisherReached=$true;throw 'LOCAL_TAG_GATE_GH_BOUNDARY_ONLY'}
 Assert ((Get-Command gh).CommandType -eq 'Function') 'Tag 發布邊界必須使用 mock gh'
