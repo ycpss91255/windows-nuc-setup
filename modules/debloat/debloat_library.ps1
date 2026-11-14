@@ -63,7 +63,11 @@ function Invoke-SetupDebloat {
   $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $ModuleRoot 'win11debloat/Win11Debloat.ps1'),'-CLI','-Silent','-SkipExplorerRestart','-Language','zh-TW','-LogPath',$logDir,'-AppRemovalTarget','AllUsers','-RemoveApps','-Apps',($apps -join ','))
   foreach($feature in $profile.Features){$arguments+=('-'+$feature)}
   Write-Host ('正在執行 Win11Debloat，已選取 '+$apps.Count+' 個 App 項目及 '+$profile.Features.Count+' 項清理設定。') -ForegroundColor Cyan
-  $code=Invoke-SetupDebloatNative -Arguments $arguments
+  $previousLocalAppData=$env:LOCALAPPDATA
+  try {
+   if([string]::IsNullOrWhiteSpace($previousLocalAppData)){$env:LOCALAPPDATA=Split-Path -Parent $ReportPath}
+   $code=Invoke-SetupDebloatNative -Arguments $arguments
+  } finally {$env:LOCALAPPDATA=$previousLocalAppData}
  }
  $after=@(Get-AppxPackage -AllUsers|Where-Object {@($_.PackageUserInformation|Where-Object InstallState -eq 'Installed').Count -gt 0}|Select-Object -ExpandProperty Name -Unique)
  $remaining=@($after|Where-Object {$_ -in $apps})
