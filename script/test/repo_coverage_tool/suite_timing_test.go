@@ -104,7 +104,7 @@ func TestShardPackExportsTimingOnlyAfterWorkerIdentityValidation(t *testing.T) {
 }
 
 func TestTimingMergeRejectsIncompleteOrCrossAttemptArtifacts(t *testing.T) {
-	for _, kind := range []string{"missing_artifact", "duplicate_suite", "wrong_attempt", "unknown_field", "missing_phase_milliseconds", "null_global_index"} {
+	for _, kind := range []string{"missing_artifact", "duplicate_suite", "wrong_attempt", "unknown_field", "missing_phase_milliseconds", "null_global_index", "oversized_timing"} {
 		t.Run(kind, func(t *testing.T) {
 			root, manifest, sha := shardCLIFixture(t)
 			parts := t.TempDir()
@@ -159,6 +159,11 @@ func TestTimingMergeRejectsIncompleteOrCrossAttemptArtifacts(t *testing.T) {
 				}
 			case "unknown_field":
 				b = bytes.Replace(b, []byte(`"SchemaVersion": 1`), []byte(`"SchemaVersion": 1, "private": "secret"`), 1)
+				if err = os.WriteFile(second, b, 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "oversized_timing":
+				b = append(b, bytes.Repeat([]byte(" "), 21000)...)
 				if err = os.WriteFile(second, b, 0600); err != nil {
 					t.Fatal(err)
 				}
