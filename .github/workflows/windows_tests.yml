@@ -53,7 +53,8 @@ jobs:
         run: |
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$RUNNER_TEMP/pr-authority.json"
-          export PREFLIGHT_MAIN_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          PREFLIGHT_MAIN_SHA="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          export PREFLIGHT_MAIN_SHA
           go run ./script/test/pr_source_preflight -repo . -event "$GITHUB_EVENT_PATH" -authority "$RUNNER_TEMP/pr-authority.json" -checkout "$(git rev-parse HEAD)" -run-sha "$GITHUB_SHA" -base "$EVENT_BASE" -head "$EVENT_HEAD"
 
   oobe_payload_inspection:
