@@ -43,6 +43,7 @@ jobs:
           $env:WINDOWS_SETUP_PSSA_PACKAGE_PATH = $package
           .\test\powershell\support\pssa_format_contract.ps1
           .\script\test\check_pssa_format.ps1 -SourceRoot $PWD.Path -PackagePath $package
+          .\test\powershell\support\pssa_step_exit_contract.ps1
       - name: 檢查設定包三檔來源與實際雜湊
         shell: powershell
         run: |
