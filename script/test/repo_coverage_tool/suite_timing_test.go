@@ -392,4 +392,9 @@ func TestTimingRejectsUnicodeFoldedAliasOverwrite(t *testing.T) {
 	if _, err = readWorkerTimings(dir, []rc.PowerShellWorkerContext{c}); err == nil {
 		t.Fatal("accepted Unicode-folded alias overwriting valid phase measurements")
 	}
+	kelvin := append(append([]byte{}, data[:len(data)-1]...), []byte(`,"K":1,"\u212a":2}`)...)
+	var decoded timingReceipt
+	if err := decodeTiming(kelvin, &decoded); err == nil || !strings.Contains(err.Error(), "duplicate timing field") {
+		t.Fatalf("Kelvin alias was not rejected as duplicate: %v", err)
+	}
 }

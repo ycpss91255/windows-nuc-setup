@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 	rc "windows_setup/script/test/repo_coverage"
 )
 
@@ -121,6 +122,19 @@ func readTimingRegular(path string, limit int64) ([]byte, error) {
 	return readTimingBounded(f, limit)
 }
 
+// foldTimingKey follows the Unicode simple-fold cycles used by encoding/json.
+func foldTimingKey(name string) string {
+	return strings.Map(func(r rune) rune {
+		min := r
+		for next := unicode.SimpleFold(r); next != r; next = unicode.SimpleFold(next) {
+			if next < min {
+				min = next
+			}
+		}
+		return min
+	}, name)
+}
+
 // Reject duplicate object members before decoding to typed values.
 func decodeTiming(data []byte, target any) error {
 	d := json.NewDecoder(bytes.NewReader(data))
@@ -143,10 +157,10 @@ func decodeTiming(data []byte, target any) error {
 					return err
 				}
 				name, ok := k.(string)
-				if !ok || names[strings.ToLower(name)] {
+				if !ok || names[foldTimingKey(name)] {
 					return fmt.Errorf("duplicate timing field")
 				}
-				names[strings.ToLower(name)] = true
+				names[foldTimingKey(name)] = true
 				if err = value(); err != nil {
 					return err
 				}
