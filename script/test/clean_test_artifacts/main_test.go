@@ -259,6 +259,45 @@ func TestConcurrentChildCreationPreservesNewData(t *testing.T) {
 	}
 }
 
+func TestEnumeratedChildReplacementIsNotDeleted(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "owned")
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}} {
+		if e := run(a, &out, now); e != nil {
+			t.Fatal(e)
+		}
+	}
+	child := filepath.Join(root, "item", "child")
+	if e := os.WriteFile(child, []byte("original"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	var swapErr error
+	called := false
+	afterEnumerateHook = func() {
+		if called {
+			return
+		}
+		called = true
+		swapErr = os.Rename(child, filepath.Join(root, "moved"))
+		if swapErr == nil {
+			swapErr = os.WriteFile(child, []byte("replacement"), 0600)
+		}
+	}
+	defer func() { afterEnumerateHook = nil }()
+	err := run([]string{"clean", root, "item", "--delete"}, &out, now)
+	if !called || swapErr != nil {
+		t.Fatalf("swap not performed: called=%v error=%v clean=%v", called, swapErr, err)
+	}
+	if err == nil {
+		t.Error("replacement accepted")
+	}
+	if b, e := os.ReadFile(child); e != nil || string(b) != "replacement" {
+		t.Errorf("replacement lost: %q %v", b, e)
+	}
+}
+
 func TestConcurrentChildReplacementCannotEscape(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "owned")
