@@ -29,6 +29,7 @@ type Job struct {
 	ID          int64   `json:"id"`
 	RunID       int64   `json:"run_id"`
 	RunAttempt  int     `json:"run_attempt"`
+	HeadSHA     *string `json:"head_sha,omitempty"`
 	Name        string  `json:"name"`
 	Status      string  `json:"status"`
 	Conclusion  string  `json:"conclusion"`
@@ -131,7 +132,7 @@ func Analyze(in Input) (Output, error) {
 			return Output{}, fmt.Errorf("invalid page sequence")
 		}
 		for _, j := range page.Jobs {
-			if j.ID < 1 || seen[j.ID] || j.RunID != in.RunID || j.RunAttempt != in.Attempt || j.Name == "" || j.Status == "" {
+			if j.ID < 1 || seen[j.ID] || j.RunID != in.RunID || j.RunAttempt != in.Attempt || (j.HeadSHA != nil && *j.HeadSHA != in.HeadSHA) || j.Name == "" || j.Status == "" {
 				return Output{}, fmt.Errorf("invalid job identity")
 			}
 			seen[j.ID] = true
