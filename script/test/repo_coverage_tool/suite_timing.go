@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	rc "windows_setup/script/test/repo_coverage"
 )
 
@@ -47,4 +48,24 @@ func validateTimingRoster(expected []rc.PowerShellWorkerContext, receipts []timi
 		}
 	}
 	return nil
+}
+
+// Worker file names are derived only from the validated local worker order.
+func readWorkerTimings(dir string, expected []rc.PowerShellWorkerContext) ([]timingReceipt, error) {
+	receipts := make([]timingReceipt, 0, len(expected))
+	for i := range expected {
+		b, err := readShardRegular(filepath.Join(dir, fmt.Sprintf("worker_%d.timing.json", i)))
+		if err != nil {
+			return nil, err
+		}
+		var receipt timingReceipt
+		if err := decodeShardManifest(b, &receipt); err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, receipt)
+	}
+	if err := validateTimingRoster(expected, receipts); err != nil {
+		return nil, err
+	}
+	return receipts, nil
 }
