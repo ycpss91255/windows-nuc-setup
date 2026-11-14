@@ -9,6 +9,17 @@
 - 原始碼與必要資產保存在 `modules/debloat/win11debloat`，包括上游的 `Assets/Images/menu.png` 與空白開始選單資產 `Assets/Start/start2.bin`。
 - 保留上游 [MIT LICENSE](../modules/debloat/win11debloat/LICENSE)、作者聲明及 README。`start2.bin` 的用途見同目錄的 `What is this file.txt`；它是上游提供的空白範本，不是從使用者電腦匯出的個人開始選單。
 - 本工具透過 CLI 呼叫上游，採用的清理項目另由 `debloat_apps.txt`、`debloat_profile.json` 控制。
+- 精簡版本保留 400 個上游檔案，包括所有語系、GUI 定義、登錄檔、執行腳本、資產、`Run.bat`、`Scripts/Get.ps1` 和上游 `.gitignore`。僅排除上游 `.github/`、`Tests/` 及 `Scripts/Build-Release.ps1`、`Scripts/Run-Tests.ps1`，共 83 個開發用檔案。上游 `.gitignore` 仍保護備份及使用者設定；不要用同步作業覆蓋既有個人資料。
+
+維護者可用本機已取得上述固定提交物件的 Git 倉庫重現。工具不下載上游、不執行 Win11Debloat，以下目標必須是尚不存在的路徑；`stage` 目的地須在上游 Git 倉庫之外：
+
+```powershell
+go run ./script/package/win11debloat_sync lock --source <本機上游Git倉庫> --output <新鎖檔路徑>
+go run ./script/package/win11debloat_sync stage --source <本機上游Git倉庫> --lock script/package/win11debloat_sync/upstream.lock.json --output <新暫存目錄>
+go run ./script/package/win11debloat_sync verify --lock script/package/win11debloat_sync/upstream.lock.json --vendor modules/debloat/win11debloat
+```
+
+鎖檔由固定提交及 tree 產生，記錄上游檔案路徑、Git blob 身分、模式、SHA-256 與是否保留。`stage` 重新核對本機 Git 物件與鎖檔後產生新樹；`verify` 離線核對交付檔案集合及 SHA-256，拒絕缺漏、額外檔案與不符內容。離線驗證以程式中固定的鎖檔 SHA-256 及儲存庫內受審查的鎖檔為基準；兩者同屬受審查來源，不能防止能修改整個儲存庫者，也不能自行證明本機 Git 物件的遠端來源。上游版本更新時，必須重新核對來源、排除規則、執行依賴與鎖檔，不自動接受未分類內容。
 
 ## Microsoft Sysinternals Autologon
 
