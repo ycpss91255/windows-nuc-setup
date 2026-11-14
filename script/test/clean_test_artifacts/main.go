@@ -155,13 +155,7 @@ func run(args []string, out io.Writer, now time.Time) error {
 			return e
 		}
 		abs = filepath.Join(parent, filepath.Base(abs))
-		if e = os.Mkdir(abs, 0700); e != nil {
-			return e
-		}
-		if afterCreateDirectoryHook != nil {
-			afterCreateDirectoryHook(abs)
-		}
-		return os.WriteFile(filepath.Join(abs, rootMarker), []byte(rootContent), 0600)
+		return createOwnedDirectory(abs, "", true)
 	}
 	root, e := validateRoot(args[1])
 	if e != nil {
@@ -178,18 +172,7 @@ func run(args []string, out io.Writer, now time.Time) error {
 		if len(args) != 3 {
 			return errors.New("invalid create arguments")
 		}
-		p := filepath.Join(root, name)
-		if e = os.Mkdir(p, 0700); e != nil {
-			return e
-		}
-		if afterCreateDirectoryHook != nil {
-			afterCreateDirectoryHook(p)
-		}
-		id, err := directoryIdentity(p)
-		if err != nil {
-			return err
-		}
-		return writeMetadata(p, metadata{Kind: "windows_setup_disposable_v1", Name: name, ID: id})
+		return createOwnedDirectory(filepath.Join(root, name), name, false)
 	}
 	p, e := item(root, name)
 	if e != nil {
