@@ -17,6 +17,7 @@ const rootContent = "windows_setup disposable artifacts root v1\n"
 
 type metadata struct {
 	Kind    string `json:"kind"`
+	Name    string `json:"name"`
 	Expires string `json:"expires"`
 }
 
@@ -159,7 +160,7 @@ func run(args []string, out io.Writer, now time.Time) error {
 		if e = os.Mkdir(p, 0700); e != nil {
 			return e
 		}
-		return writeMetadata(p, metadata{Kind: "windows_setup_disposable_v1"})
+		return writeMetadata(p, metadata{Kind: "windows_setup_disposable_v1", Name: name})
 	}
 	p, e := item(root, name)
 	if e != nil {
@@ -168,6 +169,9 @@ func run(args []string, out io.Writer, now time.Time) error {
 	m, e := readMetadata(p)
 	if e != nil {
 		return e
+	}
+	if m.Name != name {
+		return errors.New("item marker name mismatch")
 	}
 	switch args[0] {
 	case "finish":
