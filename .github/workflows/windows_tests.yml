@@ -338,7 +338,7 @@ jobs:
   docker-tests:
     name: docker-tests
     runs-on: windows-2022
-    timeout-minutes: 120
+    timeout-minutes: 125
     defaults:
       run:
         shell: pwsh
