@@ -41,7 +41,7 @@ func TestRuntimeCoverageInventoryScopeAndUnknownExecutable(t *testing.T) {
 	if len(inv.Blockers) != 0 {
 		t.Fatalf("valid scope blocked: %v", inv.Blockers)
 	}
-	for _, name := range []string{"core/native/new.cs", "modules/demo/new.py"} {
+	for _, name := range []string{"core/native/new.cs", "modules/demo/new.py", "core/new.go", "modules/demo/new.exe"} {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			t.Fatal(err)
@@ -62,5 +62,19 @@ func TestRuntimeCoverageInventoryScopeAndUnknownExecutable(t *testing.T) {
 		if !found {
 			t.Errorf("new unsupported runtime executable not blocked: %s", name)
 		}
+	}
+}
+
+func TestRuntimeCoverageInventoryActualSource(t *testing.T) {
+	root, err := filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv, err := rc.ScanRuntimeInventory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inv.Blockers) != 0 || len(inv.Sources) == 0 {
+		t.Fatalf("actual runtime inventory blocked or empty: %v", inv.Blockers)
 	}
 }
