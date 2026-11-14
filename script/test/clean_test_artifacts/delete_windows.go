@@ -374,6 +374,11 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 		if err = syscall.SetEndOfFile(mark.h); err != nil {
 			return err
 		}
+		if finishWriteTestHook != nil {
+			if err = finishWriteTestHook(); err != nil {
+				return err
+			}
+		}
 		var n uint32
 		if err = syscall.WriteFile(mark.h, encoded, &n, nil); err != nil {
 			return err

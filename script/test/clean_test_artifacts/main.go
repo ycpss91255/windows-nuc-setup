@@ -137,6 +137,7 @@ var afterEnumerateHook func()
 var identityTestHook func(string, string) string
 var beforeRestoreHook func()
 var afterCreateDirectoryHook func(string)
+var finishWriteTestHook func() error
 
 func run(args []string, out io.Writer, now time.Time) error {
 	if len(args) < 2 {
