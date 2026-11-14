@@ -19,6 +19,7 @@ type verifiedBundle struct {
 	Summary       []byte
 	Profile       []byte
 	ArchiveDigest string
+	CoverageScope string
 }
 
 type releaseMetadata struct {
