@@ -362,6 +362,15 @@ jobs:
         run: |
           . .\script\test\ci_tasks.ps1
           Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\script\docker\docker.ps1','-Action','build','-Isolation','process','-BuildReceiptPath',(Join-Path $env:RUNNER_TEMP 'windows-container-image.json'))
+      - name: 驗證精確映像健康與逾時
+        timeout-minutes: 4
+        run: |
+          . .\script\docker\library.ps1
+          . .\script\docker\runner_daemon_library.ps1
+          . .\script\docker\container_health_ci.ps1
+          $context = Get-ContainerContext -Root $env:GITHUB_WORKSPACE -ReportDirectory (Join-Path $env:RUNNER_TEMP 'health-probe-unused') -Isolation process
+          $image = Assert-ContainerBuildReceipt -Context $context -Path (Join-Path $env:RUNNER_TEMP 'windows-container-image.json')
+          Invoke-CIContainerHealthVerification -ImageId $image
       - name: 在已核對映像執行全部 Windows 隔離測試
         timeout-minutes: 35
         run: |
