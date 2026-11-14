@@ -174,11 +174,14 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 	}
 	out := filepath.Join(root, "windows_setup_report_v0.1.0.zip")
 	cmd := exec.Command("go", "run", ".", "export", "--native-dir", nativeDir, "--container-dir", containerDir, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output", out)
-	if data, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("valid same-run reports must export: %v\n%s", err, data)
+	if data, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("current exporter accepted legacy coverage: %s", data)
 	}
 	optionsFor := func(nativePath, containerPath, outputPath string, attempt int) options {
 		return options{native: nativePath, container: containerPath, source: source, version: version, commit: sha, run: runURL, attempt: attempt, output: outputPath}
+	}
+	if err := export(optionsFor(nativeDir, containerDir, out, 1)); err != nil {
+		t.Fatalf("historical fixture export: %v", err)
 	}
 	t.Run("reject_expanded_archive_over_limit", func(t *testing.T) {
 		oldLimit := maxArchive
@@ -385,10 +388,10 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 		}
 		output := filepath.Join(t.TempDir(), "windows_setup_report_v0.1.0.zip")
 		os.Args = []string{"tool", "export", "--native-dir", nativeDir, "--container-dir", containerDir, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output", output}
-		if e := run(); e != nil {
-			t.Fatal(e)
+		if e := run(); e == nil {
+			t.Fatal("current command accepted historical scope")
 		}
-		os.Args = []string{"tool", "verify", "--archive", output, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1"}
+		os.Args = []string{"tool", "verify", "--archive", inProcess, "--source-root", source, "--version", version, "--commit", sha, "--run-url", runURL, "--run-attempt", "1"}
 		if e := run(); e != nil {
 			t.Fatal(e)
 		}
@@ -832,7 +835,7 @@ func TestRuntimeReleaseReportDoesNotRequireGoCoverage(t *testing.T) {
 		}
 	}
 	archive := filepath.Join(base, "windows_setup_report_v0.1.0.zip")
-	if err := export(options{native: nativeDir, container: containerDir, source: source, version: "v0.1.0", commit: sha, run: runURL, attempt: 1, output: archive}); err != nil {
+	if err := exportWithScope(options{native: nativeDir, container: containerDir, source: source, version: "v0.1.0", commit: sha, run: runURL, attempt: 1, output: archive}, true); err != nil {
 		t.Fatalf("runtime bundle export: %v", err)
 	}
 	z, err := zip.OpenReader(archive)

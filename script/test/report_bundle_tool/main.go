@@ -359,6 +359,10 @@ func uniqueJSON(data []byte) error {
 }
 
 func export(o options) error {
+	return exportWithScope(o, false)
+}
+
+func exportWithScope(o options, current bool) error {
 	runID, e := validateIdentity(o)
 	if e != nil {
 		return e
@@ -409,6 +413,9 @@ func export(o options) error {
 	}
 	if (header.RepoCoverage.SchemaVersion == c.RuntimeSchemaVersion) != (len(namesForNative) == len(nativeRuntimeNames)) {
 		return errors.New("native report scope and file set differ")
+	}
+	if current && header.RepoCoverage.SchemaVersion != c.RuntimeSchemaVersion {
+		return errors.New("current export requires runtime coverage scope")
 	}
 	container, e := loadReport(o.container, containerNames)
 	if e != nil {
@@ -765,7 +772,7 @@ func run() error {
 	if e != nil {
 		return e
 	}
-	return export(o)
+	return exportWithScope(o, true)
 }
 func main() {
 	if e := run(); e != nil {
