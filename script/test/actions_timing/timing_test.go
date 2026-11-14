@@ -84,3 +84,31 @@ func TestRejectsContradictoryJobHeadFromAPI(t *testing.T) {
 		t.Fatal("accepted job API head inconsistent with run metadata")
 	}
 }
+
+func TestDecodeRequiresExternalExpectedIdentityAndRejectsAmbiguousJSON(t *testing.T) {
+	x := fixture()
+	wire := struct {
+		Run   Run    `json:"run"`
+		Pages []Page `json:"pages"`
+	}{x.Run, x.Pages}
+	data, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := Expected{Repository: x.Repository, RunID: x.RunID, Attempt: x.Attempt, HeadSHA: x.HeadSHA, CheckoutSHA: x.CheckoutSHA}
+	if _, err = Decode(data, expected); err != nil {
+		t.Fatal(err)
+	}
+	wrong := expected
+	wrong.RunID = 999
+	if _, err = Decode(data, wrong); err == nil {
+		t.Fatal("accepted unexpected external run")
+	}
+	duplicate := bytes.Replace(data, []byte(`"run_attempt":2`), []byte(`"run_attempt":1,"run_attempt":2`), 1)
+	if _, err = Decode(duplicate, expected); err == nil {
+		t.Fatal("accepted duplicate identity")
+	}
+	if _, err = Decode(append(data, []byte(` {}`)...), expected); err == nil {
+		t.Fatal("accepted trailing JSON")
+	}
+}
