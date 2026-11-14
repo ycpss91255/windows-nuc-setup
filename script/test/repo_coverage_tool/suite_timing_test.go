@@ -49,7 +49,8 @@ func TestReadWorkerTimingsUsesOnlyExpectedFilesAndRejectsTampering(t *testing.T)
 		t.Fatal(err)
 	}
 	for _, bad := range [][]byte{[]byte(`{}`), append(append([]byte{}, raw...), []byte(` {}`)...), bytes.Replace(raw, []byte(`"RunAttempt":1`), []byte(`"RunAttempt":2`), 1),
-		bytes.Replace(raw, []byte(`"RunAttempt":1`), []byte(`"RunAttempt":2,"RunAttempt":1`), 1), bytes.Replace(raw, []byte(`"SchemaVersion":1`), []byte(`"SchemaVersion":1,"Unexpected":"private"`), 1)} {
+		bytes.Replace(raw, []byte(`"RunAttempt":1`), []byte(`"RunAttempt":2,"RunAttempt":1`), 1),
+		bytes.Replace(raw, []byte(`"RunAttempt":1`), []byte(`"RunAttempt":2,"runattempt":1`), 1), bytes.Replace(raw, []byte(`"SchemaVersion":1`), []byte(`"SchemaVersion":1,"Unexpected":"private"`), 1)} {
 		if err := os.WriteFile(path, bad, 0600); err != nil {
 			t.Fatal(err)
 		}
