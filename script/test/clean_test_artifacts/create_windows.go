@@ -13,7 +13,48 @@ import (
 	"unsafe"
 )
 
-var createDirectory2 = syscall.NewLazyDLL("kernel32.dll").NewProc("CreateDirectory2W")
+var ntCreateFile = syscall.NewLazyDLL("ntdll.dll").NewProc("NtCreateFile")
+var rtlNtStatusToDosError = syscall.NewLazyDLL("ntdll.dll").NewProc("RtlNtStatusToDosError")
+
+type unicodeString struct {
+	Length, MaximumLength uint16
+	Buffer                *uint16
+}
+type objectAttributes struct {
+	Length                                       uint32
+	RootDirectory                                syscall.Handle
+	ObjectName                                   *unicodeString
+	Attributes                                   uint32
+	SecurityDescriptor, SecurityQualityOfService uintptr
+}
+type ioStatusBlock struct{ Status, Information uintptr }
+
+func createRelativeDirectory(parent syscall.Handle, name string) (syscall.Handle, error) {
+	if nativeCreateTestHook != nil {
+		nativeCreateTestHook()
+	}
+	if !safeName(name) {
+		return syscall.InvalidHandle, errors.New("invalid directory name")
+	}
+	u, err := syscall.UTF16FromString(name)
+	if err != nil {
+		return syscall.InvalidHandle, err
+	}
+	if len(u) > 32767 {
+		return syscall.InvalidHandle, errors.New("directory name too long")
+	}
+	n := unicodeString{Length: uint16((len(u) - 1) * 2), MaximumLength: uint16(len(u) * 2), Buffer: &u[0]}
+	a := objectAttributes{RootDirectory: parent, ObjectName: &n, Attributes: 0x40}
+	a.Length = uint32(unsafe.Sizeof(a))
+	var h syscall.Handle
+	var ios ioStatusBlock
+	status, _, _ := ntCreateFile.Call(uintptr(unsafe.Pointer(&h)), 0x81, uintptr(unsafe.Pointer(&a)), uintptr(unsafe.Pointer(&ios)), 0, 0, uintptr(syscall.FILE_SHARE_READ), 2, 0x00200001, 0, 0)
+	if int32(status) < 0 {
+		code, _, _ := rtlNtStatusToDosError.Call(status)
+		return syscall.InvalidHandle, syscall.Errno(code)
+	}
+	return h, nil
+}
 
 func createOwnedDirectory(path, name string, root bool) error {
 	parent := filepath.Dir(path)
@@ -60,21 +101,10 @@ func createOwnedDirectory(path, name string, root bool) error {
 			return errors.New("invalid root marker")
 		}
 	}
-	if testCreateDirectory2Unavailable {
-		return errors.New("atomic directory creation unavailable")
-	}
-	if e := createDirectory2.Find(); e != nil {
-		return fmt.Errorf("atomic directory creation unavailable: %w", e)
-	}
-	p, e := syscall.UTF16PtrFromString(path)
+	dir, e := createRelativeDirectory(held[len(held)-1].h, filepath.Base(path))
 	if e != nil {
-		return e
+		return fmt.Errorf("atomic directory creation: %w", e)
 	}
-	h, _, callErr := createDirectory2.Call(uintptr(unsafe.Pointer(p)), 0x00100081, uintptr(syscall.FILE_SHARE_READ), 1, 0)
-	if h == uintptr(syscall.InvalidHandle) {
-		return fmt.Errorf("atomic directory creation: %w", callErr)
-	}
-	dir := syscall.Handle(h)
 	defer syscall.CloseHandle(dir)
 	var info syscall.ByHandleFileInformation
 	if e = syscall.GetFileInformationByHandle(dir, &info); e != nil {
