@@ -508,7 +508,8 @@ func powershellShardMerge(args []string, out io.Writer) error {
 				}
 				contexts = append(contexts, *native.Context)
 			}
-			timingDir := filepath.Join(o.timingInput, entry.Name())
+			timingName := fmt.Sprintf("powershell-timing-%s-%d-%d", filepath.Base(o.runURL), o.attempt, m.ShardIndex)
+			timingDir := filepath.Join(o.timingInput, timingName)
 			info, e := os.Lstat(timingDir)
 			if e != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 				return fmt.Errorf("invalid timing artifact directory")
