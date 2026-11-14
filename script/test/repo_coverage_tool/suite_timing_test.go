@@ -1,6 +1,10 @@
 package main
 
 import (
+ "bytes"
+ "encoding/json"
+ "os"
+ "path/filepath"
 	"testing"
 	rc "windows_setup/script/test/repo_coverage"
 )
@@ -29,4 +33,20 @@ func TestTimingRosterRequiresEveryActualWorkerOnce(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReadWorkerTimingsUsesOnlyExpectedFilesAndRejectsTampering(t *testing.T) {
+ dir:=t.TempDir()
+ c:=rc.PowerShellWorkerContext{Commit:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",RunUrl:"https://github.com/example/repo/actions/runs/123",RunAttempt:1,GlobalIndex:0,TestFile:"test/a.ps1",TestSHA256:"a",ProcessId:10}
+ good:=timingReceipt{1,c,[]timingPhase{{"startup",1},{"pester_instrumentation_and_test",2},{"serialization",3}}}
+ raw,_:=json.Marshal(good)
+ path:=filepath.Join(dir,"worker_0.timing.json")
+ if err:=os.WriteFile(path,raw,0600);err!=nil {t.Fatal(err)}
+ if _,err:=readWorkerTimings(dir,[]rc.PowerShellWorkerContext{c});err!=nil {t.Fatal(err)}
+ for _,bad:=range [][]byte{[]byte(`{}`),append(append([]byte{},raw...),[]byte(` {}`)...),bytes.Replace(raw,[]byte(`"RunAttempt":1`),[]byte(`"RunAttempt":2`),1),bytes.Replace(raw,[]byte(`"SchemaVersion":1`),[]byte(`"SchemaVersion":1,"Unexpected":"private"`),1)} {
+  if err:=os.WriteFile(path,bad,0600);err!=nil {t.Fatal(err)}
+  if _,err:=readWorkerTimings(dir,[]rc.PowerShellWorkerContext{c});err==nil {t.Fatal("accepted tampered input")}
+ }
+ if err:=os.Remove(path);err!=nil {t.Fatal(err)}
+ if _,err:=readWorkerTimings(dir,[]rc.PowerShellWorkerContext{c});err==nil {t.Fatal("accepted missing input")}
 }
