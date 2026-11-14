@@ -231,7 +231,7 @@ jobs:
           Invoke-CINative -File go.exe -Arguments @('run','./script/test/repo_coverage_tool','native-stage-restore','--runtime','--source-root',$PWD.Path,'--input-dir',(Join-Path $env:RUNNER_TEMP 'native-stage-input'),'--output-dir',(Join-Path $env:RUNNER_TEMP 'native-stage-import'),'--expected-sha',$env:GITHUB_SHA,'--expected-run-url',("https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"),'--run-attempt',$env:GITHUB_RUN_ATTEMPT)
       - name: 當地量測 managed 原生程式完整計數點
         run: |
-          & .\script\test\managed_coverage.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'managed-coverage')
+          & .\script\test\managed_coverage.ps1 -SourceRoot $PWD.Path -OutputDirectory (Join-Path $env:RUNNER_TEMP 'managed-coverage') -Runtime
       - name: 下載同次與同 attempt 的完整 PowerShell 四片
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:

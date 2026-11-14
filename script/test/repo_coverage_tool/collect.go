@@ -175,7 +175,11 @@ func collect(args []string, out io.Writer) error {
 			return err
 		}
 		originals := map[string][]byte{}
-		for _, s := range inv.Sources {
+		managedInventory := inv
+		if *runtimeScope {
+			managedInventory = target
+		}
+		for _, s := range managedInventory.Sources {
 			if s.Language == "csharp" {
 				b, e := os.ReadFile(filepath.Join(source, filepath.FromSlash(s.Path)))
 				if e != nil {
