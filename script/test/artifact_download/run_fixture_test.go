@@ -107,3 +107,49 @@ func TestRunRejectsOversizeMetadataBeforeDownload(t *testing.T) {
 		t.Fatalf("expected metadata size rejection before download; calls=%d err=%v", zipCalls, err)
 	}
 }
+
+func TestRunRejectsInvalidIdentityAndTerminalDownloadErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		id        int
+		nameValue string
+		expired   bool
+		status    int
+		wantCalls int
+	}{
+		{"wrong id", 457, "windows-test-reports-123-1", false, 200, 0},
+		{"wrong attempt", 456, "windows-test-reports-123-2", false, 200, 0},
+		{"expired", 456, "windows-test-reports-123-1", true, 200, 0},
+		{"unauthorized", 456, "windows-test-reports-123-1", false, 401, 1},
+		{"missing", 456, "windows-test-reports-123-1", false, 404, 1},
+		{"retry bounded", 456, "windows-test-reports-123-1", false, 503, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			digest := "sha256:" + strings.Repeat("a", 64)
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/zip") {
+					calls++
+					w.WriteHeader(tc.status)
+					return
+				}
+				fmt.Fprintf(w, `{"id":%d,"name":%q,"digest":%q,"size_in_bytes":100,"expired":%t,"workflow_run":{"id":123}}`, tc.id, tc.nameValue, digest, tc.expired)
+			}))
+			defer server.Close()
+			u, _ := url.Parse(server.URL)
+			oldTransport := http.DefaultTransport
+			http.DefaultTransport = fixtureTransport{u, server.Client().Transport}
+			defer func() { http.DefaultTransport = oldTransport }()
+			oldFlags, oldArgs := flag.CommandLine, os.Args
+			defer func() { flag.CommandLine = oldFlags; os.Args = oldArgs }()
+			flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+			flag.CommandLine.SetOutput(io.Discard)
+			os.Args = []string{"artifact_download", "--repo", "example/repo", "--run", "123", "--attempt", "1", "--id", "456", "--digest", digest, "--dest", filepath.Join(t.TempDir(), "result")}
+			t.Setenv("GH_TOKEN", "fixture-token")
+			err := run()
+			if err == nil || calls != tc.wantCalls {
+				t.Fatalf("calls=%d err=%v", calls, err)
+			}
+		})
+	}
+}
