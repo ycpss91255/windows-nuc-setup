@@ -105,6 +105,9 @@ func TestOwnedArtifactsRequireSelectionCompletionAndExpiry(t *testing.T) {
 	if !strings.Contains(out.String(), "done") {
 		t.Fatalf("preview missing selection: %q", out.String())
 	}
+	if !strings.Contains(out.String(), "候選") {
+		t.Fatalf("preview does not distinguish candidate from verified deletion: %q", out.String())
+	}
 	if _, err := os.Stat(filepath.Join(root, "done", "payload")); err != nil {
 		t.Fatal("dry run deleted fixture", err)
 	}
