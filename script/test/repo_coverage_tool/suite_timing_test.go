@@ -104,7 +104,7 @@ func TestShardPackExportsTimingOnlyAfterWorkerIdentityValidation(t *testing.T) {
 }
 
 func TestTimingMergeRejectsIncompleteOrCrossAttemptArtifacts(t *testing.T) {
-	for _, kind := range []string{"missing_artifact", "duplicate_suite", "wrong_attempt", "unknown_field"} {
+	for _, kind := range []string{"missing_artifact", "duplicate_suite", "wrong_attempt", "unknown_field", "missing_phase_milliseconds", "null_global_index"} {
 		t.Run(kind, func(t *testing.T) {
 			root, manifest, sha := shardCLIFixture(t)
 			parts := t.TempDir()
@@ -162,6 +162,24 @@ func TestTimingMergeRejectsIncompleteOrCrossAttemptArtifacts(t *testing.T) {
 				if err = os.WriteFile(second, b, 0600); err != nil {
 					t.Fatal(err)
 				}
+			case "missing_phase_milliseconds", "null_global_index":
+				b, err = os.ReadFile(first)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var rows []map[string]any
+				if err = json.Unmarshal(b, &rows); err != nil {
+					t.Fatal(err)
+				}
+				if kind == "missing_phase_milliseconds" {
+					delete(rows[0]["Phases"].([]any)[0].(map[string]any), "Milliseconds")
+				} else {
+					rows[0]["Context"].(map[string]any)["GlobalIndex"] = nil
+				}
+				b, _ = json.Marshal(rows)
+				if err = os.WriteFile(first, b, 0600); err != nil {
+					t.Fatal(err)
+				}
 			}
 			output := filepath.Join(t.TempDir(), "coverage")
 			timingOutput := filepath.Join(t.TempDir(), "timing")
@@ -191,6 +209,57 @@ func TestTimingRejectsChangedValidatedShardBytes(t *testing.T) {
 	} {
 		if err := assertStableTimingInput(manifest, v.manifest, v.worker, v.hash); err == nil {
 			t.Fatal("accepted changed validated evidence")
+		}
+	}
+}
+
+func TestTimingPackRejectsMissingOrNullRequiredFields(t *testing.T) {
+	for _, field := range []string{"Milliseconds", "GlobalIndex", "ShardIndex", "WrapperFile", "Phases", "Context", "SchemaVersion"} {
+		for _, mode := range []string{"missing", "null"} {
+			t.Run(field+"_"+mode, func(t *testing.T) {
+				root, manifest, sha := shardCLIFixture(t)
+				dir := filepath.Join(t.TempDir(), "safe")
+				writeShardCLIProof(t, root, dir, 123, true)
+				bindShardCLIProof(t, root, dir, sha, 0, 2, 1)
+				b, err := os.ReadFile(filepath.Join(dir, "worker_0.json"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var worker struct{ Context rc.PowerShellWorkerContext }
+				if err = json.Unmarshal(b, &worker); err != nil {
+					t.Fatal(err)
+				}
+				timing := timingReceipt{1, worker.Context, []timingPhase{{"worker_setup", 0}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}
+				b, _ = json.Marshal(timing)
+				var object map[string]any
+				if err = json.Unmarshal(b, &object); err != nil {
+					t.Fatal(err)
+				}
+				target := object
+				if field == "Milliseconds" {
+					target = object["Phases"].([]any)[0].(map[string]any)
+				} else if field == "GlobalIndex" || field == "ShardIndex" || field == "WrapperFile" {
+					target = object["Context"].(map[string]any)
+				}
+				if mode == "missing" {
+					delete(target, field)
+				} else {
+					target[field] = nil
+				}
+				b, _ = json.Marshal(object)
+				private := t.TempDir()
+				if err = os.WriteFile(filepath.Join(private, "worker_0.timing.json"), b, 0600); err != nil {
+					t.Fatal(err)
+				}
+				output := filepath.Join(t.TempDir(), "timing")
+				args := append(shardCLIArgs(root, manifest, sha), "--shard-index", "0", "--evidence-dir", dir, "--timing-input-dir", private, "--timing-output-dir", output)
+				if err = powershellShardPack(args, &bytes.Buffer{}); err == nil {
+					t.Fatalf("accepted %s %s", field, mode)
+				}
+				if _, err = os.Stat(filepath.Join(output, "timing.json")); !os.IsNotExist(err) {
+					t.Fatal("published invalid timing")
+				}
+			})
 		}
 	}
 }
