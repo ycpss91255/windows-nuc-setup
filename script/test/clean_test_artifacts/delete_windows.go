@@ -15,6 +15,7 @@ import (
 )
 
 var setFileInformationByHandle = syscall.NewLazyDLL("kernel32.dll").NewProc("SetFileInformationByHandle")
+var getFileInformationByHandleEx = syscall.NewLazyDLL("kernel32.dll").NewProc("GetFileInformationByHandleEx")
 
 const deleteAccess = 0x00010000
 const openReparse = 0x00200000
@@ -23,6 +24,48 @@ type lockedEntry struct {
 	h    syscall.Handle
 	path string
 	dir  bool
+}
+
+type enumeratedEntry struct {
+	name string
+	id   uint64
+}
+
+func enumerateIDs(h syscall.Handle) ([]enumeratedEntry, error) {
+	var result []enumeratedEntry
+	buf := make([]uint64, 8192) // FILE_ID_BOTH_DIR_INFO requires eight-byte alignment.
+	for {
+		ok, _, err := getFileInformationByHandleEx.Call(uintptr(h), 10, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)*8))
+		if ok == 0 {
+			if err == syscall.Errno(18) {
+				return result, nil
+			}
+			return nil, err
+		}
+		data := unsafe.Slice((*byte)(unsafe.Pointer(&buf[0])), len(buf)*8)
+		for offset := 0; ; {
+			if offset+104 > len(data) {
+				return nil, errors.New("invalid directory record")
+			}
+			next := *(*uint32)(unsafe.Pointer(&data[offset]))
+			n := *(*uint32)(unsafe.Pointer(&data[offset+60]))
+			id := *(*uint64)(unsafe.Pointer(&data[offset+96]))
+			if n%2 != 0 || int(n) > len(data)-offset-104 {
+				return nil, errors.New("invalid directory name")
+			}
+			name := syscall.UTF16ToString(unsafe.Slice((*uint16)(unsafe.Pointer(&data[offset+104])), int(n)/2))
+			if name != "." && name != ".." {
+				result = append(result, enumeratedEntry{name, id})
+			}
+			if next == 0 {
+				break
+			}
+			if next%8 != 0 || int(next) > len(data)-offset-104 {
+				return nil, errors.New("invalid directory offset")
+			}
+			offset += int(next)
+		}
+	}
 }
 
 func openLocked(path string, deletable bool) (lockedEntry, string, error) {
@@ -189,7 +232,7 @@ func safeDelete(root, name, expectedID string, now time.Time) (result error) {
 		if e != nil {
 			return e
 		}
-		children, e := f.ReadDir(-1)
+		children, e := enumerateIDs(syscall.Handle(f.Fd()))
 		f.Close()
 		if e != nil {
 			return fmt.Errorf("enumerate: %w", e)
@@ -198,13 +241,17 @@ func safeDelete(root, name, expectedID string, now time.Time) (result error) {
 			afterEnumerateHook()
 		}
 		for _, child := range children {
-			if dir == p && child.Name() == itemMarker {
+			if dir == p && child.name == itemMarker {
 				continue
 			}
-			q := filepath.Join(dir, child.Name())
-			ent, _, e := openLocked(q, true)
+			q := filepath.Join(dir, child.name)
+			ent, childID, e := openLocked(q, true)
 			if e != nil {
 				return e
+			}
+			if !strings.HasSuffix(childID, fmt.Sprintf(":%016x", child.id)) {
+				syscall.CloseHandle(ent.h)
+				return errors.New("enumerated child identity changed")
 			}
 			entries = append(entries, ent)
 			if ent.dir {
