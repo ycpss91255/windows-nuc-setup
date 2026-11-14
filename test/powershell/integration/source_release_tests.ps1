@@ -61,7 +61,7 @@ Assert $true '正確版本下載指引通過發布前驗證'
 Refuse {Assert-ReleaseDownloadGuide -Version v1.2.3 -Notes $original} '缺少下載指引不得發布'
 Refuse {Assert-ReleaseDownloadGuide -Version v1.2.4 -Notes $actual} '錯版下載指引不得發布'
 $oldNotes=Get-UserFacingReleaseNotes v0.2.5 ([IO.File]::ReadAllText((Join-Path $root 'doc/changelog/changelog.md')))
-Assert ($oldNotes.Contains('NUC8i7HVK') -and $oldNotes.Contains('NUC8i7HNK') -and $oldNotes.Contains('HVB') -and $oldNotes.Contains('HNB')) '既有驅動說明完整列出適用型號及主機板'
+Assert ($oldNotes.Contains('NUC8i7HVK') -and $oldNotes.Contains('NUC8i7HNK') -and $oldNotes.Contains('NUC8i7HVB') -and $oldNotes.Contains('NUC8i7HNB')) '既有驅動說明完整列出適用型號及主機板'
 Assert (-not $oldNotes.Contains('[此版本測試報表]') -and -not $oldNotes.Contains('版本說明直接提供下載') -and -not $oldNotes.Contains('維護者可先核對不可變附件摘要')) '既有版本的使用者說明不重複報表連結或內部發布證明'
 Assert ($oldNotes.Contains('修正 Audit 流程') -and $oldNotes.Contains('修正 Windows Terminal')) '既有版本保留使用者修正內容'
 Assert (-not $actual.Contains('NUC8i7HVK') -and -not $actual.Contains('官方下載')) '其他版本不假稱既有驅動或尚未發布的下載能力'
