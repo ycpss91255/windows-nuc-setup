@@ -34,6 +34,26 @@ func (j *Job) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (p *Page) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for _, name := range []string{"page_number", "per_page", "total_count", "jobs"} {
+		raw, ok := fields[name]
+		if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return fmt.Errorf("missing page field %s", name)
+		}
+	}
+	type plainPage Page
+	var value plainPage
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*p = Page(value)
+	return nil
+}
+
 // Decode validates shape and internal consistency of caller-supplied data;
 // independently obtained Expected values do not authenticate the data origin.
 func Decode(data []byte, expected Expected) (Output, error) {
