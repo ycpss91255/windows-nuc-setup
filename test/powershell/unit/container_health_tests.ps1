@@ -1,7 +1,7 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
-function Assert([bool]$Condition,[string]$Name){if(-not $Condition){throw $Name};Write-Host ('PASS '+$Name)}
+function Assert([bool]$Condition,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Condition}|ConvertTo-Json -Compress));if(-not $Condition){throw $Name}}
 . (Join-Path $root 'script/docker/container_health.ps1')
 $script:called=0
 function Assert-CIRequiredTools {param([switch]$Managed) $script:called++;if(-not $Managed){throw 'managed tool check required'}}
