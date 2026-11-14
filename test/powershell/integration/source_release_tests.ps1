@@ -35,8 +35,8 @@ try{
 }finally{$ErrorActionPreference=$priorPreference;Pop-Location}
 Assert ($builderExit -eq 0) 'PS5.1 原生 File 入口省略 PackageRoot 可產生所屬 Git 套件版本說明'
 $rcOriginal=Get-ReleaseNotes v9.8.7-rc1 ([IO.File]::ReadAllText((Join-Path $defaultRepo 'doc/changelog/changelog.md')))
-$rcExpected='[此版本測試報表](https://github.com/ycpss91255/windows_setup/releases/download/v9.8.7-rc1/windows_setup_report_v9.8.7-rc1.zip)' + "`n`n" + $rcOriginal
-Assert (([IO.File]::ReadAllText((Join-Path $defaultNotes 'release_notes.md'))) -ceq $rcExpected) 'RC 報表連結位於頂端且保留完整原始說明'
+$rcExpected=(Get-ReleaseDownloadGuide v9.8.7-rc1) + "`n`n" + $rcOriginal
+Assert (([IO.File]::ReadAllText((Join-Path $defaultNotes 'release_notes.md'))) -ceq $rcExpected) 'RC 下載指引位於頂端且保留完整原始說明'
 foreach($file in @('init.cmd','windows.cmd','readme.md')){WriteFile $file 'fixture'}
 $log="## [Unreleased]`n`n### Changed`n`n- 通用 Windows 設定。`n"
 WriteFile 'doc/changelog/changelog.md' $log
@@ -52,19 +52,26 @@ try{$result=& $builder -Version v1.2.3 -PackageRoot $repo -OutputDirectory '.\no
 Assert ($result.NotesPath -eq (Join-Path $fixture 'notes\release_notes.md')) '發布輸出相對路徑依 PowerShell 位置解析'
 Assert ((Get-Content $result.NotesPath -Raw -Encoding UTF8).Contains('通用 Windows 設定')) '說明來自精確版本章節'
 $original=Get-ReleaseNotes v1.2.3 ([IO.File]::ReadAllText((Join-Path $repo 'doc/changelog/changelog.md')))
-$expected='[此版本測試報表](https://github.com/ycpss91255/windows_setup/releases/download/v1.2.3/windows_setup_report_v1.2.3.zip)' + "`n`n" + $original
+$expected=(Get-ReleaseDownloadGuide v1.2.3) + "`n`n" + $original
 $actual=[IO.File]::ReadAllText($result.NotesPath)
-Assert ($actual -ceq $expected) '正式版本必須連結自身版本報表並原樣保留說明'
-Assert ($actual -cne $expected.Replace('/download/v1.2.3/','/download/v1.2.4/') -and $actual -cne $expected.Replace('/download/v1.2.3/windows_setup_report_v1.2.3.zip','/download/main/windows_setup_report_main.zip')) '錯版及 main 連結不能通過完整內容契約'
-Assert-ReleaseReportLink -Version v1.2.3 -Notes $actual
-Assert $true '正確版本入口通過發布前驗證'
-Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes $original} '缺少版本入口不得發布'
-Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes ($expected.Replace('/download/v1.2.3/','/download/v1.2.4/'))} '錯版入口不得發布'
-Refuse {Assert-ReleaseReportLink -Version v1.2.3 -Notes ($expected.Replace('/download/v1.2.3/windows_setup_report_v1.2.3.zip','/download/main/windows_setup_report_main.zip'))} 'main 入口不得代替該版報表'
+Assert ($actual.Contains('https://github.com/ycpss91255/windows_setup/archive/refs/tags/v1.2.3.zip') -and $actual.Contains('https://github.com/ycpss91255/windows_setup/blob/v1.2.3/readme.md') -and -not $actual.Contains('/blob/main/readme.md')) '真實 builder 提供該版來源 ZIP 及同標籤 README'
+Assert ($actual.Contains('驅動為可選') -and $actual.Contains('NUC') -and $actual.Contains('略過')) '所有機型包含 NUC 均可略過驅動'
+Assert ($actual.Contains('Windows') -and $actual.Contains('GitHub') -and $actual.Contains('校驗檔') -and $actual.Contains('一般不需下載') -and $actual.Contains('可選')) '下載指引解釋 Windows 來源 ZIP、可選報表及 GitHub 校驗檔'
+Assert ($actual.Contains('Source code') -and $actual.Contains('Autologon') -and $actual.Contains('Assets') -and -not $actual.Contains('[此版本測試報表]')) '使用者說明指出來源與附件而不重複報表連結'
+Assert ($actual -ceq $expected) '正式版本包含下載指引並原樣保留說明'
+Assert-ReleaseDownloadGuide -Version v1.2.3 -Notes $actual
+Assert $true '正確版本下載指引通過發布前驗證'
+Refuse {Assert-ReleaseDownloadGuide -Version v1.2.3 -Notes $original} '缺少下載指引不得發布'
+Refuse {Assert-ReleaseDownloadGuide -Version v1.2.4 -Notes $actual} '錯版下載指引不得發布'
+$oldNotes=Get-UserFacingReleaseNotes v0.2.5 ([IO.File]::ReadAllText((Join-Path $root 'doc/changelog/changelog.md')))
+Assert ($oldNotes.Contains('NUC8i7HVK') -and $oldNotes.Contains('NUC8i7HNK') -and $oldNotes.Contains('NUC8i7HVB') -and $oldNotes.Contains('NUC8i7HNB')) '既有驅動說明完整列出適用型號及主機板'
+Assert (-not $oldNotes.Contains('[此版本測試報表]') -and -not $oldNotes.Contains('版本說明直接提供下載') -and -not $oldNotes.Contains('維護者可先核對不可變附件摘要')) '既有版本的使用者說明不重複報表連結或內部發布證明'
+Assert ($oldNotes.Contains('修正 Audit 流程') -and $oldNotes.Contains('修正 Windows Terminal')) '既有版本保留使用者修正內容'
+Assert (-not $actual.Contains('NUC8i7HVK') -and -not $actual.Contains('官方下載')) '其他版本不假稱既有驅動或尚未發布的下載能力'
 $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
 $releaseJob=[regex]::Match($workflow,'(?ms)^  release:\s*$(.*?)(?=^  [a-z][a-z-]*:|\z)').Groups[1].Value
-$builderPos=$releaseJob.IndexOf('build_source_release.ps1');$guardPos=$releaseJob.IndexOf('Assert-ReleaseReportLink');$publishPos=$releaseJob.IndexOf('publish_quality_release.ps1')
-Assert ($builderPos -ge 0 -and $guardPos -gt $builderPos -and $publishPos -gt $guardPos -and $releaseJob.Contains('Assert-ReleaseReportLink -Version $env:RELEASE_TAG -Notes $notes')) 'CD 先產說明、按本次標籤核對入口後才發布'
+$builderPos=$releaseJob.IndexOf('build_source_release.ps1');$guardPos=$releaseJob.IndexOf('Assert-ReleaseDownloadGuide');$publishPos=$releaseJob.IndexOf('publish_quality_release.ps1')
+Assert ($builderPos -ge 0 -and $guardPos -gt $builderPos -and $publishPos -gt $guardPos -and $releaseJob.Contains('Assert-ReleaseDownloadGuide -Version $env:RELEASE_TAG -Notes $notes')) 'CD 先產說明、按本次標籤核對下載指引後才發布'
 
 $nativeDownload=$releaseJob.IndexOf('windows-test-reports-${{ github.run_id }}-${{ github.run_attempt }}')
 $containerDownload=$releaseJob.IndexOf('docker-test-reports-${{ github.run_id }}-${{ github.run_attempt }}')

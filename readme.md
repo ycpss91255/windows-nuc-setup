@@ -570,7 +570,7 @@ Hosts／SSH 獨立入口為 `modules\ssh\apply_hosts_sync.cmd`、`sync_hosts.cmd
 
 ### 準備獨立驅動包
 
-一般使用者可在所用版本的 **Release → Assets** 下載可選的 **`windows_driver_nuc8_<version>.zip`**（version 包含 v，請使用與主程式相同的版本）。將它解壓到 **`USB 根目錄\windows_driver_packages\nuc8`**，該資料夾內應直接看得到 `install.cmd`、`core`、`modules`、`drivers`、`package.json`、`manifest.json`、`license` 與十二個 ZIP；不要多包一層 ZIP 檔名資料夾。執行 `windows.cmd` 時依機型提示選擇這個資料夾；一般電腦可略過，不需要下載。主程式仍依上節由 Source code ZIP 與官方 Autologon 準備，兩個包放在同一 USB 的相鄰資料夾。
+若所用版本的 **Release → Assets** 有提供，使用者可下載可選的 **`windows_driver_nuc8_<version>.zip`**（version 包含 v，請使用與主程式相同的版本）。將它解壓到 **`USB 根目錄\windows_driver_packages\nuc8`**，該資料夾內應直接看得到 `install.cmd`、`core`、`modules`、`drivers`、`package.json`、`manifest.json`、`license` 與十二個 ZIP；不要多包一層 ZIP 檔名資料夾。執行 `windows.cmd` 時依機型提示選擇這個資料夾；所有機型（包括 NUC）均可略過驅動，不需要下載。主程式仍依上節由 Source code ZIP 與官方 Autologon 準備，兩個包放在同一 USB 的相鄰資料夾。
 
 以下重新建包指令僅供維護者使用，使用者下載與解壓即可。準備符合 [drivers/nuc8i7hvk_hnk/manifest.json](drivers/nuc8i7hvk_hnk/manifest.json) 的十二個封存檔，並將此範本複製為來源目錄的 `manifest.json`，再執行：
 
@@ -778,7 +778,7 @@ git push origin "refs/tags/$version"
 
 從 GitHub Release 使用內建 **Source code (zip)** 或 **Source code (tar.gz)** 下載來源，不額外上傳重複來源 ZIP／SHA256。內建來源封存檔的根目錄名稱由 GitHub 決定。若使用快速開始的 USB 自動尋找指令，請改名為 `windows_setup` 並放在 USB 根目錄；腳本本身可放任意路徑，手動呼叫該位置的 `init.cmd` 即可。
 
-需要特定型號驅動時，依 [準備獨立驅動包](#準備獨立驅動包) 下載同版 Release 的型號獨立 ZIP 並解壓；執行 `windows.cmd` 時選取該資料夾。一般電腦可略過，不需下載驅動。資產檔名、大小、SHA256、機型設定檔與包內 manifest 雜湊，列在該版來源的 [驅動資產清單](script/release/driver_release_assets.json)；只選擇自己機型對應的包，不把其他型號包套用到本機。
+若該版有提供所需型號驅動，依 [準備獨立驅動包](#準備獨立驅動包) 下載同版 Release 的型號獨立 ZIP 並解壓；執行 `windows.cmd` 時選取該資料夾。所有機型（包括 NUC）均可略過，不需下載驅動。資產檔名、大小、SHA256、機型設定檔與包內 manifest 雜湊，列在該版來源的 [驅動資產清單](script/release/driver_release_assets.json)；只選擇自己機型對應的包，不把其他型號包套用到本機。
 
 - 來源不包含 `.git`、驅動 ZIP、Autologon EXE、實機 Reports 或密碼暫存；來源檢查會拒絕錯誤追蹤的敏感檔案。
 - 依 [來源包準備說明](#從原始碼準備完整工具包) 補齊所選功能需要的二進位，不能把來源 ZIP 當成完整離線安裝包。

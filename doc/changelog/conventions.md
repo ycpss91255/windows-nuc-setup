@@ -1,4 +1,4 @@
-﻿# 版本紀錄撰寫規則
+# 版本紀錄撰寫規則
 
 - 使用繁體中文，記錄讀者可見的影響與必要操作，不複製代理對話、測試日誌或實機個資。
 - 日常變更放在 `## [Unreleased]`；發布使用 `script/release/prepare_release.ps1 -Version vX.Y.Z`，將內容提升為 `## [vX.Y.Z] — YYYY-MM-DD` 並同步 `.version`。RC 使用 `vX.Y.Z-rcN`。
@@ -8,3 +8,4 @@
 - 破壞相容性時明確標示 BREAKING，說明受影響範圍與遷移步驟。
 - 測試方式與限制放 README；實際結果放中文 Git 提交、Actions 或 Release，不維護容易過時的手動測試總數。
 - 歷史很大時才按版本系列拆檔並維護索引。第三方原始碼的 changelog 保持上游原狀。
+- 未來 Release 與版本紀錄以讀者能理解的變更與操作為主；原始發布證明與 CI 脈絡保留在報表及 Actions。既有歷史不重寫。

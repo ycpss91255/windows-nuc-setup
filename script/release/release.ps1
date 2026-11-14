@@ -4,13 +4,32 @@ function Get-ReleaseVersion([string]$Version) {
  if($Version -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$'){throw '版本必須是 vX.Y.Z 或 vX.Y.Z-rcN。'}
  [pscustomobject]@{Version=$Version;Base=($Version -replace '-rc[0-9]+$','');Prerelease=($Version -match '-rc[0-9]+$')}
 }
-function Get-ReleaseReportLink([string]$Version) {
+function Get-ReleaseDownloadGuide([string]$Version) {
  $null=Get-ReleaseVersion $Version
- return ('[此版本測試報表](https://github.com/ycpss91255/windows_setup/releases/download/'+$Version+'/windows_setup_report_'+$Version+'.zip)')
+ $guide="## $Version 下載與使用`n`n- 通用 Windows 工具：下載 [本版 Source code ZIP](https://github.com/ycpss91255/windows_setup/archive/refs/tags/$Version.zip)，依 [本版 README](https://github.com/ycpss91255/windows_setup/blob/$Version/readme.md) 另行取得 Microsoft 官方 Autologon；來源 ZIP 不含 Autologon，使用前須依說明準備。`n- 驅動為可選，即使是 NUC 也可略過；未選驅動包可繼續使用通用工具。`n- 測試報表（可選）：在 Assets 下載本版本報表 ZIP。`n- GitHub 自動產生的 attestation JSON 是校驗檔，一般不需下載。"
+ if($Version -ceq 'v0.2.5'){$guide+="`n- 可選驅動：Assets 的 NUC8 驅動包適用 NUC8i7HVK／NUC8i7HNK，主機板 NUC8i7HVB／NUC8i7HNB。"}
+ return $guide
 }
-function Assert-ReleaseReportLink([string]$Version,[string]$Notes) {
- $expected=(Get-ReleaseReportLink $Version)+"`n`n"
- if($Notes -isnot [string] -or -not $Notes.StartsWith($expected,[StringComparison]::Ordinal)){throw '版本說明缺少正確的該版報表入口。'}
+function Assert-ReleaseDownloadGuide([string]$Version,[string]$Notes) {
+ $expected=(Get-ReleaseDownloadGuide $Version)+"`n`n"
+ if(-not $Notes.StartsWith($expected,[StringComparison]::Ordinal)){throw '版本說明缺少正確的下載指引。'}
+}
+function Get-UserFacingReleaseNotes([string]$Version,[string]$Changelog) {
+ $body=Get-ReleaseNotes $Version $Changelog
+ if($Version -ceq 'v0.2.5'){
+  $omit=@(
+   '- Actions 執行名稱清楚標示觸發事件與來源。',
+   '- 版本發布自動封裝同次原生與容器測試報告，驗證後以單一 ZIP 保存，版本說明直接提供下載。',
+   '- 維護者可先核對不可變附件摘要，再驗證歷史報表 ZIP 及其中記載的執行脈絡。',
+   '- 維護者可將完整驗證後的報表 ZIP 原始檔與摘要輸出至專用目錄，供後續消費者核對。',
+   '- 維護工具可將同次 Windows 原生與容器的公開測試證據封裝、核對為版本專屬 ZIP，保留原始內容與容器未量測狀態。',
+   '- 新版本的 Release 說明頂端提供該版本專屬測試報表入口，方便查看對應的測試與覆蓋率證據。',
+   '- 標籤部署後驗證公開版本頁、同次來源與不可變 Release 證據，缺件、來源不符或覆蓋率未達門檻時不再回報部署驗收成功。'
+  )
+  foreach($line in $omit){$body=$body.Replace($line,'')}
+  $body=[regex]::Replace($body,'(?ms)^### Added（新增）\s*(?=^### |\z)','').Trim()
+ }
+ return (Get-ReleaseDownloadGuide $Version)+"`n`n"+$body
 }
 function Get-ReleaseNotes([string]$Version,[string]$Changelog) {
  $info=Get-ReleaseVersion $Version
