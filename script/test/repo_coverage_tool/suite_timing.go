@@ -124,7 +124,53 @@ func decodeTiming(data []byte, target any) error {
 	if err := value(); err != nil {
 		return err
 	}
+	var rows []json.RawMessage
+	switch target.(type) {
+	case *timingReceipt:
+		rows = []json.RawMessage{data}
+	case *[]timingReceipt:
+		if err := json.Unmarshal(data, &rows); err != nil || rows == nil {
+			return fmt.Errorf("invalid timing array")
+		}
+	default:
+		return fmt.Errorf("unsupported timing target")
+	}
+	for _, row := range rows {
+		var receipt map[string]json.RawMessage
+		if err := json.Unmarshal(row, &receipt); err != nil {
+			return err
+		}
+		if err := requireTimingFields(receipt, "SchemaVersion", "Context", "Phases"); err != nil {
+			return err
+		}
+		var context map[string]json.RawMessage
+		if err := json.Unmarshal(receipt["Context"], &context); err != nil {
+			return err
+		}
+		if err := requireTimingFields(context, "Commit", "RunUrl", "RunAttempt", "ShardIndex", "ShardCount", "GlobalIndex", "ProcessId", "TestFile", "TestSHA256", "WrapperFile", "WrapperSHA256"); err != nil {
+			return err
+		}
+		var phases []map[string]json.RawMessage
+		if err := json.Unmarshal(receipt["Phases"], &phases); err != nil || phases == nil {
+			return fmt.Errorf("invalid timing phases")
+		}
+		for _, phase := range phases {
+			if err := requireTimingFields(phase, "Name", "Milliseconds"); err != nil {
+				return err
+			}
+		}
+	}
 	return decodeShardManifest(data, target)
+}
+
+func requireTimingFields(object map[string]json.RawMessage, fields ...string) error {
+	for _, name := range fields {
+		value, ok := object[name]
+		if !ok || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return fmt.Errorf("missing or null timing field %s", name)
+		}
+	}
+	return nil
 }
 
 func assertStableTimingInput(validatedManifest, currentManifest, worker []byte, expectedHash string) error {
