@@ -14,7 +14,7 @@ $hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath @confir
 if(-not (Test-SetupEntryAdministrator)){
  $command="& '"+$PSCommandPath.Replace("'","''")+"' -ExpectedUserSID '"+$currentSID+"'"
  $command+=" -VerificationRunId '"+$VerificationRunId+"'"
- Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)));exit
+ Start-SetupEntryElevated -Command $command;exit
 }
 . (Resolve-NucPath 'update_stage_library.ps1')
 . (Resolve-NucPath 'gui_stage_library.ps1')
