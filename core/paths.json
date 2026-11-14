@@ -122,6 +122,8 @@
   "verify_after_restart.ps1": "core/verify_after_restart.ps1",
   "verify_only.ps1": "core/verify_only.ps1",
   "audit_library.ps1": "core/audit_library.ps1",
+  "audit_entry_library.ps1": "core/audit_entry_library.ps1",
+  "audit_setup.ps1": "core/audit_setup.ps1",
   "audit_nuc.ps1": "core/audit_nuc.ps1",
   "run_setup.cmd": "core/run_setup.cmd",
   "verify_after_restart.cmd": "core/verify_after_restart.cmd",
