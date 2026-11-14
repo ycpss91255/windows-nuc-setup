@@ -62,3 +62,16 @@ func TestReadWorkerTimingsUsesOnlyExpectedFilesAndRejectsTampering(t *testing.T)
 		t.Fatal("accepted missing input")
 	}
 }
+
+func TestShardPackExportsTimingOnlyAfterWorkerIdentityValidation(t *testing.T) {
+ root,manifest,sha:=shardCLIFixture(t)
+ dir:=filepath.Join(t.TempDir(),"safe");writeShardCLIProof(t,root,dir,123,true);bindShardCLIProof(t,root,dir,sha,0,2,1)
+ data,err:=os.ReadFile(filepath.Join(dir,"worker_0.json"));if err!=nil{t.Fatal(err)}
+ var worker struct{Context rc.PowerShellWorkerContext};if err=json.Unmarshal(data,&worker);err!=nil{t.Fatal(err)}
+ private:=t.TempDir();timing:=timingReceipt{1,worker.Context,[]timingPhase{{"startup",1},{"pester_instrumentation_and_test",2},{"serialization",3}}};data,_=json.Marshal(timing)
+ if err=os.WriteFile(filepath.Join(private,"worker_0.timing.json"),data,0600);err!=nil{t.Fatal(err)}
+ output:=filepath.Join(t.TempDir(),"timing")
+ args:=append(shardCLIArgs(root,manifest,sha),"--shard-index","0","--evidence-dir",dir,"--timing-input-dir",private,"--timing-output-dir",output)
+ if err=powershellShardPack(args,&bytes.Buffer{});err!=nil{t.Fatal(err)}
+ if _,err=os.Stat(filepath.Join(output,"timing.json"));err!=nil{t.Fatal(err)}
+}
