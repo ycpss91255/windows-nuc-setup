@@ -125,7 +125,7 @@ if($WorkerIndex -ge 0){
  Write-Json (Join-Path $output ('worker_'+$WorkerIndex+'.json')) $workerProof
  if($null -ne $testContext){
   $serializationMilliseconds=$workerClock.ElapsedMilliseconds
-  $timing=[ordered]@{SchemaVersion=1;Context=$testContext;Phases=@([ordered]@{Name='startup';Milliseconds=$setupMilliseconds},[ordered]@{Name='pester_instrumentation_and_test';Milliseconds=$pesterMilliseconds},[ordered]@{Name='serialization';Milliseconds=$serializationMilliseconds})}
+  $timing=[ordered]@{SchemaVersion=1;Context=$testContext;Phases=@([ordered]@{Name='worker_setup';Milliseconds=$setupMilliseconds},[ordered]@{Name='pester_instrumentation_and_test';Milliseconds=$pesterMilliseconds},[ordered]@{Name='serialization';Milliseconds=$serializationMilliseconds})}
   Write-Json (Join-Path $output ('worker_'+$WorkerIndex+'.timing.json')) $timing
  }
  exit 0

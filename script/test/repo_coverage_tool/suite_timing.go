@@ -40,7 +40,7 @@ func validateTimingRoster(expected []rc.PowerShellWorkerContext, receipts []timi
 		if len(r.Phases) != 3 {
 			return fmt.Errorf("timing phase count mismatch")
 		}
-		names := map[string]bool{"startup": false, "pester_instrumentation_and_test": false, "serialization": false}
+		names := map[string]bool{"worker_setup": false, "pester_instrumentation_and_test": false, "serialization": false}
 		for _, p := range r.Phases {
 			used, ok := names[p.Name]
 			if !ok || used || p.Milliseconds < 0 {
