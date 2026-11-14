@@ -98,6 +98,119 @@ func syncFixture(t *testing.T) (string, pin) {
 	git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
 	return root, pin{git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}"), 8, 4, ""}
 }
+
+func TestSourceGitBoundary(t *testing.T) {
+	source, expected := syncFixture(t)
+	nested := filepath.Join(source, "nested")
+	if e := os.Mkdir(nested, 0700); e != nil {
+		t.Fatal(e)
+	}
+	external := t.TempDir()
+	lock := filepath.Join(external, "lock.json")
+	if e := run([]string{"lock", "--source", source, "--output", lock}, &bytes.Buffer{}, expected); e != nil {
+		t.Fatal(e)
+	}
+	data, e := os.ReadFile(lock)
+	if e != nil {
+		t.Fatal(e)
+	}
+	expected.lockSHA256 = fmt.Sprintf("%x", sha256.Sum256(data))
+	good := filepath.Join(external, "external-stage")
+	if e := run([]string{"stage", "--source", nested, "--lock", lock, "--output", good}, &bytes.Buffer{}, expected); e != nil {
+		t.Fatalf("rejected external output for nested source: %v", e)
+	}
+	for _, tc := range []struct{ name, command, output string }{
+		{"stage in worktree", "stage", filepath.Join(source, "staged_inside_worktree")},
+		{"lock in worktree", "lock", filepath.Join(source, "lock_inside_worktree.json")},
+		{"stage in control directory", "stage", filepath.Join(source, ".git", "staged_inside_control")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{tc.command, "--source", nested, "--output", tc.output}
+			if tc.command == "stage" {
+				args = append(args, "--lock", lock)
+			}
+			if e := run(args, &bytes.Buffer{}, expected); e == nil {
+				t.Fatalf("accepted output inside source Git boundary: %s", tc.output)
+			}
+			if _, e := os.Lstat(tc.output); !os.IsNotExist(e) {
+				t.Fatalf("invalid output was created: %s", tc.output)
+			}
+		})
+	}
+	t.Run("linked worktree common control directory", func(t *testing.T) {
+		linked := filepath.Join(external, "linked")
+		cmd := exec.Command("git", "-C", source, "worktree", "add", "--detach", linked, "HEAD")
+		if b, e := cmd.CombinedOutput(); e != nil {
+			t.Fatalf("linked worktree fixture: %v %s", e, b)
+		}
+		nestedLinked := filepath.Join(linked, "nested")
+		if e := os.Mkdir(nestedLinked, 0700); e != nil {
+			t.Fatal(e)
+		}
+		dest := filepath.Join(source, ".git", "linked-output")
+		if e := run([]string{"stage", "--source", nestedLinked, "--lock", lock, "--output", dest}, &bytes.Buffer{}, expected); e == nil {
+			t.Fatal("accepted output inside shared Git control directory")
+		}
+		if _, e := os.Lstat(dest); !os.IsNotExist(e) {
+			t.Fatal("created output inside shared Git control directory")
+		}
+		alias := filepath.Join(external, "common-link")
+		if e := os.Symlink(filepath.Join(source, ".git"), alias); e != nil {
+			t.Fatalf("Git control alias fixture: %v", e)
+		}
+		aliasDest := filepath.Join(alias, "aliased-output")
+		if e := run([]string{"stage", "--source", nestedLinked, "--lock", lock, "--output", aliasDest}, &bytes.Buffer{}, expected); e == nil {
+			t.Fatal("accepted alias to shared Git control directory")
+		}
+		if _, e := os.Lstat(aliasDest); !os.IsNotExist(e) {
+			t.Fatal("created output through shared Git control alias")
+		}
+	})
+	t.Run("bare repository subdirectory", func(t *testing.T) {
+		bare := filepath.Join(external, "bare.git")
+		cmd := exec.Command("git", "clone", "--bare", "--quiet", source, bare)
+		if b, e := cmd.CombinedOutput(); e != nil {
+			t.Fatalf("bare fixture: %v %s", e, b)
+		}
+		dest := filepath.Join(bare, "staged-inside-bare")
+		if e := run([]string{"stage", "--source", filepath.Join(bare, "objects"), "--lock", lock, "--output", dest}, &bytes.Buffer{}, expected); e == nil {
+			t.Fatal("accepted output inside bare repository")
+		}
+		if _, e := os.Lstat(dest); !os.IsNotExist(e) {
+			t.Fatal("created output inside bare repository")
+		}
+	})
+}
+
+func TestSafeOutputDifferentWorkspace(t *testing.T) {
+	source, _ := syncFixture(t)
+	working, e := os.Getwd()
+	if e != nil {
+		t.Fatal(e)
+	}
+	dest := filepath.Join(working, "external-probe-not-created")
+	if _, e = os.Lstat(dest); !os.IsNotExist(e) {
+		t.Fatal("probe destination must not exist")
+	}
+	if !safeOutput(source, dest) {
+		t.Fatalf("rejected external destination: source volume %q output volume %q", filepath.VolumeName(source), filepath.VolumeName(dest))
+	}
+	t.Logf("source volume %q; output volume %q", filepath.VolumeName(source), filepath.VolumeName(dest))
+}
+
+func TestWriteNewDoesNotOverwrite(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "existing")
+	if e := os.WriteFile(p, []byte("original"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e := writeNew(p, []byte("replacement"), 0600); e == nil {
+		t.Fatal("accepted existing output file")
+	}
+	b, e := os.ReadFile(p)
+	if e != nil || string(b) != "original" {
+		t.Fatal("existing output was changed")
+	}
+}
 func TestSyncStageAndVerify(t *testing.T) {
 	source, expected := syncFixture(t)
 	root := t.TempDir()
@@ -113,6 +226,13 @@ func TestSyncStageAndVerify(t *testing.T) {
 		t.Fatal(e)
 	}
 	expected.lockSHA256 = fmt.Sprintf("%x", sha256.Sum256(lockData))
+	if e = call("lock", "--source", source, "--output", lock); e == nil {
+		t.Fatal("overwrote existing lock")
+	}
+	unchanged, e := os.ReadFile(lock)
+	if e != nil || !bytes.Equal(unchanged, lockData) {
+		t.Fatal("existing lock was changed")
+	}
 	for _, dest := range []string{one, two} {
 		if e := call("stage", "--source", source, "--lock", lock, "--output", dest); e != nil {
 			t.Fatalf("stage: %v", e)

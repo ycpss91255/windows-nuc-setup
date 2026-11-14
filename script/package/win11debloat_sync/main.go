@@ -175,11 +175,62 @@ func safeOutput(source, dest string) bool {
 		return false
 	}
 	b = filepath.Join(parent, filepath.Base(b))
-	rel, e := filepath.Rel(a, b)
+	bareBytes, e := git(source, "rev-parse", "--is-bare-repository")
 	if e != nil {
-		return filepath.VolumeName(a) != filepath.VolumeName(b)
+		return false
 	}
-	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	bare := strings.TrimSpace(string(bareBytes))
+	if bare != "true" && bare != "false" {
+		return false
+	}
+	boundaries := []string{a}
+	queries := [][]string{{"rev-parse", "--absolute-git-dir"}, {"rev-parse", "--path-format=absolute", "--git-common-dir"}}
+	if bare == "false" {
+		queries = append(queries, []string{"rev-parse", "--path-format=absolute", "--show-toplevel"})
+	}
+	for _, query := range queries {
+		result, err := git(source, query...)
+		if err != nil {
+			return false
+		}
+		name := strings.TrimSpace(string(result))
+		if !filepath.IsAbs(name) {
+			return false
+		}
+		name, err = filepath.EvalSymlinks(name)
+		if err != nil {
+			return false
+		}
+		boundaries = append(boundaries, name)
+	}
+	for _, boundary := range boundaries {
+		rel, err := filepath.Rel(boundary, b)
+		if err != nil {
+			if strings.EqualFold(filepath.VolumeName(boundary), filepath.VolumeName(b)) {
+				return false
+			}
+			continue
+		}
+		if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return false
+		}
+	}
+	return true
+}
+
+// The staging parent must be caller-owned and quiescent; exclusive creation
+// avoids overwriting an existing file but is not a concurrent-writer protocol.
+func writeNew(file string, data []byte, mode fs.FileMode) error {
+	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return err
+	}
+	_, writeErr := f.Write(data)
+	closeErr := f.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	return closeErr
 }
 func verify(vendor string, l lockFile) error {
 	expected := map[string]entry{}
@@ -300,7 +351,7 @@ func run(args []string, out io.Writer, expected pin) error {
 			if f.Mode == "100755" {
 				mode = 0755
 			}
-			if e = os.WriteFile(p, data[f.Path], mode); e != nil {
+			if e = writeNew(p, data[f.Path], mode); e != nil {
 				return e
 			}
 		}
