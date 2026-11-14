@@ -533,7 +533,7 @@ Windows 啟用由使用者另外處理；本工具不處理 Ubuntu 分割或安�
 
 ## 清理與網路規則補充
 
-Win11Debloat 清理除了檢查已安裝與預佈建 App，還會逐項讀回 `debloat_profile.json` 所選功能的登錄型別及值，不把第三方程序退出 0 當成全部成功。目前十項功能包含建議、廣告、Bing 與部分 AI 設定；依上游 Windows build 適用範圍，不適用項目在結果中明列 `Skipped`，不宣稱已套用。結果保存在 `%ProgramData%\NUC8-Setup\Debloat-Result.json`；`windows.cmd -VerifyOnly` 會重新讀回本輪狀態，不重新清理或套用設定。登錄讀回不代表所有資料傳輸停止或所有應用程式 AI 功能已移除。
+Win11Debloat 清理除了檢查已安裝與預佈建 App，還會逐項讀回 `debloat_profile.json` 所選功能的登錄型別及值，不把第三方程序退出 0 當成全部成功。目前十項功能包含建議、廣告、Bing 與部分 AI 設定；依上游 Windows build 適用範圍，不適用項目在結果中明列 `Skipped`，不宣稱已套用。清單中的 Microsoft.Copilot、Microsoft.GamingServices 與 Microsoft.Edge.GameAssist 另以精確套件身分處理已安裝和預佈建版本，仍以讀回結果判定成功；結果保存在 `%ProgramData%\NUC8-Setup\Debloat-Result.json`；`windows.cmd -VerifyOnly` 會重新讀回本輪狀態，不重新清理或套用設定。登錄讀回不代表所有資料傳輸停止或所有應用程式 AI 功能已移除。
 
 OneDrive 獨立入口為 `modules\debloat\remove_one_drive.cmd`；解除安裝後僅清除空的預設資料夾，不刪除個人或雲端資料。清理模組對 Windows.old、Contacts、Saved Games、Favorites、Links、Searches 只清除符合空目錄條件的項目；含資料或連結時保留。具名預設 Bing 書籤、捷徑與內建搜尋定義可清除，其他自訂內容保留；不可移除及僅 Staged 的 Windows 元件不代表一般已安裝 App 未清理。
 
