@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"flag"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fixtureTransport struct {
@@ -221,5 +223,36 @@ func TestRunRejectsInvalidArgumentsAndMissingToken(t *testing.T) {
 				t.Fatal("invalid request accepted")
 			}
 		})
+	}
+}
+
+func TestRunContextBoundsTotalRetryTime(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/zip") {
+			calls++
+			w.WriteHeader(503)
+			return
+		}
+		fmt.Fprintf(w, `{"id":456,"name":"windows-test-reports-123-1","digest":%q,"size_in_bytes":100,"expired":false,"workflow_run":{"id":123}}`, digest)
+	}))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = fixtureTransport{u, server.Client().Transport}
+	defer func() { http.DefaultTransport = oldTransport }()
+	oldFlags, oldArgs := flag.CommandLine, os.Args
+	defer func() { flag.CommandLine = oldFlags; os.Args = oldArgs }()
+	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flag.CommandLine.SetOutput(io.Discard)
+	os.Args = []string{"artifact_download", "--repo", "example/repo", "--run", "123", "--attempt", "1", "--id", "456", "--digest", digest, "--dest", filepath.Join(t.TempDir(), "result")}
+	t.Setenv("GH_TOKEN", "fixture-token")
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := runContext(ctx)
+	if err == nil || ctx.Err() != context.DeadlineExceeded || calls != 1 || time.Since(start) > time.Second {
+		t.Fatalf("deadline not honored: calls=%d err=%v context=%v", calls, err, ctx.Err())
 	}
 }
