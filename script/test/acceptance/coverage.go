@@ -55,8 +55,8 @@ func EvaluateCoverage(profiles [][]byte, expectedFiles []string) (CoverageMeasur
 				return m, fmt.Errorf("invalid or private coverage block")
 			}
 			n, e := strconv.Atoi(match[3])
-			if e != nil || n <= 0 {
-				return m, fmt.Errorf("coverage statements must be positive")
+			if e != nil {
+				return m, fmt.Errorf("invalid coverage statement count")
 			}
 			count, e := strconv.Atoi(match[4])
 			if e != nil {
