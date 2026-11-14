@@ -29,6 +29,8 @@ type objectAttributes struct {
 }
 type ioStatusBlock struct{ Status, Information uintptr }
 
+var ntCreateFileTestHook func(*syscall.Handle, *ioStatusBlock) uintptr
+
 func createRelativeDirectory(parent syscall.Handle, name string) (syscall.Handle, error) {
 	if nativeCreateTestHook != nil {
 		nativeCreateTestHook()
@@ -48,7 +50,12 @@ func createRelativeDirectory(parent syscall.Handle, name string) (syscall.Handle
 	a.Length = uint32(unsafe.Sizeof(a))
 	var h syscall.Handle
 	var ios ioStatusBlock
-	status, _, _ := ntCreateFile.Call(uintptr(unsafe.Pointer(&h)), 0x81, uintptr(unsafe.Pointer(&a)), uintptr(unsafe.Pointer(&ios)), 0, 0, uintptr(syscall.FILE_SHARE_READ), 2, 0x00200001, 0, 0)
+	var status uintptr
+	if ntCreateFileTestHook != nil {
+		status = ntCreateFileTestHook(&h, &ios)
+	} else {
+		status, _, _ = ntCreateFile.Call(uintptr(unsafe.Pointer(&h)), 0x81, uintptr(unsafe.Pointer(&a)), uintptr(unsafe.Pointer(&ios)), 0, 0, uintptr(syscall.FILE_SHARE_READ), 2, 0x00200001, 0, 0)
+	}
 	if int32(status) < 0 {
 		code, _, _ := rtlNtStatusToDosError.Call(status)
 		return syscall.InvalidHandle, syscall.Errno(code)
