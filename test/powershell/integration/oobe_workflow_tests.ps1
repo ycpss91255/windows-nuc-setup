@@ -33,6 +33,7 @@ $wrongMessage='';try{& ([scriptblock]::Create($wrongScript))}catch{$wrongMessage
 Assert ((Test-RollupFailure $wrongMessage 'PowerShellCoverage') -and -not (Test-RollupFailure $wrongMessage 'Coverage')) 'wrong PowerShellCoverage failure cannot satisfy Coverage check'
 }finally{$env:COVERAGE_RESULT=$priorCoverageResult;$env:GITHUB_STEP_SUMMARY=$priorSummaryPath;if(Test-Path -LiteralPath $summaryPath){[IO.File]::Delete($summaryPath)}}
 $job=[regex]::Match($workflow,'(?ms)^  oobe_payload_inspection:\r?\n(?<body>.*?)(?=^  [a-z][a-z_-]+:)').Groups['body'].Value
+Assert ($job -match '(?m)^    runs-on: windows-2022\s*$' -and [regex]::Matches($job,'(?m)^    needs:').Count -eq 1 -and $job -match '(?m)^    needs: \[source-preflight\]\s*$') 'payload inspection runs on Windows after source preflight only'
 Assert ($job -match 'runs-on: windows-2022' -and $job -notmatch '(?m)^    needs:') 'payload inspection runs independently on Windows'
 Assert ($job.Contains('verify_oobe_payload.ps1') -and $job.Contains('payload_baseline.json') -and $job.Contains('if: always()') -and $job.Contains('retention-days: 7')) 'CI invokes real reader with reviewed baseline and preserves failure evidence seven days'
 Assert ($job -match '(?s)name:.*?三檔來源與實際雜湊\r?\n\s+shell: powershell\r?\n\s+run: \|\r?\n\s+.*provisioning_source_tests\.ps1' -and $job -match '(?s)id: payload\r?\n\s+if: always\(\)') 'CI names real source verification accurately and preserves independent native WIM inspection'
