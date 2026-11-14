@@ -95,3 +95,52 @@ func TestOversizedMessageFailsClosed(t *testing.T) {
 		t.Fatal("不得輸出機密")
 	}
 }
+
+func TestDirectLintAndInstall(t *testing.T) {
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	if err := install(repo); err != nil {
+		t.Fatal(err)
+	}
+	if err := install(repo); err == nil {
+		t.Fatal("不得覆蓋既有 hook")
+	}
+	p := filepath.Join(repo, "message")
+	for _, tc := range []struct {
+		msg string
+		ok  bool
+	}{
+		{"修正：測試", true}, {"english", false}, {"修正：C:\\Users\\fixture\\x", false}, {"修正：token=fixturesecretvalue", false}, {"修正：" + strings.Repeat("x", 65536), false},
+	} {
+		if err := os.WriteFile(p, []byte(tc.msg), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := lint(p); (err == nil) != tc.ok {
+			t.Fatalf("ok=%v err=%v", tc.ok, err)
+		}
+	}
+	if err := lint(filepath.Join(repo, "absent")); err == nil {
+		t.Fatal("缺少訊息檔應拒絕")
+	}
+}
+
+func TestCLIEntry(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "message")
+	if err := os.WriteFile(p, []byte("修正：測試"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	for _, tc := range []struct {
+		args []string
+		code int
+	}{
+		{nil, 2}, {[]string{"unknown", p}, 1}, {[]string{"lint", p}, 0}, {[]string{"lint", p + "missing"}, 1}, {[]string{"install", p}, 1},
+	} {
+		output.Reset()
+		if got := runCLI(tc.args, &output); got != tc.code {
+			t.Fatalf("args=%v code=%d", tc.args, got)
+		}
+	}
+}

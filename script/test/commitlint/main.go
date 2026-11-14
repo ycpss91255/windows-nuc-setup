@@ -77,22 +77,24 @@ func install(repo string) error {
 	}
 	return closeErr
 }
-func main() {
-	if len(os.Args) != 3 {
-		fmt.Fprintln(os.Stderr, "用法：commitlint lint <訊息檔> | install <儲存庫>")
-		os.Exit(2)
+func runCLI(args []string, stderr io.Writer) int {
+	if len(args) != 2 {
+		fmt.Fprintln(stderr, "用法：commitlint lint <訊息檔> | install <儲存庫>")
+		return 2
 	}
 	var err error
-	switch os.Args[1] {
+	switch args[0] {
 	case "lint":
-		err = lint(os.Args[2])
+		err = lint(args[1])
 	case "install":
-		err = install(os.Args[2])
+		err = install(args[1])
 	default:
 		err = fmt.Errorf("未知命令")
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		fmt.Fprintln(stderr, err)
+		return 1
 	}
+	return 0
 }
+func main() { os.Exit(runCLI(os.Args[1:], os.Stderr)) }

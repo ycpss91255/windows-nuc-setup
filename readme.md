@@ -832,6 +832,6 @@ Pages 部署後匿名讀取首頁、main 報表、JSON／Markdown／JUnit、整�
 
 ### 提交訊息輔助檢查
 
-維護者可選擇安裝 `commit-msg` hook；需要 Git、Go 1.27.3 及提交時可用的 Go 執行環境。在本儲存庫根目錄執行 `powershell -File script/commitlint/install.ps1`；指定其他目標可加 `-Repository <路徑>`。安裝尊重 Git 的 hooks 路徑，若已有 `commit-msg` 便停止，不覆蓋原檔。移除時請先確認內容，再自行刪除安裝的 hook。hook 參照此工作樹中的工具來源，移動或刪除工作樹後須重新安裝。
+維護者可選擇安裝 `commit-msg` hook；需要 Git、Go 1.27.3 及提交時可用的 Go 執行環境。在本儲存庫根目錄執行 `powershell -File script/test/commitlint/install.ps1`；指定其他目標可加 `-Repository <路徑>`。安裝尊重 Git 的 hooks 路徑，若已有 `commit-msg` 便停止，不覆蓋原檔。移除時請先確認內容，再自行刪除安裝的 hook。hook 參照此工作樹中的工具來源，移動或刪除工作樹後須重新安裝。
 
-也可單獨執行 `go run ./script/commitlint lint <訊息檔>`；退出碼 0 代表通過，非 0 代表未通過或執行失敗。檢查標題含漢字，以及訊息中的常見家目錄路徑和憑證指定模式；錯誤不回印原文。這只是有限的提示，可能誤判或漏判，不能證明沒有機密，也不能判定是否為單一任務、TDD 證據是否真實；仍須人工審查。僅檢查啟用後的新提交，不回溯舊歷史。
+也可單獨執行 `go run ./script/test/commitlint lint <訊息檔>`；退出碼 0 代表通過，非 0 代表未通過或執行失敗。檢查標題含漢字，以及訊息中的常見家目錄路徑和憑證指定模式；錯誤不回印原文。這只是有限的提示，可能誤判或漏判，不能證明沒有機密，也不能判定是否為單一任務、TDD 證據是否真實；仍須人工審查。僅檢查啟用後的新提交，不回溯舊歷史。
