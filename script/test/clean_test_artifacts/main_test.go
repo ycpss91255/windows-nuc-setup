@@ -55,6 +55,24 @@ func TestCreateWithoutNewDirectoryAPI(t *testing.T) {
 	}
 }
 
+func TestInitRejectsOutsideConfiguredTemp(t *testing.T) {
+	parent := t.TempDir()
+	temp := filepath.Join(parent, "temp")
+	if e := os.Mkdir(temp, 0700); e != nil {
+		t.Fatal(e)
+	}
+	t.Setenv("TEMP", temp)
+	t.Setenv("TMP", temp)
+	outside := filepath.Join(parent, "outside")
+	var out bytes.Buffer
+	if e := run([]string{"init", outside}, &out, time.Now()); e == nil {
+		t.Fatal("outside configured TEMP accepted")
+	}
+	if _, e := os.Stat(outside); !os.IsNotExist(e) {
+		t.Fatalf("outside path created: %v", e)
+	}
+}
+
 func TestOwnedArtifactsRequireSelectionCompletionAndExpiry(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "owned")
