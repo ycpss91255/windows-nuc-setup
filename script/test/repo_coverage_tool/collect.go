@@ -130,9 +130,13 @@ func collect(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
+		psInventory := inv
+		if *runtimeScope {
+			psInventory = target
+		}
 		report, lines, err := rc.NormalizePowerShell(evidence, func(name string) ([]byte, error) {
 			return os.ReadFile(filepath.Join(filepath.Dir(*pe), filepath.FromSlash(name)))
-		}, inv)
+		}, psInventory)
 		if err != nil {
 			return err
 		}

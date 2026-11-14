@@ -14,9 +14,9 @@ function Invoke-RepoCoveragePipeline {
  Push-Location $source
  try{
   Invoke-CINative -File go.exe -Arguments @('build','-mod=vendor','-o',$tool,'./script/test/repo_coverage_tool')
-  Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $source 'test/powershell/coverage/create_baseline_manifest.ps1'),'-SourceRoot',$source,'-OutputPath',$manifest)
+  Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $source 'test/powershell/coverage/create_baseline_manifest.ps1'),'-SourceRoot',$source,'-OutputPath',$manifest,'-Runtime')
   if($PowerShellShardDirectory){
-   Invoke-CINative -File $tool -Arguments @('powershell-shard-merge','--source-root',$source,'--manifest',$manifest,'--input-dir',$PowerShellShardDirectory,'--output-dir',$ps,'--expected-sha',[string]$metadata.Commit,'--expected-run-url',[string]$metadata.RunUrl,'--run-attempt',$RunAttempt.ToString(),'--shard-count','4')
+   Invoke-CINative -File $tool -Arguments @('powershell-shard-merge','--runtime','--source-root',$source,'--manifest',$manifest,'--input-dir',$PowerShellShardDirectory,'--output-dir',$ps,'--expected-sha',[string]$metadata.Commit,'--expected-run-url',[string]$metadata.RunUrl,'--run-attempt',$RunAttempt.ToString(),'--shard-count','4')
   }else{
    Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $source 'script/test/powershell_coverage.ps1'),'-ManifestPath',$manifest,'-OutputDirectory',$ps,'-ThrottleLimit','2')
   }
