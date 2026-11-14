@@ -156,3 +156,17 @@ func TestDecodeRejectsMissingPaginationEvidence(t *testing.T) {
 		t.Fatal("accepted absent page total and jobs")
 	}
 }
+
+func TestInProgressJobRetainsKnownPendingWithoutInventingElapsed(t *testing.T) {
+	x := fixture()
+	x.Pages[0].Jobs[0].Status = "in_progress"
+	x.Pages[0].Jobs[0].Conclusion = ""
+	x.Pages[0].Jobs[0].CompletedAt = nil
+	out, err := Analyze(x)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Jobs[0].PendingMilliseconds == nil || *out.Jobs[0].PendingMilliseconds != 2000 || out.Jobs[0].ElapsedMilliseconds != nil || out.Jobs[0].Steps[0].ElapsedMilliseconds == nil || *out.Jobs[0].Steps[0].ElapsedMilliseconds != 4000 {
+		t.Fatalf("known pending lost or elapsed invented: %+v", out.Jobs[0])
+	}
+}
