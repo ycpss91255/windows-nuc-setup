@@ -1,5 +1,7 @@
 ﻿#Requires -Version 5.1
 $ErrorActionPreference = 'Stop'
+$originalConsoleEncoding = [Console]::OutputEncoding
+[Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $wrapper = Join-Path $repo 'script/test/clean_test_artifacts.ps1'
 if (-not [IO.File]::Exists($wrapper)) { throw 'SPEC MISSING: PowerShell cleanup entry point' }
@@ -34,4 +36,4 @@ try {
     try { $env:PATH = $fixture; [void](Invoke-Wrapper @('clean', $root, 'item') 1) } finally { $env:PATH = $savedPath }
     Assert $true 'Missing Go exits nonzero'
     Write-Output 'PASS: PS5 wrapper, preview, options and owned data'
-} finally { Pop-Location }
+} finally { Pop-Location; [Console]::OutputEncoding = $originalConsoleEncoding }
