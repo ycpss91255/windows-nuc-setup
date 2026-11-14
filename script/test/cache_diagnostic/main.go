@@ -2,7 +2,12 @@
 package main
 
 import (
+	"encoding/json"
+	"flag"
 	"fmt"
+	"os"
+	"os/exec"
+	"regexp"
 	"time"
 )
 
@@ -37,4 +42,65 @@ func runSample(plan []command, run func(command) error) ([]observation, error) {
 	}
 	return result, nil
 }
-func main() {}
+
+type configuration struct {
+	Native, Report, Fixture, Root, SHA, RunURL, Output, Sample string
+	Attempt                                                    int
+}
+
+func runDiagnostic(c configuration, execute func(command) error) error {
+	if c.Native == "" || c.Report == "" || c.Fixture == "" || c.Root == "" || c.Output == "" || c.Attempt < 1 || !regexp.MustCompile(`^[a-f0-9]{40}$`).MatchString(c.SHA) || !regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[1-9][0-9]*$`).MatchString(c.RunURL) || !regexp.MustCompile(`^(cold|warm)_[1-9][0-9]*$`).MatchString(c.Sample) {
+		return fmt.Errorf("complete diagnostic identity is required")
+	}
+	observations, err := runSample(samplePlan(c.Native, c.Report, c.Fixture, c.Root, c.SHA, c.RunURL), execute)
+	if err != nil {
+		return err
+	}
+	value := struct {
+		Commit, RunURL, Sample string
+		Attempt                int
+		Observations           []observation
+	}{c.SHA, c.RunURL, c.Sample, c.Attempt, observations}
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(c.Output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err = f.Write(data); err != nil {
+		return err
+	}
+	return f.Close()
+}
+func main() {
+	var c configuration
+	flag.StringVar(&c.Native, "native", "", "native stage report")
+	flag.StringVar(&c.Report, "report", "", "complete report")
+	flag.StringVar(&c.Fixture, "fixture", "", "synthetic portal fixture")
+	flag.StringVar(&c.Root, "root", "", "same source root")
+	flag.StringVar(&c.SHA, "sha", "", "same source commit")
+	flag.StringVar(&c.RunURL, "run-url", "", "same run URL")
+	flag.StringVar(&c.Output, "output", "", "new timing output")
+	flag.StringVar(&c.Sample, "sample", "", "sample label")
+	flag.IntVar(&c.Attempt, "attempt", 0, "same run attempt")
+	flag.Parse()
+	if flag.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "unexpected arguments")
+		os.Exit(2)
+	}
+	err := runDiagnostic(c, func(cmd command) error {
+		p := exec.Command("go", cmd.Args...)
+		p.Dir = c.Root
+		p.Env = append(os.Environ(), "WINDOWS_SETUP_ARTIFACT_DIR="+cmd.Artifact, "WINDOWS_SETUP_PORTAL_FIXTURE_DIR="+cmd.Fixture)
+		p.Stdout = os.Stdout
+		p.Stderr = os.Stderr
+		return p.Run()
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}

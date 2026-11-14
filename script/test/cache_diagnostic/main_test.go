@@ -1,11 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
- "encoding/json"
- "os"
- "path/filepath"
- "strings"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -42,14 +42,38 @@ func TestSampleRunsBothFreshTestSetsAndStopsOnFailure(t *testing.T) {
 }
 
 func TestDiagnosticRequiresCompleteIdentityAndOnlyWritesSuccess(t *testing.T) {
- dir:=t.TempDir();out:=filepath.Join(dir,"sample.json")
- cfg:=configuration{Native:"native",Report:"report",Fixture:"fixture",Root:"root",SHA:strings.Repeat("a",40),RunURL:"https://github.com/example/repo/actions/runs/123",Output:out}
- if err:=runDiagnostic(cfg,func(command) error{return errors.New("failed")});err==nil {t.Fatal("failure accepted")}
- if _,err:=os.Stat(out);!os.IsNotExist(err){t.Fatal("failure published successful sample")}
- cfg.RunURL="";if err:=runDiagnostic(cfg,func(command) error{return nil});err==nil{t.Fatal("missing identity accepted")}
- cfg.RunURL="https://github.com/example/repo/actions/runs/123";if err:=runDiagnostic(cfg,func(command) error{return nil});err!=nil{t.Fatal(err)}
- data,err:=os.ReadFile(out);if err!=nil{t.Fatal(err)}
- var summary struct { Commit,RunURL string; Observations []observation };if err=json.Unmarshal(data,&summary);err!=nil{t.Fatal(err)}
- if summary.Commit!=cfg.SHA || summary.RunURL!=cfg.RunURL || len(summary.Observations)!=4{t.Fatalf("incomplete sample: %s",data)}
- if err:=runDiagnostic(cfg,func(command)error{return nil});err==nil{t.Fatal("overwrote existing sample")}
+	dir := t.TempDir()
+	out := filepath.Join(dir, "sample.json")
+	cfg := configuration{Native: "native", Report: "report", Fixture: "fixture", Root: "root", SHA: strings.Repeat("a", 40), RunURL: "https://github.com/example/repo/actions/runs/123", Output: out, Attempt: 1, Sample: "cold_1"}
+	if err := runDiagnostic(cfg, func(command) error { return errors.New("failed") }); err == nil {
+		t.Fatal("failure accepted")
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Fatal("failure published successful sample")
+	}
+	cfg.RunURL = ""
+	if err := runDiagnostic(cfg, func(command) error { return nil }); err == nil {
+		t.Fatal("missing identity accepted")
+	}
+	cfg.RunURL = "https://github.com/example/repo/actions/runs/123"
+	if err := runDiagnostic(cfg, func(command) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary struct {
+		Commit, RunURL string
+		Observations   []observation
+	}
+	if err = json.Unmarshal(data, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Commit != cfg.SHA || summary.RunURL != cfg.RunURL || len(summary.Observations) != 4 {
+		t.Fatalf("incomplete sample: %s", data)
+	}
+	if err := runDiagnostic(cfg, func(command) error { return nil }); err == nil {
+		t.Fatal("overwrote existing sample")
+	}
 }
