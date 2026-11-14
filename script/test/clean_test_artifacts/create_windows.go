@@ -48,17 +48,30 @@ func createRelativeDirectory(parent syscall.Handle, name string) (syscall.Handle
 	n := unicodeString{Length: uint16((len(u) - 1) * 2), MaximumLength: uint16(len(u) * 2), Buffer: &u[0]}
 	a := objectAttributes{RootDirectory: parent, ObjectName: &n, Attributes: 0x40}
 	a.Length = uint32(unsafe.Sizeof(a))
-	var h syscall.Handle
-	var ios ioStatusBlock
+	h := syscall.InvalidHandle
+	ios := ioStatusBlock{Status: 0x103}
 	var status uintptr
 	if ntCreateFileTestHook != nil {
 		status = ntCreateFileTestHook(&h, &ios)
 	} else {
-		status, _, _ = ntCreateFile.Call(uintptr(unsafe.Pointer(&h)), 0x81, uintptr(unsafe.Pointer(&a)), uintptr(unsafe.Pointer(&ios)), 0, 0, uintptr(syscall.FILE_SHARE_READ), 2, 0x00200001, 0, 0)
+		status, _, _ = ntCreateFile.Call(uintptr(unsafe.Pointer(&h)), 0x00100081, uintptr(unsafe.Pointer(&a)), uintptr(unsafe.Pointer(&ios)), 0, 0, uintptr(syscall.FILE_SHARE_READ), 2, 0x00200021, 0, 0)
 	}
-	if int32(status) < 0 {
+	if uint32(status) != 0 {
+		if h != syscall.InvalidHandle && h != 0 {
+			syscall.CloseHandle(h)
+		}
+		if int32(status) >= 0 {
+			return syscall.InvalidHandle, fmt.Errorf("native create incomplete: %#x", uint32(status))
+		}
 		code, _, _ := rtlNtStatusToDosError.Call(status)
 		return syscall.InvalidHandle, syscall.Errno(code)
+	}
+	if h == syscall.InvalidHandle || h == 0 {
+		return syscall.InvalidHandle, errors.New("native create returned invalid handle")
+	}
+	if uint32(ios.Status) != 0 || ios.Information != 2 {
+		syscall.CloseHandle(h)
+		return syscall.InvalidHandle, errors.New("native create did not confirm creation")
 	}
 	return h, nil
 }
