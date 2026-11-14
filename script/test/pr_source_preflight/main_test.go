@@ -184,12 +184,13 @@ func TestWorkflowRejectsFailedMainQuery(t *testing.T) {
 	if len(commands) < 3 || !strings.HasPrefix(commands[len(commands)-1], "go run ") {
 		t.Fatal("preflight workflow commands not found")
 	}
-	bash, err := exec.LookPath("bash")
+	gitPath, err := exec.Command("git", "--exec-path").Output()
 	if err != nil {
-		bash = `C:\Program Files\Git\bin\bash.exe`
-		if _, err = os.Stat(bash); err != nil {
-			t.Fatal("bash required for workflow behavior test")
-		}
+		t.Fatal(err)
+	}
+	bash, err := workflowShell(strings.TrimSpace(string(gitPath)))
+	if err != nil {
+		t.Fatal(err)
 	}
 	for _, tc := range []struct {
 		name        string
@@ -209,5 +210,33 @@ func TestWorkflowRejectsFailedMainQuery(t *testing.T) {
 				t.Fatalf("unexpected preflight invocation: %s", out)
 			}
 		})
+	}
+}
+
+func workflowShell(gitExecPath string) (string, error) {
+	if bash, err := exec.LookPath("bash"); err == nil {
+		return bash, nil
+	}
+	bash := `C:\Program Files\Git\bin\bash.exe`
+	if _, err := os.Stat(bash); err != nil {
+		return "", err
+	}
+	return bash, nil
+}
+
+func TestWorkflowShellResolvesMinGit(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PATH", root)
+	shell := filepath.Join(root, "usr", "bin", "sh.exe")
+	if err := os.MkdirAll(filepath.Dir(shell), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(shell, []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	gitExecPath := filepath.Join(root, "ucrt64", "libexec", "git-core")
+	got, err := workflowShell(gitExecPath)
+	if err != nil || got != shell {
+		t.Fatalf("want MinGit shell %q, got %q, %v", shell, got, err)
 	}
 }
