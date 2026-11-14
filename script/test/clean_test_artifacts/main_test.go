@@ -418,6 +418,41 @@ func TestFinishRejectsAlternateDataStream(t *testing.T) {
 	}
 }
 
+func TestConcurrentAlternateStreamIsNotDeleted(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "owned")
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}} {
+		if e := run(a, &out, now); e != nil {
+			t.Fatal(e)
+		}
+	}
+	child := filepath.Join(root, "item", "child")
+	if e := os.WriteFile(child, []byte("data"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if e := run([]string{"finish", root, "item", "2026-01-02T00:00:00Z"}, &out, now); e != nil {
+		t.Fatal(e)
+	}
+	called := false
+	var createErr error
+	beforeDeleteHook = func() { called = true; createErr = os.WriteFile(child+":extra", []byte("new stream"), 0600) }
+	defer func() { beforeDeleteHook = nil }()
+	err := run([]string{"clean", root, "item", "--delete"}, &out, now)
+	if !called {
+		t.Fatalf("hook not reached: %v", err)
+	}
+	t.Logf("concurrent stream creation: %v; clean: %v", createErr, err)
+	if createErr == nil {
+		if err == nil {
+			t.Error("accepted concurrent alternate stream")
+		}
+		if b, e := os.ReadFile(child + ":extra"); e != nil || string(b) != "new stream" {
+			t.Errorf("stream lost: %q %v", b, e)
+		}
+	}
+}
+
 func TestConcurrentChildReplacementCannotEscape(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "owned")
