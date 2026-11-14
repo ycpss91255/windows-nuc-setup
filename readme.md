@@ -829,3 +829,17 @@ Pages 部署後匿名讀取首頁、main 報表、JSON／Markdown／JUnit、整�
 實作、freeze、主代理與未參與實作的獨立代理完整審查流程見 [維護規範](agents.md)。發現問題必須修正後重新全需求審查，不能把上次 PASS 沿用到修改後版本。
 
 每個問題／功能採嚴格 TDD，以獨立中文提交保留「測試（紅）→ 修改（綠）→ 優化（綠，可選）」及實跑命令、原因與結果；最終必要 CI 全綠才合併，歷史紅燈提交保留。純文件修改只記錄真實文件核對，不偽造失敗測試；既有歷史不追造 TDD。完整規則集中於 [維護規範](agents.md#嚴格-tdd-與中文提交證據)。
+
+### 自有測試暫存的預覽與清理
+
+維護者可用 Go 執行 `go run ./script/test/clean_test_artifacts` 管理本工具新建的拋棄式測試資料夾。先以 `init <新根目錄>` 建立不存在的專用根目錄，再用 `create <根目錄> <名稱>` 建立單項。僅在資料確定可拋棄、無續跑或私人證據需求後，以 `finish <根目錄> <名稱> <RFC3339到期時間>` 標記完成。`clean <根目錄> <名稱>` 預設只預覽；明確加上 `--delete` 才刪除選定且已到期的單項。範例：
+
+```powershell
+go run ./script/test/clean_test_artifacts init C:\scratch\disposable_test_root
+go run ./script/test/clean_test_artifacts create C:\scratch\disposable_test_root sample
+go run ./script/test/clean_test_artifacts finish C:\scratch\disposable_test_root sample 2026-01-01T00:00:00Z
+go run ./script/test/clean_test_artifacts clean C:\scratch\disposable_test_root sample
+go run ./script/test/clean_test_artifacts clean C:\scratch\disposable_test_root sample --delete
+```
+
+此工具不掃描系統 TEMP，也不認領或清理舊的 `windows-setup-*` 目錄；既有產生器尚未整合此標記。請勿把正式程式碼、未提交工作、私人資料或需保留的證據放入拋棄式目錄。操作期間不得有其他程序修改目錄，因檢查和刪除之間無法防止並行替換。工具拒絕含連結或重解析點的路徑及項目。Go 是維護工具需求，不是一般 Windows 執行環境的需求。
