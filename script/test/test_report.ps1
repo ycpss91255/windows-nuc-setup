@@ -106,7 +106,7 @@ function Write-TestReports {
   $label=$badge+' '+$RefType.ToLowerInvariant();$color='#9f9f9f';$status='not measured'
   if($badge -in @('unit','integration')){$rows=@($safe|Where-Object {$_.Layer -eq $badge -and $_.Executed});$status=if(-not $rows.Count){'not run'}elseif(@($rows|Where-Object {-not $_.Passed}).Count){'failed'}else{'passed'};$color=if($status -eq 'passed'){'#4c1'}elseif($status -eq 'failed'){'#e05d44'}else{'#9f9f9f'}}
   if($badge -eq 'system'){$status='not run'}
-  if($badge -eq 'coverage'){$label=if($SchemaVersion -eq 1){'ps coverage'}else{'coverage'};if($null -ne $RepoCoverage -and $RepoCoverage.Result.Complete){$status=Get-RepoCoveragePercentText $RepoCoverage;$color='#007ec6'}}
+  if($badge -eq 'coverage'){$label=if($SchemaVersion -eq 1){'ps coverage'}elseif($null -ne $RepoCoverage -and $RepoCoverage.SchemaVersion -eq 2){'runtime PowerShell/C#'}else{'coverage'};if($null -ne $RepoCoverage -and $RepoCoverage.Result.Complete){$status=Get-RepoCoveragePercentText $RepoCoverage;$color='#007ec6'}}
   $scopeLabel=if($badge -eq 'coverage'){$label+' '+$RefType.ToLowerInvariant()}else{$label}
   $title=[Security.SecurityElement]::Escape($scopeLabel+': '+$status)
   $labelWidth=$label.Length*7+12;$valueWidth=$status.Length*7+12;$width=$labelWidth+$valueWidth

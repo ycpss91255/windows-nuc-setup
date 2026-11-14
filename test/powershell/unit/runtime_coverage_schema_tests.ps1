@@ -24,6 +24,7 @@ $view=Join-Path $temp 'view'
 Write-TestReports -Checks $checks -OutputDirectory $view -Layer All -Commit $coverage.Commit -RunUrl $coverage.RunUrl -SourceState Clean -RefName main -MeasuredAt $coverage.MeasuredAt -RepoCoverage $coverage | Out-Null
 Assert ([IO.File]::ReadAllText((Join-Path $view 'index.html')).Contains('PowerShell/C# runtime')) 'Report page identifies runtime scope'
 Assert ([IO.File]::ReadAllText((Join-Path $view 'summary.md')).Contains('PowerShell/C# runtime')) 'Report summary identifies runtime scope'
+Assert ([IO.File]::ReadAllText((Join-Path $view 'coverage.svg')).Contains('runtime PowerShell/C#')) 'Badge identifies runtime language scope'
 foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml')){if($name -eq 'repo_coverage.json'){$value=$coverage|ConvertTo-Json -Depth 20}else{$value='fixture'};[IO.File]::WriteAllText((Join-Path $view $name),$value)}
 $catalog=Join-Path $temp 'catalog.json';[IO.File]::WriteAllText($catalog,'[]')
 $portal=Join-Path $temp 'portal';$env:RUNTIME_SCHEMA_ARGS=$capture

@@ -62,3 +62,14 @@ func TestRuntimePortalRequiresVisiblePowerShellCSharpScope(t *testing.T) {
 		t.Fatal("runtime scope mislabeled as all-owned coverage")
 	}
 }
+
+func TestRuntimeCoverageBadgeRequiresLanguageScope(t *testing.T) {
+	pct := 80.0
+	r := a.Report{SchemaVersion: 2, RefType: "Branch", RepoCoverage: &rc.Evidence{SchemaVersion: rc.RuntimeSchemaVersion, Metric: rc.RuntimeMetric, Scope: rc.RuntimeScope, Result: rc.Result{Complete: true, Covered: 4, Executable: 5, Percent: &pct}}}
+	label, value := "runtime PowerShell/C#", "80.0%"
+	left, right := len(label)*7+12, len(value)*7+12
+	svg := []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="20" aria-label="%s branch: %s"><title>%s branch: %s</title><rect width="%d" fill="#555"/><rect width="%d" fill="#007ec6"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, left+right, label, value, label, value, left, right, label, value))
+	if err := a.ValidateSVG(svg, r, "coverage"); err != nil {
+		t.Fatalf("runtime badge rejected: %v", err)
+	}
+}
