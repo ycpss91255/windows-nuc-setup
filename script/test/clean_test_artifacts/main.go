@@ -136,6 +136,7 @@ var afterMarkerReadHook func()
 var afterEnumerateHook func()
 var identityTestHook func(string, string) string
 var beforeRestoreHook func()
+var afterCreateDirectoryHook func(string)
 
 func run(args []string, out io.Writer, now time.Time) error {
 	if len(args) < 2 {
@@ -157,6 +158,9 @@ func run(args []string, out io.Writer, now time.Time) error {
 		if e = os.Mkdir(abs, 0700); e != nil {
 			return e
 		}
+		if afterCreateDirectoryHook != nil {
+			afterCreateDirectoryHook(abs)
+		}
 		return os.WriteFile(filepath.Join(abs, rootMarker), []byte(rootContent), 0600)
 	}
 	root, e := validateRoot(args[1])
@@ -177,6 +181,9 @@ func run(args []string, out io.Writer, now time.Time) error {
 		p := filepath.Join(root, name)
 		if e = os.Mkdir(p, 0700); e != nil {
 			return e
+		}
+		if afterCreateDirectoryHook != nil {
+			afterCreateDirectoryHook(p)
 		}
 		id, err := directoryIdentity(p)
 		if err != nil {
