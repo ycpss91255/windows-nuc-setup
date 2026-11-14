@@ -45,6 +45,9 @@ func TestCacheDiagnosticWorkflowIsOptInAndKeepsEvidenceFresh(t *testing.T) {
 	if strings.Contains(coverageJob(workflow, "requirements-gate"), "actions/cache") || strings.Contains(coverageJob(workflow, "coverage-aggregation"), "actions/cache") {
 		t.Error("formal jobs must not enable cache")
 	}
+	if !strings.Contains(prime, `du -sb "$GOCACHE"`) || strings.Count(samples, `echo "cache_hit=$CACHE_HIT"`) != 2 {
+		t.Error("prime size and both exact hit states must be recorded")
+	}
 	if !strings.Contains(prime, "go build") || strings.Contains(prime, "go test") || !strings.Contains(samples, "fail-on-cache-miss: true") {
 		t.Error("cache must be build-only and warm restores must not silently miss")
 	}
