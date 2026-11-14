@@ -725,7 +725,24 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 }
 
 func TestRuntimeReleaseReportDoesNotRequireGoCoverage(t *testing.T) {
-	source := t.TempDir()
+	base := t.TempDir()
+	if requested := os.Getenv("WINDOWS_SETUP_RUNTIME_BUNDLE_FIXTURE_DIR"); requested != "" {
+		if !filepath.IsAbs(requested) {
+			t.Fatal("fixture destination must be absolute")
+		}
+		parent, err := canonicalSafeParent(filepath.Dir(filepath.Clean(requested)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		base = filepath.Join(parent, filepath.Base(filepath.Clean(requested)))
+		if err := os.Mkdir(base, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	source := filepath.Join(base, "source")
+	if err := os.Mkdir(source, 0700); err != nil {
+		t.Fatal(err)
+	}
 	original, oldSHA, runURL := syntheticNativeReport(t, source)
 	ps := filepath.Join(source, "core", "sample.ps1")
 	if err := os.MkdirAll(filepath.Dir(ps), 0700); err != nil {
@@ -768,6 +785,10 @@ func TestRuntimeReleaseReportDoesNotRequireGoCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 	summary["RepoCoverage"], summary["RefType"], summary["RefName"], summary["Version"], summary["Environment"] = evidence, "Release", "v0.1.0", "v0.1.0", "Windows synthetic native fixture"
+	summary["Changes"] = []string{"Synthetic fixture"}
+	for _, check := range summary["Checks"].([]any) {
+		check.(map[string]any)["ExitCode"] = 0
+	}
 	native["summary.json"], _ = json.Marshal(summary)
 	native["repo_coverage.json"], native["coverage_inventory.json"], native["coverage.xml"] = art.Summary, art.Inventory, art.XML
 	for _, name := range []string{"unit", "integration", "coverage"} {
@@ -800,7 +821,6 @@ func TestRuntimeReleaseReportDoesNotRequireGoCoverage(t *testing.T) {
 	if err := validateReports(options{source: source, version: "v0.1.0", commit: sha, run: runURL, attempt: 1}, native, container); err != nil {
 		t.Fatalf("runtime release without Go coverage rejected: %v", err)
 	}
-	base := t.TempDir()
 	nativeDir, containerDir := filepath.Join(base, "windows-test-reports-1-1"), filepath.Join(base, "docker-test-reports-1-1")
 	for _, pair := range []struct {
 		dir   string
@@ -861,6 +881,20 @@ func TestRuntimeReleaseReportDoesNotRequireGoCoverage(t *testing.T) {
 	}
 	if fields["coverage_scope"] != c.RuntimeScope || fields["profile_sha256"] != nil {
 		t.Fatalf("runtime receipt must identify its scope and omit Go profile: %s", receipt)
+	}
+	if os.Getenv("WINDOWS_SETUP_RUNTIME_BUNDLE_FIXTURE_DIR") != "" {
+		data, err := os.ReadFile(archive)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hash := sha256.Sum256(data)
+		metadata, err := json.Marshal(map[string]any{"kind": "Synthetic", "version": "v0.1.0", "commit": sha, "run_url": runURL, "run_attempt": 1, "source": "source", "archive": filepath.Base(archive), "sha256": fmt.Sprintf("%x", hash), "size": len(data)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(base, "fixture.json"), metadata, 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 func TestOutputParentComparisonRespectsPlatform(t *testing.T) {
