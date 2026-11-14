@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -137,14 +138,69 @@ func TestConfiguredTempShortAliasSupportsOwnedRoot(t *testing.T) {
 	if strings.EqualFold(short, base) {
 		t.Skip("volume does not provide a distinct short alias")
 	}
+	// Preserve a long leaf while shortening its ancestor: Windows can return
+	// a different mixture of aliases for the same directory.
+	parentPtr, err := syscall.UTF16PtrFromString(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, _, callErr = proc.Call(uintptr(unsafe.Pointer(parentPtr)), uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))
+	if n == 0 || n >= uintptr(len(buffer)) {
+		t.Fatalf("short parent query failed: %v", callErr)
+	}
+	partial := filepath.Join(syscall.UTF16ToString(buffer[:n]), filepath.Base(base))
 	t.Setenv("TMP", short)
 	t.Setenv("TEMP", short)
 	var out bytes.Buffer
 	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
-	for _, root := range []string{filepath.Join(base, "long_root"), filepath.Join(short, "short_root")} {
+	for _, root := range []string{filepath.Join(base, "long_root"), filepath.Join(short, "short_root"), filepath.Join(partial, "partial_root")} {
 		for _, args := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}, {"clean", root, "item", "--delete"}} {
 			if err := run(args, &out, now); err != nil {
 				t.Fatalf("%s failed under short TEMP: %v", args[0], err)
+			}
+		}
+	}
+}
+
+func TestConfiguredTempAliasMatrixAndNestedRoot(t *testing.T) {
+	parent := t.TempDir()
+	base := filepath.Join(parent, "long temporary directory")
+	nested := filepath.Join(base, "long nested directory")
+	if err := os.MkdirAll(nested, 0700); err != nil {
+		t.Fatal(err)
+	}
+	shortPath := func(path string) string {
+		ptr, err := syscall.UTF16PtrFromString(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buf := make([]uint16, 32768)
+		n, _, callErr := syscall.NewLazyDLL("kernel32.dll").NewProc("GetShortPathNameW").Call(uintptr(unsafe.Pointer(ptr)), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+		if n == 0 || n >= uintptr(len(buf)) {
+			t.Fatalf("short path query: %v", callErr)
+		}
+		return syscall.UTF16ToString(buf[:n])
+	}
+	shortBase, shortNested := shortPath(base), shortPath(nested)
+	if strings.EqualFold(shortBase, base) || strings.EqualFold(shortNested, nested) {
+		t.Skip("volume does not provide distinct aliases")
+	}
+	partial := filepath.Join(shortPath(parent), filepath.Base(base), filepath.Base(nested))
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	for i, temp := range []string{base, shortBase} {
+		t.Setenv("TMP", temp)
+		t.Setenv("TEMP", temp)
+		for j, dir := range []string{nested, partial, shortNested} {
+			root := filepath.Join(dir, fmt.Sprintf("long owned root %d %d", i, j))
+			var out bytes.Buffer
+			if err := run([]string{"init", root}, &out, now); err != nil {
+				t.Fatalf("init %s: %v", root, err)
+			}
+			shortRoot := shortPath(root)
+			for _, args := range [][]string{{"create", shortRoot, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}, {"clean", shortRoot, "item", "--delete"}} {
+				if err := run(args, &out, now); err != nil {
+					t.Fatalf("%s %s: %v", args[0], args[1], err)
+				}
 			}
 		}
 	}
