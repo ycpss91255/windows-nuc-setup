@@ -46,7 +46,10 @@ if($MainSnapshotPath -and (Test-Path -LiteralPath $MainSnapshotPath)){
  $main=Get-Content -LiteralPath $MainSnapshotPath -Raw -Encoding UTF8|ConvertFrom-Json
  Assert-TestReportSnapshot -Report $main
  if($main.RefType -cne 'Branch' -or $main.RefName -cne 'main' -or $main.SourceState -cne 'Clean' -or $main.RequestedLayer -cne 'All'){throw 'main 品質來源標記不符。'}
- if(-not $Preview){Assert-RepoCoverageArtifacts -Report $main -Directory (Split-Path -Parent $MainSnapshotPath) -CoverageToolPath $CoverageToolPath -RequireComplete}
+ if(-not $Preview){
+  if(-not $main.PSObject.Properties['RepoCoverage'] -or $main.RepoCoverage.SchemaVersion -ne 2 -or $main.RepoCoverage.Metric -cne 'runtime-powershell-csharp-executable-lines-v2' -or $main.RepoCoverage.Scope -cne 'core-modules-powershell-and-modules-native-csharp'){throw '正式主線必須使用 PowerShell/C# runtime 覆蓋範圍。'}
+  Assert-RepoCoverageArtifacts -Report $main -Directory (Split-Path -Parent $MainSnapshotPath) -CoverageToolPath $CoverageToolPath -RequireComplete
+ }
  $hasRepo=$null -ne $main.PSObject.Properties['RepoCoverage']
  if($Preview -and $hasRepo){Assert-RepoCoverageArtifacts -Report $main -Directory (Split-Path -Parent $MainSnapshotPath) -CoverageToolPath $CoverageToolPath}
  $hasGo=$null -ne $main.PSObject.Properties['GoCoverage']

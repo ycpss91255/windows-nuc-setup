@@ -30,6 +30,14 @@ $catalog=Join-Path $temp 'catalog.json';[IO.File]::WriteAllText($catalog,'[]')
 $portal=Join-Path $temp 'portal';$env:RUNTIME_SCHEMA_ARGS=$capture
 try { & (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $catalog -MainSnapshotPath (Join-Path $view 'summary.json') -OutputDirectory $portal -CoverageToolPath $tool | Out-Null } finally {$env:RUNTIME_SCHEMA_ARGS=$previous}
 Assert ([IO.File]::ReadAllText((Join-Path $portal 'index.html')).Contains('PowerShell/C# runtime')) 'Portal identifies runtime scope'
+$legacy=$coverage|ConvertTo-Json -Depth 20|ConvertFrom-Json
+$legacy.SchemaVersion=1;$legacy.Metric='complete-executable-lines-v1';$legacy.PSObject.Properties.Remove('Scope')
+$legacyView=Join-Path $temp 'legacy-view'
+Write-TestReports -Checks $checks -OutputDirectory $legacyView -Layer All -Commit $legacy.Commit -RunUrl $legacy.RunUrl -SourceState Clean -RefName main -MeasuredAt $legacy.MeasuredAt -RepoCoverage $legacy | Out-Null
+foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml')){if($name -eq 'repo_coverage.json'){$value=$legacy|ConvertTo-Json -Depth 20}else{$value='fixture'};[IO.File]::WriteAllText((Join-Path $legacyView $name),$value)}
+$rejected=$false;$env:RUNTIME_SCHEMA_ARGS=$capture
+try { & (Join-Path $root 'script/report/build_portal.ps1') -CatalogPath $catalog -MainSnapshotPath (Join-Path $legacyView 'summary.json') -OutputDirectory (Join-Path $temp 'legacy-current') -CoverageToolPath $tool | Out-Null } catch {$rejected=$true} finally {$env:RUNTIME_SCHEMA_ARGS=$previous}
+Assert $rejected 'Published main rejects historical coverage scope even with matching identity'
 $coverage.Scope='all-owned'
 $rejected=$false;try{Assert-RepoCoverage -Coverage $coverage}catch{$rejected=$true}
 Assert $rejected 'Altered scope rejected'
