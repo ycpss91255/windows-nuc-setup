@@ -59,3 +59,11 @@ func TestRejectsMixedIdentityIncompletePagesAndBadTime(t *testing.T) {
 		})
 	}
 }
+
+func TestRejectsExtraEmptyPage(t *testing.T) {
+	x := fixture()
+	x.Pages = append(x.Pages, Page{PageNumber: 2, PerPage: 2, TotalCount: 2, Jobs: []Job{}})
+	if _, err := Analyze(x); err == nil {
+		t.Fatal("accepted extra page beyond declared total")
+	}
+}
