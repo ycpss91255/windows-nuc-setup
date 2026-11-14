@@ -23,14 +23,14 @@ try {
  function Invoke-SetupDebloatOneDrive {param($ModuleRoot) $script:oneDriveCalls++}
  function Get-AppxPackage {param([switch]$AllUsers)}
  function Get-AppxProvisionedPackage {param([switch]$Online)}
- $script:code=0;$script:logPath='';$script:nativeCalls=0
+ $script:code=0;$script:logPath='';$script:nativeCalls=0;$script:requireDataPath=$false
  $upstream=[IO.File]::ReadAllText((Join-Path $root 'modules/debloat/win11debloat/Win11Debloat.ps1'))
  $match=[regex]::Match($upstream,'(?s)# Log script output to .+?(?=\r?\n# When Group Policy)')
  if(-not $match.Success){throw 'upstream transcript contract missing'}
  $transcript=[scriptblock]::Create($match.Value)
  function Start-Transcript {param($Path,[switch]$Append,[switch]$IncludeInvocationHeader,[switch]$Force) $script:logPath=$Path;[IO.File]::WriteAllText($Path,'safe transcript fixture')}
  function Invoke-SetupDebloatNative {param($Arguments)
-  $script:nativeCalls++;$index=[array]::IndexOf($Arguments,'-LogPath');if($index -lt 0){throw 'missing LogPath'}
+  $script:nativeCalls++;if($script:requireDataPath -and [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)){throw 'upstream would write user data into readonly module'};$index=[array]::IndexOf($Arguments,'-LogPath');if($index -lt 0){throw 'missing LogPath'}
   $LogPath=$Arguments[$index+1]
   $script:DefaultLogPath=Join-Path $ModuleRoot 'unexpected.log'
   & $transcript
@@ -44,6 +44,12 @@ try {
  Assert ($failed -and -not $saved.Success -and $saved.ExitCode -eq 7 -and $saved.Log -ceq $script:logPath) '原生失敗仍傳播並保留記錄路徑'
  $calls=$script:nativeCalls;$verify=Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report -VerifyOnly
  Assert ($verify.Success -and $verify.Log -ceq '' -and $script:nativeCalls -eq $calls) 'VerifyOnly 不執行原生程序且記錄路徑為空'
+ $previousLocal=$env:LOCALAPPDATA
+ try {
+  $env:LOCALAPPDATA='';$script:requireDataPath=$true;$script:code=0
+  $fallback=Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report
+  Assert ($fallback.Success -and [string]::IsNullOrEmpty($env:LOCALAPPDATA)) '缺少 LOCALAPPDATA 時提供安全資料根並還原原環境'
+ } finally {$env:LOCALAPPDATA=$previousLocal;$script:requireDataPath=$false}
  $badParent=Join-Path $fixture 'not_a_directory';[IO.File]::WriteAllText($badParent,'fixture')
  $calls=$script:nativeCalls;$oneDrive=$script:oneDriveCalls;$failed=$false
  try{Invoke-SetupDebloat -ModuleRoot $module -ReportPath (Join-Path $badParent 'result.json')|Out-Null}catch{$failed=$true}
