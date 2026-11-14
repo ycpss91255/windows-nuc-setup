@@ -150,6 +150,11 @@ func main() {
 	}
 }
 func run() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	return runContext(ctx)
+}
+func runContext(ctx context.Context) error {
 	repo := flag.String("repo", "", "repository")
 	runID := flag.String("run", "", "run ID")
 	attempt := flag.Int("attempt", 0, "run attempt")
@@ -167,8 +172,6 @@ func run() error {
 	if token == "" {
 		return errors.New("GitHub token unavailable")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
 	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) > 5 || !strings.HasSuffix(via[0].URL.Path, "/zip") || req.URL.Scheme != "https" || req.URL.User != nil || req.URL.Hostname() == "" {
 			return errors.New("unsafe artifact redirect")
