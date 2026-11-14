@@ -231,8 +231,12 @@ func validateReports(o options, native, container map[string][]byte) error {
 		}
 	}
 	r := reportReader(native)
-	if _, e := a.ValidateRepoCoverageReport(r, native["summary.json"], o.commit, o.run, true); e != nil {
+	repo, e := a.ValidateRepoCoverageReport(r, native["summary.json"], o.commit, o.run, true)
+	if e != nil {
 		return e
+	}
+	if repo.SchemaVersion == c.RuntimeSchemaVersion {
+		return c.ValidateRuntimeInventory(o.source, native["coverage_inventory.json"])
 	}
 	if e := c.ValidateInventory(o.source, native["coverage_inventory.json"]); e != nil {
 		return e

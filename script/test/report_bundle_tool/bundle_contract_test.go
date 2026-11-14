@@ -723,6 +723,84 @@ func TestReportBundleExportPreservesValidatedReports(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeReleaseReportDoesNotRequireGoCoverage(t *testing.T) {
+	source := t.TempDir()
+	original, oldSHA, runURL := syntheticNativeReport(t, source)
+	ps := filepath.Join(source, "core", "sample.ps1")
+	if err := os.MkdirAll(filepath.Dir(ps), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ps, []byte("Write-Output 'fixture'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "core/sample.ps1"}, {"-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "runtime fixture"}} {
+		if out, err := exec.Command("git", append([]string{"-C", source}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("fixture git: %s %v", out, err)
+		}
+	}
+	commit, err := exec.Command("git", "-C", source, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sha := strings.TrimSpace(string(commit))
+	inv, err := c.ScanRuntimeInventory(source)
+	if err != nil || len(inv.Sources) != 1 {
+		t.Fatalf("runtime inventory: %+v %v", inv, err)
+	}
+	inv.Sources[0].ExpectedLines = []int{1}
+	art, err := c.CreateRuntimeEvidence(inv, []c.Report{{SchemaVersion: 1, Metric: c.Metric, Files: map[string]map[int]bool{"core/sample.ps1": {1: true}}}}, c.Identity{Commit: sha, RunUrl: runURL, MeasuredAt: "2026-01-01T00:00:00Z", SourceState: "Clean"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	native := map[string][]byte{}
+	for name, data := range original {
+		if strings.HasPrefix(name, "main/") {
+			native[strings.TrimPrefix(name, "main/")] = bytes.ReplaceAll(data, []byte(oldSHA), []byte(sha))
+		}
+	}
+	var summary map[string]any
+	if err = json.Unmarshal(native["summary.json"], &summary); err != nil {
+		t.Fatal(err)
+	}
+	var evidence any
+	if err = json.Unmarshal(art.Summary, &evidence); err != nil {
+		t.Fatal(err)
+	}
+	summary["RepoCoverage"], summary["RefType"], summary["RefName"], summary["Version"], summary["Environment"] = evidence, "Release", "v0.1.0", "v0.1.0", "Windows synthetic native fixture"
+	native["summary.json"], _ = json.Marshal(summary)
+	native["repo_coverage.json"], native["coverage_inventory.json"], native["coverage.xml"] = art.Summary, art.Inventory, art.XML
+	for _, name := range []string{"unit", "integration", "coverage"} {
+		label, value, color := name+" release", "passed", "#4c1"
+		if name == "coverage" {
+			label, value, color = "runtime PowerShell/C#", "100.0%", "#007ec6"
+		}
+		l, q := len(label)*7+12, len(value)*7+12
+		aria := ""
+		if name == "coverage" {
+			aria = fmt.Sprintf(` aria-label="%s release: %s"><title>%s release: %s</title`, label, value, label, value)
+		}
+		if name == "coverage" {
+			native[name+".svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d"%s><rect width="%d" fill="#555"/><rect width="%d" fill="%s"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, l+q, aria, l, q, color, label, value))
+		} else {
+			native[name+".svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d"><rect width="%d" fill="#555"/><rect width="%d" fill="%s"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, l+q, l, q, color, label, value))
+		}
+	}
+	container := map[string][]byte{}
+	for _, n := range containerNames {
+		container[n] = append([]byte(nil), native[n]...)
+	}
+	delete(summary, "RepoCoverage")
+	summary["Coverage"] = "NotMeasured"
+	summary["Environment"] = "Windows container / Windows synthetic fixture"
+	container["summary.json"], _ = json.Marshal(summary)
+	label, value := "coverage release", "not measured"
+	l, q := len(label)*7+12, len(value)*7+12
+	container["coverage.svg"] = []byte(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" height="20" width="%d"><rect width="%d" fill="#555"/><rect width="%d" fill="#9f9f9f"/><g font-size="11"><text>%s</text><text>%s</text></g></svg>`, l+q, l, q, label, value))
+	if err := validateReports(options{source: source, version: "v0.1.0", commit: sha, run: runURL, attempt: 1}, native, container); err != nil {
+		t.Fatalf("runtime release without Go coverage rejected: %v", err)
+	}
+}
 func TestOutputParentComparisonRespectsPlatform(t *testing.T) {
 	if sameOutputParent("/tmp/A", "/tmp/a", "linux") {
 		t.Fatal("case-distinct Linux paths accepted as identical")
