@@ -54,6 +54,7 @@ Assert ((Get-Content $result.NotesPath -Raw -Encoding UTF8).Contains('通用 Win
 $original=Get-ReleaseNotes v1.2.3 ([IO.File]::ReadAllText((Join-Path $repo 'doc/changelog/changelog.md')))
 $expected=(Get-ReleaseDownloadGuide v1.2.3) + "`n`n" + $original
 $actual=[IO.File]::ReadAllText($result.NotesPath)
+Assert ($actual.Contains('Windows') -and $actual.Contains('GitHub') -and $actual.Contains('校驗檔') -and $actual.Contains('一般不需下載') -and $actual.Contains('可選')) '下載指引解釋 Windows 來源 ZIP、可選報表及 GitHub 校驗檔'
 Assert ($actual.Contains('Source code') -and $actual.Contains('Autologon') -and $actual.Contains('Assets') -and -not $actual.Contains('[此版本測試報表]')) '使用者說明指出來源與附件而不重複報表連結'
 Assert ($actual -ceq $expected) '正式版本包含下載指引並原樣保留說明'
 Assert-ReleaseDownloadGuide -Version v1.2.3 -Notes $actual
