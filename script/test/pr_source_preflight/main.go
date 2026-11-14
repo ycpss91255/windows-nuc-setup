@@ -66,19 +66,68 @@ func check(repo, eventPath, checkout, runSHA, base, head string) error {
 	}
 	return nil
 }
-func main() {
-	repo := flag.String("repo", ".", "repository containing actual checkout")
-	event := flag.String("event", "", "event JSON")
-	checkout := flag.String("checkout", "", "actual checked out commit")
-	run := flag.String("run-sha", "", "event run SHA")
-	base := flag.String("base", "", "expected base commit")
-	head := flag.String("head", "", "expected head commit")
-	flag.Parse()
-	if flag.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "unexpected arguments")
-		os.Exit(1)
+
+type prIdentity struct {
+	Number int    `json:"number"`
+	State  string `json:"state"`
+	Base   struct {
+		Ref  string `json:"ref"`
+		Repo struct {
+			FullName string `json:"full_name"`
+		} `json:"repo"`
+	} `json:"base"`
+	Head struct {
+		SHA string `json:"sha"`
+	} `json:"head"`
+}
+
+func authorityCheck(eventPath, authorityPath string) error {
+	var ev struct {
+		Number      int         `json:"number"`
+		PullRequest *prIdentity `json:"pull_request"`
 	}
-	if err := check(*repo, *event, *checkout, *run, *base, *head); err != nil {
+	var live prIdentity
+	e, err := os.ReadFile(eventPath)
+	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(e, &ev); err != nil {
+		return err
+	}
+	a, err := os.ReadFile(authorityPath)
+	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(a, &live); err != nil {
+		return err
+	}
+	if ev.PullRequest == nil || ev.Number <= 0 || ev.Number != ev.PullRequest.Number || ev.Number != live.Number || live.State != "open" || ev.PullRequest.Base.Ref != "main" || ev.PullRequest.Base.Repo.FullName == "" || ev.PullRequest.Base.Ref != live.Base.Ref || ev.PullRequest.Base.Repo.FullName != live.Base.Repo.FullName || !oid.MatchString(live.Head.SHA) || ev.PullRequest.Head.SHA != live.Head.SHA {
+		return errors.New("live PR identity differs from event")
+	}
+	return nil
+}
+func run(args []string) error {
+	f := flag.NewFlagSet("source-preflight", flag.ContinueOnError)
+	authority := f.String("authority", "", "live PR API response")
+	repo := f.String("repo", ".", "repository")
+	event := f.String("event", "", "event JSON")
+	checkout := f.String("checkout", "", "actual commit")
+	runSHA := f.String("run-sha", "", "event run SHA")
+	base := f.String("base", "", "event base")
+	head := f.String("head", "", "event head")
+	if err := f.Parse(args); err != nil {
+		return err
+	}
+	if f.NArg() != 0 {
+		return errors.New("unexpected arguments")
+	}
+	if err := authorityCheck(*event, *authority); err != nil {
+		return err
+	}
+	return check(*repo, *event, *checkout, *runSHA, *base, *head)
+}
+func main() {
+	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "source preflight:", err)
 		os.Exit(1)
 	}

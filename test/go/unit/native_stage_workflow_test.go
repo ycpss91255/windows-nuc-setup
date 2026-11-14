@@ -14,7 +14,7 @@ func TestNativeProducerAndStrictCoverageAggregatorAreParallel(t *testing.T) {
 	}
 	text := string(data)
 	native := coverageJob(text, "isolated-tests")
-	if strings.Contains(native, "needs:") || strings.Contains(native, "run_repo_coverage.ps1") {
+	if !strings.Contains(native, "needs: [source-preflight]") || strings.Contains(native, "run_repo_coverage.ps1") {
 		t.Fatal("native producer still waits for PowerShell or claims whole coverage")
 	}
 	for _, required := range []string{"run_ci.ps1", "measure_go_coverage.ps1", "native-stage-pack", "--run-attempt", "native-stage-${{ github.run_id }}-${{ github.run_attempt }}"} {

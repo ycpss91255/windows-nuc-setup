@@ -49,11 +49,21 @@ func TestActualCheckoutSource(t *testing.T) {
 	event := filepath.Join(d, "event.json")
 	writeEvent := func(b, h string) {
 		t.Helper()
-		data, _ := json.Marshal(map[string]any{"pull_request": map[string]any{"base": map[string]string{"sha": b}, "head": map[string]string{"sha": h}}})
+		data, _ := json.Marshal(map[string]any{"number": 1, "pull_request": map[string]any{"number": 1, "base": map[string]any{"sha": b, "ref": "main", "repo": map[string]string{"full_name": "fixture/repo"}}, "head": map[string]string{"sha": h}}})
 		if err := os.WriteFile(event, data, 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
+	authority := filepath.Join(d, "authority.json")
+	writeAuthority := func(ref, sha string) {
+		t.Helper()
+		v := map[string]any{"number": 1, "state": "open", "base": map[string]any{"ref": ref, "repo": map[string]string{"full_name": "fixture/repo"}}, "head": map[string]string{"sha": sha}}
+		b, _ := json.Marshal(v)
+		if err := os.WriteFile(authority, b, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeAuthority("main", head)
 	cases := []struct {
 		name, checkout, runSHA, eventBase, eventHead, expectedBase, expectedHead string
 		ok                                                                       bool
@@ -75,14 +85,34 @@ func TestActualCheckoutSource(t *testing.T) {
 			t.Fatalf("missing independent authority was accepted: %s", b)
 		}
 	})
+	t.Run("CLI errors", func(t *testing.T) {
+		for _, args := range [][]string{{"-unknown"}, {"extra"}, {"-event", event}} {
+			if run(args) == nil {
+				t.Fatalf("accepted %v", args)
+			}
+		}
+	})
+	t.Run("retargeted live PR", func(t *testing.T) {
+		writeEvent(base, head)
+		writeAuthority("other", head)
+		if err := authorityCheck(event, authority); err == nil {
+			t.Fatal("retarget accepted")
+		}
+		writeAuthority("main", head)
+	})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			git("checkout", "--detach", "-q", tc.checkout)
 			writeEvent(tc.eventBase, tc.eventHead)
+			writeAuthority("main", tc.eventHead)
 			if err := check(d, event, tc.checkout, tc.runSHA, tc.expectedBase, tc.expectedHead); (err == nil) != tc.ok {
 				t.Fatalf("direct check: want success=%v, got %v", tc.ok, err)
 			}
-			c := exec.Command("go", "run", ".", "-repo", d, "-event", event, "-checkout", tc.checkout, "-run-sha", tc.runSHA, "-base", tc.expectedBase, "-head", tc.expectedHead)
+			args := []string{"-authority", authority, "-repo", d, "-event", event, "-checkout", tc.checkout, "-run-sha", tc.runSHA, "-base", tc.expectedBase, "-head", tc.expectedHead}
+			if err := run(args); (err == nil) != tc.ok {
+				t.Fatalf("run: want success=%v, got %v", tc.ok, err)
+			}
+			c := exec.Command("go", "run", ".", "-authority", authority, "-repo", d, "-event", event, "-checkout", tc.checkout, "-run-sha", tc.runSHA, "-base", tc.expectedBase, "-head", tc.expectedHead)
 			b, e := c.CombinedOutput()
 			if (e == nil) != tc.ok {
 				t.Fatalf("want success=%v, got %v: %s", tc.ok, e, b)
