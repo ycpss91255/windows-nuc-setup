@@ -18,6 +18,19 @@ import (
 
 var deploymentSleep = time.Sleep
 
+func validatePublishedInventory(evidence *c.Evidence, root string, inventory []byte) error {
+	if evidence == nil {
+		return fmt.Errorf("missing coverage evidence")
+	}
+	if evidence.SchemaVersion == c.RuntimeSchemaVersion {
+		if evidence.Metric != c.RuntimeMetric || evidence.Scope != c.RuntimeScope {
+			return fmt.Errorf("runtime scope mismatch")
+		}
+		return c.ValidateRuntimeInventory(root, inventory)
+	}
+	return c.ValidateInventory(root, inventory)
+}
+
 func run() error {
 	mode := flag.String("mode", "branch", "branch or release")
 	tag := flag.String("tag", "", "release tag")
@@ -127,7 +140,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		if err = c.ValidateInventory(".", inventory); err != nil {
+		if err = validatePublishedInventory(measured, ".", inventory); err != nil {
 			return err
 		}
 		if err = a.ValidateGoCoverageReport(reportReader, files, *sha, *run, false); err != nil {
