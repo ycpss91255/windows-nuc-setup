@@ -47,3 +47,18 @@ func TestRuntimeCoverageReportAcceptsNewScopeAndPreservesHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimePortalRequiresVisiblePowerShellCSharpScope(t *testing.T) {
+	pct := 80.0
+	e := rc.Evidence{SchemaVersion: rc.RuntimeSchemaVersion, Metric: rc.RuntimeMetric, Scope: rc.RuntimeScope, Result: rc.Result{Complete: true, Covered: 4, Executable: 5, Percent: &pct}}
+	summary, err := json.Marshal(map[string]any{"SchemaVersion": 2, "RepoCoverage": e})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.ValidatePortalCoverage("PowerShell/C# runtime 覆蓋率 80.0% 4/5 可執行行", summary); err != nil {
+		t.Fatalf("explicit runtime scope rejected: %v", err)
+	}
+	if err := a.ValidatePortalCoverage("整體覆蓋率 80.0% 4/5 可執行行", summary); err == nil {
+		t.Fatal("runtime scope mislabeled as all-owned coverage")
+	}
+}
