@@ -30,6 +30,7 @@ func TestVisibilityPreflight(t *testing.T) {
 		{"rest duplicate", "duplicate", "valid", false, 0},
 		{"rest expired", "expired", "valid", false, 0},
 		{"rest wrong id", "wrong", "valid", false, 0},
+		{"rest string id", "string_id", "valid", false, 0},
 		{"rest wrong digest", "digest", "valid", false, 0},
 		{"rest unauthorized", "unauthorized", "valid", false, 0},
 	} {
@@ -57,6 +58,9 @@ func TestVisibilityPreflight(t *testing.T) {
 					d = "bad"
 				}
 				row := fmt.Sprintf(`{"id":%d,"name":%q,"digest":%q,"size_in_bytes":100,"expired":%t,"workflow_run":{"id":123}}`, id, name, d, expired)
+				if tc.restMode == "string_id" {
+					row = strings.Replace(row, `"id":456`, `"id":"456"`, 1)
+				}
 				rows := row
 				if tc.restMode == "duplicate" {
 					rows += "," + row
