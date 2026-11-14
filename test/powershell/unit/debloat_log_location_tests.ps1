@@ -24,15 +24,21 @@ try {
  function Get-AppxPackage {param([switch]$AllUsers)}
  function Get-AppxProvisionedPackage {param([switch]$Online)}
  $script:code=0;$script:logPath='';$script:nativeCalls=0
+ $upstream=[IO.File]::ReadAllText((Join-Path $root 'modules/debloat/win11debloat/Win11Debloat.ps1'))
+ $match=[regex]::Match($upstream,'(?s)# Log script output to .+?(?=\r?\n# When Group Policy)')
+ if(-not $match.Success){throw 'upstream transcript contract missing'}
+ $transcript=[scriptblock]::Create($match.Value)
+ function Start-Transcript {param($Path,[switch]$Append,[switch]$IncludeInvocationHeader,[switch]$Force) $script:logPath=$Path;[IO.File]::WriteAllText($Path,'safe transcript fixture')}
  function Invoke-SetupDebloatNative {param($Arguments)
   $script:nativeCalls++;$index=[array]::IndexOf($Arguments,'-LogPath');if($index -lt 0){throw 'missing LogPath'}
-  $script:logPath=$Arguments[$index+1]
-  [IO.File]::WriteAllText($script:logPath,'safe native fixture')
+  $LogPath=$Arguments[$index+1]
+  $script:DefaultLogPath=Join-Path $ModuleRoot 'unexpected.log'
+  & $transcript
   return $script:code
  }
  $result=Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report
  $saved=Get-Content -LiteralPath $report -Raw -Encoding UTF8|ConvertFrom-Json
- Assert ($result.Success -and $result.Log -ceq $script:logPath -and $saved.Log -ceq $script:logPath -and (Split-Path -Parent $script:logPath) -ceq (Split-Path -Parent $report) -and (Test-Path -LiteralPath $script:logPath -PathType Leaf)) '成功結果與 JSON 指向每機記錄路徑'
+ Assert ($result.Success -and $result.Log -ceq $script:logPath -and $saved.Log -ceq $script:logPath -and ((Split-Path -Parent (Split-Path -Parent $script:logPath)) -ceq (Split-Path -Parent $report)) -and ([IO.Path]::GetFileName($script:logPath) -ceq 'Win11Debloat.log') -and (Test-Path -LiteralPath $script:logPath -PathType Leaf)) '成功結果與 JSON 指向每機記錄路徑'
  $script:code=7;$failed=$false;try{Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report|Out-Null}catch{$failed=$true}
  $saved=Get-Content -LiteralPath $report -Raw -Encoding UTF8|ConvertFrom-Json
  Assert ($failed -and -not $saved.Success -and $saved.ExitCode -eq 7 -and $saved.Log -ceq $script:logPath) '原生失敗仍傳播並保留記錄路徑'
