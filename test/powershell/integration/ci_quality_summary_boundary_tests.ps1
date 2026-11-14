@@ -9,6 +9,7 @@ try {
  $anchor='$step=[regex]::Match'
  Assert ($source.Contains($anchor)) '實際 workflow 測試擷取入口存在'
  Copy-Item -LiteralPath (Join-Path $root 'script/test/ci_quality_summary.ps1') -Destination (Join-Path $temp 'script/test/ci_quality_summary.ps1')
+ Copy-Item -LiteralPath (Join-Path $root 'script/test/ci_tasks.ps1') -Destination (Join-Path $temp 'script/test/ci_tasks.ps1')
  $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
  foreach($id in @('_Next_job','Next_Job')){
   $fixture=$workflow.Replace('cache-diagnostic-prime',$id)
@@ -22,6 +23,7 @@ try {
   try{$ErrorActionPreference='Continue';$result=@(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $path 2>&1);$code=$LASTEXITCODE}finally{$ErrorActionPreference=$previous}
   if($code -ne 0 -and ($result -join '
 ') -match 'rollup included next job'){Write-Host 'fixture detected rollup included next job'} 
+  if($code -ne 0){$result | Select-Object -Last 8 | ForEach-Object {Write-Host $_}}
   Assert ($code -eq 0 -and ($result -join "`n") -match '實際 rollup 失敗時明示未完整量測且保留失敗') ('合法後續 job ID 不可進入 rollup，且原測試完整通過：'+$id)
  }
 }finally{Remove-Item -LiteralPath $temp -Recurse -Force}
