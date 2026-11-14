@@ -102,7 +102,7 @@ PR 與 main 的 `requirements-gate` 讀取同一次 PS5.1 測試產物，驗證�
 
 Pages 部署後匿名讀取首頁、main 報表、JSON／Markdown／JUnit、整體及分層 SVG、README 的原生 CI／整體 coverage 徽章，以及歷史版本頁。驗收會重算 `repo_coverage.json`、`coverage_inventory.json`、`coverage.xml`，核對本次提交、Actions 來源與實際 checkout 的自有原始碼清單；整體量測必須完整，且 `Covered × 100 >= Executable × 80` 才能通過。分項資訊保留在報表與 Actions 摘要，不要求 README 顯示分項徽章。CDN 只有限重試，舊證據或不一致會失敗，無需 agent 代替腳本處理。
 
-實作、freeze、主代理與未參與實作的獨立代理完整審查流程見 [維護規範](../agents.md)。發現問題必須修正後重新全需求審查，不能把上次 PASS 沿用到修改後版本。
+審查以本次變更、實際驗證及最新提交為準；發現問題後修正並重新核對受影響需求，不將先前提交的通過結果套用到修改後版本。具體代理分工依當次授權安排；儲存庫契約見 [維護規範](../agents.md)。
 
 測試與提交規範以 [維護規範](../agents.md) 為準。
 
