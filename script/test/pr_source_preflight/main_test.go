@@ -67,6 +67,14 @@ func TestActualCheckoutSource(t *testing.T) {
 		{"wrong tree", badTree, badTree, base, head, base, head, false},
 		{"missing metadata", actual, actual, "", head, base, head, false},
 	}
+	t.Run("missing independent authority", func(t *testing.T) {
+		git("checkout", "--detach", "-q", actual)
+		writeEvent(base, head)
+		c := exec.Command("go", "run", ".", "-repo", d, "-event", event, "-checkout", actual, "-run-sha", actual, "-base", base, "-head", head)
+		if b, err := c.CombinedOutput(); err == nil {
+			t.Fatalf("missing independent authority was accepted: %s", b)
+		}
+	})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			git("checkout", "--detach", "-q", tc.checkout)
