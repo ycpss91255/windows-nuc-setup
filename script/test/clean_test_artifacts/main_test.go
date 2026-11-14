@@ -256,6 +256,10 @@ func TestConcurrentChildCreationPreservesNewData(t *testing.T) {
 		if _, e := os.Stat(filepath.Join(root, "item", itemMarker)); e != nil {
 			t.Errorf("ownership marker lost after partial deletion: %v", e)
 		}
+		matches, e := filepath.Glob(filepath.Join(root, ".windows_setup_cleanup_recovery_*"))
+		if e != nil || len(matches) != 1 {
+			t.Errorf("missing persistent recovery receipt: %v %v", matches, e)
+		}
 	}
 }
 
