@@ -447,14 +447,14 @@ jobs:
           $release = .\script\release\build_source_release.ps1 -Version $env:RELEASE_TAG -Revision $env:SOURCE_COMMIT -OutputDirectory "$env:RUNNER_TEMP\release-notes"
           "prerelease=$($release.Prerelease.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
         id: release
-      - name: 發布前核對該版本報表入口
+      - name: 發布前核對版本下載指引
         shell: powershell
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           . .\script\release\release.ps1
           $notes = [IO.File]::ReadAllText("$env:RUNNER_TEMP\release-notes\release_notes.md", [Text.UTF8Encoding]::new($false, $true))
-          Assert-ReleaseReportLink -Version $env:RELEASE_TAG -Notes $notes
+          Assert-ReleaseDownloadGuide -Version $env:RELEASE_TAG -Notes $notes
       - name: 準備固定的證據驗證工具鏈
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
