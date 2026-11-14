@@ -276,6 +276,9 @@ func rootDocuments(version string, native, container map[string][]byte) ([]byte,
 			link = "windows_container/index.html"
 		}
 		fmt.Fprintf(&scope, "\n## %s\n\n- 版本：%s\n- Commit：%s\n- 執行：%s\n- 量測時間：%s\n- 環境：%s\n- Coverage：%s\n- 測試套件：%d；斷言：%d（通過 %d，失敗 %d）\n- [完整原始報表](%s)\n", label, strconv.Quote(r.Version), strconv.Quote(r.Commit), strconv.Quote(r.RunUrl), strconv.Quote(r.MeasuredAt), strconv.Quote(r.Environment), strconv.Quote(r.Coverage), r.Totals.SuitesExecuted, r.Totals.AssertionsExecuted, r.Totals.AssertionsPassed, r.Totals.AssertionsFailed, link)
+		if r.RepoCoverage != nil && r.RepoCoverage.SchemaVersion == c.RuntimeSchemaVersion {
+			fmt.Fprintln(&scope, "- 覆蓋範圍：PowerShell/C# runtime 可執行行（不含 CMD 與 Go）")
+		}
 		for _, check := range r.Checks {
 			if check.Layer != "Unit" && check.Layer != "Integration" {
 				continue

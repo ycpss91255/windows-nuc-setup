@@ -823,10 +823,26 @@ func TestRuntimeReleaseReportDoesNotRequireGoCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	scopeFound := false
 	for _, f := range z.File {
 		if strings.HasPrefix(f.Name, "native/go_coverage.") {
 			t.Errorf("runtime bundle includes Go coverage: %s", f.Name)
 		}
+		if f.Name == "report_scope.md" {
+			r, e := f.Open()
+			if e != nil {
+				t.Fatal(e)
+			}
+			data, e := io.ReadAll(r)
+			r.Close()
+			if e != nil {
+				t.Fatal(e)
+			}
+			scopeFound = strings.Contains(string(data), "PowerShell/C# runtime")
+		}
+	}
+	if !scopeFound {
+		t.Error("runtime bundle scope document lacks language scope")
 	}
 	if err = z.Close(); err != nil {
 		t.Fatal(err)
