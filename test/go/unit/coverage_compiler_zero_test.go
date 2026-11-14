@@ -92,3 +92,12 @@ func TestZeroBlocksDoNotRelaxCoverageConstraints(t *testing.T) {
 		t.Fatal("omitted owned source accepted")
 	}
 }
+
+func TestZeroOnlyBlocksDoNotSatisfyOwnedSourceCoverage(t *testing.T) {
+	covered := "windows_setup/script/test/a/main.go"
+	zeroOnly := "windows_setup/script/test/missing/main.go"
+	profile := "mode: set\n" + covered + ":1.1,2.1 4 1\n" + covered + ":3.1,4.1 1 0\n" + zeroOnly + ":1.1,1.1 0 1\n"
+	if _, err := a.EvaluateCoverage([][]byte{[]byte(profile)}, []string{covered, zeroOnly}); err == nil {
+		t.Fatal("zero-only block counted as owned source evidence")
+	}
+}
