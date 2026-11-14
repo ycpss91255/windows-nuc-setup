@@ -65,24 +65,11 @@ foreach($mutation in @('commit','run','profile','missing_profile','missing_metad
  }
  [IO.File]::WriteAllText($path,($c|ConvertTo-Json -Depth 8));if($mutation -eq 'missing_metadata'){Remove-Item -LiteralPath $path};Reject-Unchanged $case ('invalid Tag evidence is rejected: '+$mutation)
 }
-# Execute the actual producer step for both events, using only synthetic local reports.
+# Current CI requires Go tests while runtime coverage does not require Go evidence.
 $workflow=[IO.File]::ReadAllText((Join-Path $root '.github/workflows/windows_tests.yml'))
-$measureAt=$workflow.IndexOf('measure_go_coverage.ps1');$attachAt=$workflow.IndexOf('attach_go_coverage.ps1');$repoAt=$workflow.IndexOf('run_repo_coverage.ps1');$publishAt=$workflow.IndexOf('publish_quality_release.ps1')
-Assert ($measureAt -ge 0 -and $measureAt -lt $attachAt -and $attachAt -lt $repoAt -and $repoAt -lt $publishAt) 'workflow measures Go before attachment and preserves strict repo validation before publication'
-$step=[regex]::Match($workflow,'(?ms)^      - name: 附加分項 Go 證據\r?\n(?<body>.*?)(?=^      - name:|\z)').Groups['body'].Value
-Assert ($step -and $step -notmatch '(?m)^        if:') 'both branch and Tag events execute the Go producer step'
-$run=[regex]::Match($step,'(?ms)^        run: \|\r?\n(?<run>.*)').Groups['run'].Value -replace '(?m)^          ',''
-$oldTemp=$env:RUNNER_TEMP;$oldType=$env:GITHUB_REF_TYPE
-Push-Location $root
-try{
- foreach($event in @('branch','tag')){
-  $kind=if($event -eq 'tag'){'Release'}else{'Branch'};$case=New-Case ('workflow_'+$event) $kind -RestoredStage
-  $env:RUNNER_TEMP=$case.Directory;$env:GITHUB_REF_TYPE=$event
-  & ([scriptblock]::Create($run))
-  $report=Get-Content -LiteralPath $case.Summary -Raw|ConvertFrom-Json
-  Assert ($report.GoCoverage.Covered -eq 8 -and (Test-Path -LiteralPath (Join-Path $case.Public 'go_coverage.out'))) ('actual workflow run step attaches metadata and profile for '+$event)
- }
-}finally{$env:RUNNER_TEMP=$oldTemp;$env:GITHUB_REF_TYPE=$oldType;Pop-Location}
+$testsAt=$workflow.IndexOf("'test','-mod=vendor','-count=1','./...'");$packAt=$workflow.IndexOf("'native-stage-pack','--runtime'");$repoAt=$workflow.IndexOf('run_repo_coverage.ps1');$publishAt=$workflow.IndexOf('publish_quality_release.ps1')
+Assert ($testsAt -ge 0 -and $testsAt -lt $packAt -and $packAt -lt $repoAt -and $repoAt -lt $publishAt) 'workflow requires Go tests before runtime evidence and publication'
+Assert (-not $workflow.Contains('attach_go_coverage.ps1') -and -not $workflow.Contains('measure_go_coverage.ps1')) 'current workflow does not require Go coverage attachment'
 # Complete the actual local Tag producer -> strict repo attachment -> publisher
 # validation path. Coverage is an explicit tiny synthetic fixture, never CI proof.
 $tool=Join-Path $fixture 'repo_coverage_tool.exe'
