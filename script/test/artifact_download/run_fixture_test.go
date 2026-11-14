@@ -124,6 +124,8 @@ func TestRunRejectsInvalidIdentityAndTerminalDownloadErrors(t *testing.T) {
 		wantCalls int
 	}{
 		{"wrong id", 457, "windows-test-reports-123-1", false, 200, 0},
+		{"wrong run", 456, "windows-test-reports-123-1", false, 200, 0},
+		{"wrong digest", 456, "windows-test-reports-123-1", false, 200, 0},
 		{"wrong attempt", 456, "windows-test-reports-123-2", false, 200, 0},
 		{"expired", 456, "windows-test-reports-123-1", true, 200, 0},
 		{"unauthorized", 456, "windows-test-reports-123-1", false, 401, 1},
@@ -139,7 +141,14 @@ func TestRunRejectsInvalidIdentityAndTerminalDownloadErrors(t *testing.T) {
 					w.WriteHeader(tc.status)
 					return
 				}
-				fmt.Fprintf(w, `{"id":%d,"name":%q,"digest":%q,"size_in_bytes":100,"expired":%t,"workflow_run":{"id":123}}`, tc.id, tc.nameValue, digest, tc.expired)
+				metaRun, metaDigest := 123, digest
+				if tc.name == "wrong run" {
+					metaRun = 124
+				}
+				if tc.name == "wrong digest" {
+					metaDigest = "sha256:" + strings.Repeat("b", 64)
+				}
+				fmt.Fprintf(w, `{"id":%d,"name":%q,"digest":%q,"size_in_bytes":100,"expired":%t,"workflow_run":{"id":%d}}`, tc.id, tc.nameValue, metaDigest, tc.expired, metaRun)
 			}))
 			defer server.Close()
 			u, _ := url.Parse(server.URL)
