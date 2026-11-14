@@ -62,6 +62,9 @@ func readWorkerTimings(dir string, expected []rc.PowerShellWorkerContext) ([]tim
 		if err != nil {
 			return nil, err
 		}
+		if len(b) > 16384 {
+			return nil, fmt.Errorf("timing receipt too large")
+		}
 		var receipt timingReceipt
 		if err := decodeTiming(b, &receipt); err != nil {
 			return nil, err
