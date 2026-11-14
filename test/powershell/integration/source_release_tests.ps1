@@ -54,6 +54,7 @@ Assert ((Get-Content $result.NotesPath -Raw -Encoding UTF8).Contains('通用 Win
 $original=Get-ReleaseNotes v1.2.3 ([IO.File]::ReadAllText((Join-Path $repo 'doc/changelog/changelog.md')))
 $expected='[此版本測試報表](https://github.com/ycpss91255/windows_setup/releases/download/v1.2.3/windows_setup_report_v1.2.3.zip)' + "`n`n" + $original
 $actual=[IO.File]::ReadAllText($result.NotesPath)
+Assert ($actual.Contains('Source code') -and $actual.Contains('Autologon') -and $actual.Contains('Assets') -and -not $actual.Contains('[此版本測試報表]')) '使用者說明指出來源與附件而不重複報表連結'
 Assert ($actual -ceq $expected) '正式版本必須連結自身版本報表並原樣保留說明'
 Assert ($actual -cne $expected.Replace('/download/v1.2.3/','/download/v1.2.4/') -and $actual -cne $expected.Replace('/download/v1.2.3/windows_setup_report_v1.2.3.zip','/download/main/windows_setup_report_main.zip')) '錯版及 main 連結不能通過完整內容契約'
 Assert-ReleaseReportLink -Version v1.2.3 -Notes $actual
