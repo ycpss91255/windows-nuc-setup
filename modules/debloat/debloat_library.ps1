@@ -53,13 +53,14 @@ function Invoke-SetupDebloat {
  $profile=Get-Content -LiteralPath (Join-Path $ModuleRoot 'debloat_profile.json') -Raw -Encoding UTF8|ConvertFrom-Json
  $before=@();$code=$null;$log=''
  if(-not $VerifyOnly){
-  [void][IO.Directory]::CreateDirectory((Split-Path -Parent $ReportPath))
+  $logDir=Join-Path (Split-Path -Parent $ReportPath) ('Debloat-'+(Get-Date -Format yyyyMMdd-HHmmss)+'-'+[guid]::NewGuid().ToString('N'))
+  [void][IO.Directory]::CreateDirectory($logDir)
   # Validate every selected feature before any cleanup, including unsupported grammar.
   $null=@(Get-SetupDebloatFeaturePlan -ModuleRoot $ModuleRoot)
   Invoke-SetupDebloatOneDrive -ModuleRoot $ModuleRoot
   $before=@(Get-AppxPackage -AllUsers|Where-Object {@($_.PackageUserInformation|Where-Object InstallState -eq 'Installed').Count -gt 0}|Select-Object -ExpandProperty Name -Unique)
-  $log=Join-Path (Split-Path -Parent $ReportPath) ('Debloat-'+(Get-Date -Format yyyyMMdd-HHmmss)+'.log')
-  $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $ModuleRoot 'win11debloat/Win11Debloat.ps1'),'-CLI','-Silent','-SkipExplorerRestart','-Language','zh-TW','-LogPath',$log,'-AppRemovalTarget','AllUsers','-RemoveApps','-Apps',($apps -join ','))
+  $log=Join-Path $logDir 'Win11Debloat.log'
+  $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $ModuleRoot 'win11debloat/Win11Debloat.ps1'),'-CLI','-Silent','-SkipExplorerRestart','-Language','zh-TW','-LogPath',$logDir,'-AppRemovalTarget','AllUsers','-RemoveApps','-Apps',($apps -join ','))
   foreach($feature in $profile.Features){$arguments+=('-'+$feature)}
   Write-Host ('正在執行 Win11Debloat，已選取 '+$apps.Count+' 個 App 項目及 '+$profile.Features.Count+' 項清理設定。') -ForegroundColor Cyan
   $code=Invoke-SetupDebloatNative -Arguments $arguments
