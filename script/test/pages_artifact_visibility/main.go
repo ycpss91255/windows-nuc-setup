@@ -91,25 +91,25 @@ func getJSON(ctx context.Context, o options, method, endpoint, token string, bod
 }
 func restVisible(ctx context.Context, o options) (bool, error) {
 	var matches []struct {
-		ID       json.Number `json:"id"`
-		Name     string      `json:"name"`
-		Digest   string      `json:"digest"`
-		Size     json.Number `json:"size_in_bytes"`
-		Expired  *bool       `json:"expired"`
+		ID       int64  `json:"id"`
+		Name     string `json:"name"`
+		Digest   string `json:"digest"`
+		Size     int64  `json:"size_in_bytes"`
+		Expired  *bool  `json:"expired"`
 		Workflow struct {
-			ID json.Number `json:"id"`
+			ID int64 `json:"id"`
 		} `json:"workflow_run"`
 	}
 	for page := 1; page <= 100; page++ {
 		var result struct {
 			Artifacts []struct {
-				ID       json.Number `json:"id"`
-				Name     string      `json:"name"`
-				Digest   string      `json:"digest"`
-				Size     json.Number `json:"size_in_bytes"`
-				Expired  *bool       `json:"expired"`
+				ID       int64  `json:"id"`
+				Name     string `json:"name"`
+				Digest   string `json:"digest"`
+				Size     int64  `json:"size_in_bytes"`
+				Expired  *bool  `json:"expired"`
 				Workflow struct {
-					ID json.Number `json:"id"`
+					ID int64 `json:"id"`
 				} `json:"workflow_run"`
 			} `json:"artifacts"`
 		}
@@ -139,8 +139,8 @@ func restVisible(ctx context.Context, o options) (bool, error) {
 		return false, errors.New("duplicate REST artifacts")
 	}
 	a := matches[0]
-	size, err := strconv.ParseInt(string(a.Size), 10, 64)
-	if string(a.ID) != o.artifactID || string(a.Workflow.ID) != o.runID || a.Expired == nil || *a.Expired || !digestPattern.MatchString(a.Digest) || err != nil || size <= 0 || size > 1<<30 {
+	size := a.Size
+	if strconv.FormatInt(a.ID, 10) != o.artifactID || strconv.FormatInt(a.Workflow.ID, 10) != o.runID || a.Expired == nil || *a.Expired || !digestPattern.MatchString(a.Digest) || size <= 0 || size > 1<<30 {
 		return false, errors.New("REST artifact identity mismatch")
 	}
 	return true, nil
