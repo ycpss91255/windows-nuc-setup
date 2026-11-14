@@ -128,3 +128,20 @@ func TestDownloadExhaustsBoundedAttempts(t *testing.T) {
 		t.Fatalf("calls=%d err=%v", count, err)
 	}
 }
+
+func TestMetadataRejectsOverflowingExpectedIDs(t *testing.T) {
+	const digest = "sha256:abc"
+	const max = "9223372036854775807"
+	const overflow = "9223372036854775808"
+	for _, tc := range []struct{ name, id, run, metaID, metaRun string }{
+		{"artifact", overflow, "123", max, "123"},
+		{"run", "456", overflow, "456", max},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := fmt.Sprintf(`{"id":%s,"name":"windows-test-reports-%s-1","digest":%q,"size_in_bytes":100,"expired":false,"workflow_run":{"id":%s}}`, tc.metaID, tc.run, digest, tc.metaRun)
+			if err := validateMetadata(strings.NewReader(payload), tc.id, tc.run, 1, digest); err == nil {
+				t.Fatal("overflowing expected identity was accepted as a different ID")
+			}
+		})
+	}
+}

@@ -228,8 +228,14 @@ func validateMetadata(body io.Reader, id, runID string, attempt int, digest stri
 	if err := json.NewDecoder(io.LimitReader(body, 1<<20)).Decode(&meta); err != nil {
 		return errors.New("invalid artifact metadata")
 	}
-	expectedID, _ := strconv.ParseInt(id, 10, 64)
-	expectedRun, _ := strconv.ParseInt(runID, 10, 64)
+	expectedID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return errors.New("invalid artifact ID")
+	}
+	expectedRun, err := strconv.ParseInt(runID, 10, 64)
+	if err != nil {
+		return errors.New("invalid run ID")
+	}
 	if meta.ID != expectedID || meta.Workflow.ID != expectedRun || meta.Name != "windows-test-reports-"+runID+"-"+strconv.Itoa(attempt) || meta.Expired == nil || *meta.Expired || meta.Digest != digest || meta.Size == nil || *meta.Size <= 0 || *meta.Size > maxArchive {
 		return errors.New("artifact source or digest mismatch")
 	}
