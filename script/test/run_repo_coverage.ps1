@@ -4,7 +4,7 @@ param([string]$SourceRoot,[string]$PublicDirectory,[string]$GoCoverageDirectory,
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ci_tasks.ps1')
 function Invoke-RepoCoveragePipeline {
- param([Parameter(Mandatory=$true)][string]$SourceRoot,[Parameter(Mandatory=$true)][string]$PublicDirectory,[Parameter(Mandatory=$true)][string]$GoCoverageDirectory,[Parameter(Mandatory=$true)][string]$ManagedEvidencePath,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$PowerShellShardDirectory,[ValidateRange(1,2147483647)][int]$RunAttempt=1)
+ param([Parameter(Mandatory=$true)][string]$SourceRoot,[Parameter(Mandatory=$true)][string]$PublicDirectory,[string]$GoCoverageDirectory,[Parameter(Mandatory=$true)][string]$ManagedEvidencePath,[Parameter(Mandatory=$true)][string]$OutputDirectory,[string]$PowerShellShardDirectory,[ValidateRange(1,2147483647)][int]$RunAttempt=1)
  $source=[IO.Path]::GetFullPath($SourceRoot).TrimEnd('\','/');$output=[IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\','/')
  if($output -ieq $source -or $output.StartsWith($source+'\',[StringComparison]::OrdinalIgnoreCase) -or (Test-Path -LiteralPath $output)){throw '整體覆蓋率必須使用來源外部全新目錄。'}
  $metadata=Get-Content -LiteralPath (Join-Path $PublicDirectory 'summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
@@ -25,8 +25,8 @@ function Invoke-RepoCoveragePipeline {
   Invoke-CINative -File $tool -Arguments @('cmd-measure','--source-root',$source,'--probe-executable',$probe,'--output',$cmd)
   $identity=@('--expected-sha',[string]$metadata.Commit)
   if($metadata.RunUrl){$identity+=@('--expected-run-url',[string]$metadata.RunUrl)}
-  Invoke-CINative -File $tool -Arguments (@('collect','--source-root',$source,'--output-dir',$coverage,'--go-evidence',(Join-Path $GoCoverageDirectory 'go_coverage.json'),'--go-profile',(Join-Path $GoCoverageDirectory 'go_coverage.out'),'--powershell-evidence',(Join-Path $ps 'evidence.json'),'--cmd-evidence',$cmd,'--managed-evidence',$ManagedEvidencePath)+$identity)
-  Invoke-CINative -File $tool -Arguments (@('verify','--artifact-dir',$coverage,'--source-root',$source,'--require-complete','--minimum-percent','80')+$identity)
+  Invoke-CINative -File $tool -Arguments (@('collect','--runtime','--source-root',$source,'--output-dir',$coverage,'--powershell-evidence',(Join-Path $ps 'evidence.json'),'--cmd-evidence',$cmd,'--managed-evidence',$ManagedEvidencePath)+$identity)
+  Invoke-CINative -File $tool -Arguments (@('verify','--runtime','--artifact-dir',$coverage,'--source-root',$source,'--require-complete','--minimum-percent','80')+$identity)
   Invoke-CINative -File powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $source 'script/test/attach_repo_coverage.ps1'),'-PublicDirectory',$PublicDirectory,'-CoverageDirectory',$coverage,'-CoverageToolPath',$tool,'-SourceRoot',$source)
  }finally{Pop-Location}
 }
