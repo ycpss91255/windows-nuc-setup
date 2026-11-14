@@ -298,3 +298,35 @@ func TestConcurrentChildReplacementCannotEscape(t *testing.T) {
 		t.Fatalf("outside fixture changed: %v", e)
 	}
 }
+
+func TestMarkerChangeAfterReadCannotAuthorizeDelete(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "owned")
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}} {
+		if e := run(a, &out, now); e != nil {
+			t.Fatal(e)
+		}
+	}
+	p := filepath.Join(root, "item")
+	if e := os.WriteFile(filepath.Join(p, "keep"), []byte("fixture"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	var changeErr error
+	called := false
+	afterMarkerReadHook = func() { called = true; changeErr = os.WriteFile(filepath.Join(p, itemMarker), []byte("changed"), 0600) }
+	defer func() { afterMarkerReadHook = nil }()
+	err := run([]string{"clean", root, "item", "--delete"}, &out, now)
+	if !called {
+		t.Fatalf("hook not reached: %v", err)
+	}
+	if changeErr == nil {
+		if err == nil {
+			t.Error("changed marker authorized deletion")
+		}
+		if _, e := os.Stat(filepath.Join(p, "keep")); e != nil {
+			t.Errorf("fixture removed: %v", e)
+		}
+	}
+}
