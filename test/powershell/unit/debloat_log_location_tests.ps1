@@ -19,7 +19,8 @@ try {
  $before=@(Get-ChildItem -LiteralPath $module -Recurse -Force|ForEach-Object FullName)
  function Get-SetupDebloatFeaturePlan {param($ModuleRoot) @()}
  function Test-SetupDebloatFeatures {param($ModuleRoot) [pscustomobject]@{Success=$true;Features=@();Scope='fixture'}}
- function Invoke-SetupDebloatOneDrive {param($ModuleRoot)}
+ $script:oneDriveCalls=0
+ function Invoke-SetupDebloatOneDrive {param($ModuleRoot) $script:oneDriveCalls++}
  function Get-AppxPackage {param([switch]$AllUsers)}
  function Get-AppxProvisionedPackage {param([switch]$Online)}
  $script:code=0;$script:logPath='';$script:nativeCalls=0
@@ -37,6 +38,10 @@ try {
  Assert ($failed -and -not $saved.Success -and $saved.ExitCode -eq 7 -and $saved.Log -ceq $script:logPath) '原生失敗仍傳播並保留記錄路徑'
  $calls=$script:nativeCalls;$verify=Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report -VerifyOnly
  Assert ($verify.Success -and $verify.Log -ceq '' -and $script:nativeCalls -eq $calls) 'VerifyOnly 不執行原生程序且記錄路徑為空'
+ $badParent=Join-Path $fixture 'not_a_directory';[IO.File]::WriteAllText($badParent,'fixture')
+ $calls=$script:nativeCalls;$oneDrive=$script:oneDriveCalls;$failed=$false
+ try{Invoke-SetupDebloat -ModuleRoot $module -ReportPath (Join-Path $badParent 'result.json')|Out-Null}catch{$failed=$true}
+ Assert ($failed -and $script:nativeCalls -eq $calls -and $script:oneDriveCalls -eq $oneDrive) '無法建立記錄目錄時先停止且不執行清理'
  $after=@(Get-ChildItem -LiteralPath $module -Recurse -Force|ForEach-Object FullName)
  Assert (($before -join "`n") -ceq ($after -join "`n")) '模組目錄沒有新增任何檔案'
 } finally {
