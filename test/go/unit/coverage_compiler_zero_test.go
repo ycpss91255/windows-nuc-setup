@@ -68,6 +68,24 @@ func TestCompilerZeroStatementBlocksRemainCanonical(t *testing.T) {
 	if _, err = a.ValidateCoverageEvidence(data, canonical, scope, provenance.Commit, provenance.RunUrl); err != nil {
 		t.Fatalf("consumer rejected canonical profile: %v", err)
 	}
+	if runtime.GOOS == "windows" {
+		helper, err := filepath.Abs("../../../script/test/go_coverage.ps1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(filepath.Join(root, "go_coverage.out"), canonical, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(filepath.Join(root, "coverage.json"), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		script := `$ErrorActionPreference='Stop'; . $env:FIXTURE_GO_HELPER; $c=Get-Content -Raw -Encoding UTF8 -LiteralPath $env:FIXTURE_GO_JSON|ConvertFrom-Json; Assert-GoCoverageProfile -Coverage $c -Directory $env:FIXTURE_GO_DIR; Write-Host '@@ASSERT@@{"Name":"compiler profile accepted by PowerShell","Passed":true}'`
+		ps := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
+		ps.Env = append(os.Environ(), "FIXTURE_GO_HELPER="+helper, "FIXTURE_GO_JSON="+filepath.Join(root, "coverage.json"), "FIXTURE_GO_DIR="+root)
+		if output, err := ps.CombinedOutput(); err != nil {
+			t.Fatalf("PowerShell consumer rejected compiler profile: %v\n%s", err, output)
+		}
+	}
 	zeroOnly := []byte("mode: set\n" + string(zero) + "\n")
 	if _, err = a.EvaluateCoverage([][]byte{zeroOnly}, scope); err == nil {
 		t.Fatal("zero total accepted")
