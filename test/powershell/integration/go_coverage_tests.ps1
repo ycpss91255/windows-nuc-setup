@@ -82,3 +82,21 @@ try{& $measure -SourceRoot $root -ReportDirectory $arguments.OutputDirectory -Ou
 Assert ($failed -and $global:coverageCalls.Count -eq 1) 'measurement stops on actual native test failure before producer or attachment'
 Assert ($global:coverageCalls[0] -contains '-coverpkg=./script/test/...' -and $global:coverageCalls[0] -contains './...') 'measurement instruments every production Go package while executing all tests'
 Remove-Item Function:/go.exe
+
+# Zero-statement blocks remain in the original compiler profile without adding coverage.
+$zeroDir=Join-Path $fixture 'zero-profile';[void][IO.Directory]::CreateDirectory($zeroDir)
+$zeroPath=Join-Path $zeroDir 'go_coverage.out';$zeroFile='windows_setup/script/test/example/main.go'
+$zeroGood="mode: set`n${zeroFile}:1.1,2.1 1 1`n${zeroFile}:3.1,3.1 0 1`n"
+function Write-ZeroProfile([string]$Text,[long]$Covered,[long]$Total,[string[]]$Packages){
+ [IO.File]::WriteAllText($zeroPath,$Text,[Text.UTF8Encoding]::new($false))
+ return [pscustomobject]@{ProfileSHA256=(Get-FileHash -LiteralPath $zeroPath -Algorithm SHA256).Hash.ToLowerInvariant();Covered=$Covered;TotalStatements=$Total;Packages=$Packages}
+}
+$zeroCoverage=Write-ZeroProfile $zeroGood 1 1 @('windows_setup/script/test/example')
+Assert-GoCoverageProfile -Coverage $zeroCoverage -Directory $zeroDir
+Assert $true 'PowerShell 接受保留零區塊的正數總量 profile'
+$zeroCoverage=Write-ZeroProfile "mode: set`n${zeroFile}:3.1,3.1 0 1`n" 0 0 @('windows_setup/script/test/example')
+Refuse {Assert-GoCoverageProfile -Coverage $zeroCoverage -Directory $zeroDir} 'PowerShell 拒絕全零總量'
+$other='windows_setup/script/test/other/main.go';$zeroCoverage=Write-ZeroProfile ($zeroGood+"${other}:1.1,1.1 0 1`n") 1 1 @('windows_setup/script/test/example','windows_setup/script/test/other')
+Refuse {Assert-GoCoverageProfile -Coverage $zeroCoverage -Directory $zeroDir} 'PowerShell 拒絕只有零區塊的來源'
+$zeroCoverage=Write-ZeroProfile ($zeroGood+"${zeroFile}:4.1,5.1 -1 1`n") 1 1 @('windows_setup/script/test/example')
+Refuse {Assert-GoCoverageProfile -Coverage $zeroCoverage -Directory $zeroDir} 'PowerShell 拒絕負敘述數'
