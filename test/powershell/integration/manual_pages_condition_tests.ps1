@@ -21,6 +21,7 @@ foreach($c in @(
  @{Event='workflow_dispatch';Ref='refs/heads/main';Rollup='failure';Release='skipped';Build=$false;Publish=$false;Name='手動 main 門檻失敗'},
  @{Event='workflow_dispatch';Ref='refs/heads/feature';Rollup='success';Release='skipped';Build=$false;Publish=$false;Name='手動非 main'},
  @{Event='workflow_dispatch';Ref='refs/tags/v0.2.5';Rollup='success';Release='success';Build=$false;Publish=$false;Name='手動 tag'},
+ @{Event='merge_group';Ref='refs/heads/gh-readonly-queue/main/pr-123-0123456789abcdef';Rollup='success';Release='success';Build=$false;Publish=$false;Name='merge queue'},
  @{Event='pull_request';Ref='refs/heads/main';Rollup='success';Release='success';Build=$false;Publish=$false;Name='PR'},
  @{Event='push';Ref='refs/heads/main';Rollup='success';Release='skipped';Build=$true;Publish=$false;Name='原 main push'},
  @{Event='push';Ref='refs/tags/v0.2.5';Rollup='success';Release='success';Build=$true;Publish=$true;Name='原 tag push'},
