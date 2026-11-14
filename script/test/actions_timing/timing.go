@@ -157,9 +157,12 @@ func Analyze(in Input) (Output, error) {
 			if e != nil {
 				return Output{}, e
 			}
-			elapsed, e := interval(start, end, executed)
+			elapsed, e := interval(start, end, j.Conclusion != "skipped")
 			if e != nil {
 				return Output{}, e
+			}
+			if !executed {
+				elapsed = nil
 			}
 			obs := JobObservation{Job: j, PendingMilliseconds: pending, ElapsedMilliseconds: elapsed, Steps: []StepObservation{}}
 			steps := map[int]bool{}
@@ -176,9 +179,12 @@ func Analyze(in Input) (Output, error) {
 				if e != nil {
 					return Output{}, e
 				}
-				duration, e := interval(ss, se, j.Conclusion != "skipped" && s.Status == "completed" && s.Conclusion != "skipped" && s.Conclusion != "")
+				duration, e := interval(ss, se, j.Conclusion != "skipped" && s.Conclusion != "skipped")
 				if e != nil {
 					return Output{}, e
+				}
+				if s.Status != "completed" || s.Conclusion == "" {
+					duration = nil
 				}
 				obs.Steps = append(obs.Steps, StepObservation{Step: s, ElapsedMilliseconds: duration})
 			}
