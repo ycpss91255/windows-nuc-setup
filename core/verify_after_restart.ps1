@@ -10,8 +10,7 @@ $DriverPackagePath=Get-SetupSavedDriverSelection -ResultPath (Resolve-NucPath 'S
 $confirmation=Get-SetupSavedHardwareConfirmation -ResultPath (Resolve-NucPath 'Setup-Result.json')
 $hardware=Get-SetupHardwareProfile -DriverPackagePath $DriverPackagePath @confirmation
 $skippedModules=@(@('install_drivers.ps1','apply_amd_privacy_settings.ps1','desktop_icon_layout.ps1')|ForEach-Object {Get-SetupModuleDecision -Module $_ -Hardware $hardware}|Where-Object {-not $_.Applicable})
-$p=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
-if(-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
+if(-not (Test-SetupEntryAdministrator)){
  $command="& '"+$PSCommandPath.Replace("'","''")+"' -ExpectedUserSID '"+$currentSID+"'"
  Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -NoExit -EncodedCommand '+[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command)));exit
 }
