@@ -21,6 +21,7 @@ import (
 type shardCLIOptions struct {
 	source, manifest, output, evidence, input, commit, runURL string
 	attempt, index, count                                     int
+	timingInput, timingOutput                                 string
 }
 type shardCollectionManifest struct {
 	SourceRoot     string
@@ -54,6 +55,8 @@ func parseShardOptions(name string, args []string, out io.Writer) (shardCLIOptio
 	}
 	if name == "powershell-shard-pack" {
 		f.StringVar(&o.evidence, "evidence-dir", "", "validated safe raw export")
+		f.StringVar(&o.timingInput, "timing-input-dir", "", "private timing receipts")
+		f.StringVar(&o.timingOutput, "timing-output-dir", "", "fresh timing output")
 	}
 	if name == "powershell-shard-merge" {
 		f.StringVar(&o.input, "input-dir", "", "complete matrix artifacts")
@@ -61,7 +64,7 @@ func parseShardOptions(name string, args []string, out io.Writer) (shardCLIOptio
 	if err := f.Parse(args); err != nil {
 		return o, err
 	}
-	if f.NArg() != 0 || o.source == "" || o.manifest == "" || !regexp.MustCompile(`^[a-f0-9]{40}$`).MatchString(o.commit) || !regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_-][A-Za-z0-9_.-]*/[A-Za-z0-9_-][A-Za-z0-9_.-]*/actions/runs/[1-9][0-9]*$`).MatchString(o.runURL) || o.attempt < 1 || o.count < 1 || o.count > 4 || name != "powershell-shard-merge" && (o.index < 0 || o.index >= o.count) || name == "powershell-shard-pack" && o.evidence == "" || name != "powershell-shard-pack" && o.output == "" || name == "powershell-shard-merge" && o.input == "" {
+	if (o.timingInput == "") != (o.timingOutput == "") || f.NArg() != 0 || o.source == "" || o.manifest == "" || !regexp.MustCompile(`^[a-f0-9]{40}$`).MatchString(o.commit) || !regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_-][A-Za-z0-9_.-]*/[A-Za-z0-9_-][A-Za-z0-9_.-]*/actions/runs/[1-9][0-9]*$`).MatchString(o.runURL) || o.attempt < 1 || o.count < 1 || o.count > 4 || name != "powershell-shard-merge" && (o.index < 0 || o.index >= o.count) || name == "powershell-shard-pack" && o.evidence == "" || name != "powershell-shard-pack" && o.output == "" || name == "powershell-shard-merge" && o.input == "" {
 		return o, fmt.Errorf("complete source, manifest, matrix and workflow identity are required")
 	}
 	return o, nil
@@ -362,6 +365,7 @@ func powershellShardPack(args []string, out io.Writer) error {
 	}
 	manifest := rc.PowerShellShardManifest{SchemaVersion: 1, Commit: o.commit, RunUrl: o.runURL, RunAttempt: o.attempt, ShardIndex: o.index, ShardCount: o.count, Sources: catalog.Sources, Tests: catalog.Tests, Wrapper: catalog.Wrapper}
 	local := 0
+	contexts := []rc.PowerShellWorkerContext{}
 	for global, test := range catalog.Tests {
 		if global%o.count != o.index {
 			continue
@@ -389,6 +393,7 @@ func powershellShardPack(args []string, out io.Writer) error {
 		if native.Context == nil || *native.Context != expectedContext {
 			return fmt.Errorf("native worker context does not match actual selected suite and workflow")
 		}
+		contexts = append(contexts, *native.Context)
 		manifest.Workers = append(manifest.Workers, rc.PowerShellShardWorker{GlobalIndex: global, TestFile: test.File, TestSHA256: test.SHA256, Evidence: name, SHA256: fmt.Sprintf("%x", sha256.Sum256(b))})
 		local++
 	}
@@ -402,6 +407,26 @@ func powershellShardPack(args []string, out io.Writer) error {
 		actual, readErr := readShardFile(o.evidence, name)
 		if readErr != nil || !bytes.Equal(actual, captured) {
 			return fmt.Errorf("raw shard changed during validation")
+		}
+	}
+	if o.timingInput != "" {
+		root, _, _, e := trustedShardCatalog(o)
+		if e != nil {
+			return e
+		}
+		destination, e := freshShardOutput(o.timingOutput, root, o.timingInput, o.evidence)
+		if e != nil {
+			return e
+		}
+		receipts, e := readWorkerTimings(o.timingInput, contexts)
+		if e != nil {
+			return e
+		}
+		if e = os.Mkdir(destination, 0700); e != nil {
+			return e
+		}
+		if e = writeShardJSON(filepath.Join(destination, "timing.json"), receipts); e != nil {
+			return e
 		}
 	}
 	if err = writeShardJSON(filepath.Join(o.evidence, "shard.json"), manifest); err != nil {
