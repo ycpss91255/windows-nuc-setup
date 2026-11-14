@@ -125,3 +125,52 @@ func TestZeroOnlyBlocksDoNotSatisfyOwnedSourceCoverage(t *testing.T) {
 		t.Fatal("zero-only block counted as owned source evidence")
 	}
 }
+
+func TestCompilerSelectCommunicationsDoNotHideCaseBodies(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "script", "test", "select_fixture")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	source := "package selectfixture\nfunc Transfer(in <-chan int, out chan<- int) {\n select {\n case v := <-in:\n  out <- v\n default:\n  _ = in\n }\n}\n"
+	files := map[string]string{filepath.Join(root, "go.mod"): "module windows_setup\n\ngo 1.27.3\n", filepath.Join(dir, "select.go"): source, filepath.Join(dir, "select_test.go"): "package selectfixture\nimport \"testing\"\nfunc TestTransfer(t *testing.T) { in:=make(chan int,1);out:=make(chan int,1);in<-1;Transfer(in,out) }\n"}
+	for path, data := range files {
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("GOTOOLCHAIN", "local")
+	t.Setenv("GOPROXY", "off")
+	t.Setenv("GOSUMDB", "off")
+	t.Setenv("GOWORK", "off")
+	t.Setenv("GOFLAGS", "-mod=mod")
+	profile := filepath.Join(root, "coverage.out")
+	goexe := filepath.Join(runtime.GOROOT(), "bin", "go")
+	if runtime.GOOS == "windows" {
+		goexe += ".exe"
+	}
+	cmd := exec.Command(goexe, "test", "-count=1", "-coverprofile="+profile, "./script/test/select_fixture")
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fixture compilation: %v\n%s", err, out)
+	}
+	raw, err := os.ReadFile(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "script/test/select_fixture/select.go"
+	report, _, err := rc.NormalizeGo([][]byte{raw}, map[string][]byte{path: []byte(source)}, "windows_setup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := report.Files[path]
+	if len(lines) != 3 || !lines[3] || !lines[5] || lines[7] {
+		t.Fatalf("unexpected line coverage: %+v", lines)
+	}
+	if _, ok := lines[4]; ok {
+		t.Fatal("select communication counted separately")
+	}
+	if _, ok := lines[7]; !ok {
+		t.Fatal("uncovered default body missing")
+	}
+}
