@@ -45,6 +45,9 @@ func TestCIRuntimeCoverageKeepsGoAndCMDTests(t *testing.T) {
 	if !strings.Contains(gate, "--require-runtime") || !strings.Contains(gate, "verify --runtime") {
 		t.Fatal("runtime evidence is not mandatory in CI")
 	}
+	if !strings.Contains(coverageJob(text, "verify-deployment"), "verify_deployment --mode release --require-runtime") {
+		t.Fatal("current tag deployment must require a verified runtime bundle")
+	}
 	docker := coverageJob(text, "docker-tests")
 	if !strings.Contains(docker, "'./script/test/requirements_gate','--tests-only'") {
 		t.Fatal("container host report must use tests-only validation")

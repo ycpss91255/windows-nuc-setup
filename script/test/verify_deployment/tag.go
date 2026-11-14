@@ -44,7 +44,7 @@ func releaseRequiresGoProfile(e *c.Evidence, bundle *verifiedBundle) (bool, erro
 	return true, nil
 }
 
-func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []string, bundle *verifiedBundle) error {
+func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []string, bundle *verifiedBundle, requireRuntime bool) error {
 	if !regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$`).MatchString(tag) {
 		return fmt.Errorf("invalid release tag")
 	}
@@ -131,6 +131,11 @@ func verifyTag(read a.Reader, metadata []byte, tag, sha, run string, files []str
 	coverage, e := a.ValidateRepoCoverageReport(reader, summary, sha, run, true)
 	if e != nil {
 		return e
+	}
+	if requireRuntime {
+		if bundle == nil || bundle.CoverageScope != c.RuntimeScope || requireCurrentRuntimeCoverage(coverage) != nil {
+			return fmt.Errorf("current release requires matching runtime bundle")
+		}
 	}
 	requireProfile, e := releaseRequiresGoProfile(coverage, bundle)
 	if e != nil {

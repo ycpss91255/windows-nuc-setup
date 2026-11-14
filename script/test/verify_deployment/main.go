@@ -54,6 +54,7 @@ func run() error {
 	bundleTool := flag.String("report-bundle-tool", "", "trusted report verifier executable")
 	archive := flag.String("report-archive", "", "downloaded report archive")
 	attempt := flag.Int("run-attempt", 0, "expected run attempt")
+	requireRuntime := flag.Bool("require-runtime", false, "require current release runtime report bundle")
 	portalDir := flag.String("portal-dir", "", "validated same-run portal artifact")
 	latestMetadata := flag.String("latest-release-metadata", "", "immutable latest release metadata")
 	base := flag.String("base-url", "", "HTTPS Pages root")
@@ -99,12 +100,15 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		if *requireRuntime && (bundle == nil || bundle.CoverageScope != c.RuntimeScope) {
+			return fmt.Errorf("current release requires verified runtime bundle")
+		}
 		files, err := releaseGoFiles(".", bundle)
 		if err != nil {
 			return err
 		}
 		for i := 0; i < 12; i++ {
-			err = verifyTag(read, data, *tag, *sha, *run, files, bundle)
+			err = verifyTag(read, data, *tag, *sha, *run, files, bundle, *requireRuntime)
 			if err == nil {
 				fmt.Printf("公開版本驗收通過：%s %s\n", *tag, *sha)
 				return nil
@@ -115,7 +119,7 @@ func run() error {
 		}
 		return err
 	}
-	if *mode != "branch" || *tag != "" || *metadata != "" || *bundleTool != "" || *archive != "" || *attempt != 0 || *download || *repository != "" {
+	if *mode != "branch" || *tag != "" || *metadata != "" || *bundleTool != "" || *archive != "" || *attempt != 0 || *download || *repository != "" || *requireRuntime {
 		return fmt.Errorf("invalid deployment mode")
 	}
 	requiredVersion := ""

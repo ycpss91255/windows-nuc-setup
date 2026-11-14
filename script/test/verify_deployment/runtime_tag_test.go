@@ -2,7 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -77,11 +81,44 @@ func TestRuntimeReleaseTagUsesVerifiedBundle(t *testing.T) {
 		}
 		return data, nil
 	}
-	if err := verifyTag(read, meta, f.Version, f.Commit, f.RunURL, nil, bundle); err != nil {
+	if err := verifyTag(read, meta, f.Version, f.Commit, f.RunURL, nil, bundle, true); err != nil {
 		t.Fatalf("runtime tag: %v", err)
 	}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, ok := pages[strings.TrimPrefix(r.URL.Path, "/")]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(data)
+	}))
+	defer server.Close()
+	previousTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	defer func() { http.DefaultTransport = previousTransport }()
+	metadataPath := filepath.Join(t.TempDir(), "release.json")
+	if err = os.WriteFile(metadataPath, meta, 0600); err != nil {
+		t.Fatal(err)
+	}
+	doc := filepath.Join(t.TempDir(), "readme.md")
+	if err = os.WriteFile(doc, []byte("synthetic fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	previousFlags, previousArgs := flag.CommandLine, os.Args
+	defer func() { flag.CommandLine, os.Args = previousFlags, previousArgs }()
+	flag.CommandLine = flag.NewFlagSet("deployment", flag.ContinueOnError)
+	flag.CommandLine.SetOutput(io.Discard)
+	os.Args = []string{"verify_deployment", "--mode", "release", "--require-runtime", "--base-url", server.URL, "--readme", doc, "--expected-sha", f.Commit, "--expected-run-url", f.RunURL, "--tag", f.Version, "--release-metadata", metadataPath, "--report-bundle-tool", tool, "--report-archive", filepath.Join(fixture, f.Archive), "--run-attempt", "1"}
+	if err := run(); err != nil {
+		t.Fatalf("current runtime CLI rejected verified synthetic ZIP: %v", err)
+	}
+	wrongScope := *bundle
+	wrongScope.CoverageScope = ""
+	if err := verifyTag(read, meta, f.Version, f.Commit, f.RunURL, nil, &wrongScope, true); err == nil || !strings.Contains(err.Error(), "runtime bundle") {
+		t.Fatalf("wrong runtime receipt accepted: %v", err)
+	}
 	pages[prefix+"summary.json"] = append(pages[prefix+"summary.json"], ' ')
-	if err := verifyTag(read, meta, f.Version, f.Commit, f.RunURL, nil, bundle); err == nil || !strings.Contains(err.Error(), "immutable release") {
+	if err := verifyTag(read, meta, f.Version, f.Commit, f.RunURL, nil, bundle, true); err == nil || !strings.Contains(err.Error(), "immutable release") {
 		t.Fatalf("changed summary accepted: %v", err)
 	}
 }

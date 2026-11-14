@@ -394,6 +394,12 @@ func TestDeploymentCases(t *testing.T) {
 			pages["versions.json"] = []byte(`[]`)
 		}()
 		tagArgs := append(args(), "--mode", "release", "--tag", tag, "--release-metadata", metadata)
+		t.Run("current_runtime_rejects_legacy_raw", func(t *testing.T) {
+			err := invoke(append(append([]string{}, tagArgs...), "--require-runtime")...)
+			if err == nil || !strings.Contains(err.Error(), "runtime bundle") {
+				t.Fatalf("current runtime accepted legacy raw or wrong rejection: %v", err)
+			}
+		})
 		t.Run("混合新舊附件必須拒絕", func(t *testing.T) {
 			original, err := os.ReadFile(metadata)
 			if err != nil {
@@ -463,6 +469,9 @@ func TestDeploymentCases(t *testing.T) {
 			zipArgs := append(append([]string{}, tagArgs...), "--report-bundle-tool", "trusted", "--report-archive", archive, "--run-attempt", "1")
 			if err := invoke(zipArgs...); err != nil || calls != 1 {
 				t.Fatalf("驗證版本報表失敗: %v calls=%d", err, calls)
+			}
+			if err := invoke(append(append([]string{}, zipArgs...), "--require-runtime")...); err == nil || !strings.Contains(err.Error(), "runtime bundle") {
+				t.Fatalf("current runtime accepted legacy ZIP or wrong rejection: %v", err)
 			}
 			rows[0]["ArchiveDigest"] = rows[0]["Digest"]
 			pages["versions.json"], _ = json.Marshal(rows)
