@@ -102,7 +102,7 @@ function Invoke-SetupDebloat {
   # Validate every selected feature before any cleanup, including unsupported grammar.
   $null=@(Get-SetupDebloatFeaturePlan -ModuleRoot $ModuleRoot)
   Invoke-SetupDebloatOneDrive -ModuleRoot $ModuleRoot
-  $before=@(Get-AppxPackage -AllUsers|Where-Object {@($_.PackageUserInformation|Where-Object InstallState -eq 'Installed').Count -gt 0}|Select-Object -ExpandProperty Name -Unique)
+  $before=@(Get-AppxPackage -AllUsers -PackageTypeFilter Main,Bundle,Framework|Where-Object {@($_.PackageUserInformation|Where-Object InstallState -eq 'Installed').Count -gt 0}|Select-Object -ExpandProperty Name -Unique)
   $log=Join-Path $ModuleRoot ('Debloat-'+(Get-Date -Format yyyyMMdd-HHmmss)+'.log')
   $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $ModuleRoot 'win11debloat/Win11Debloat.ps1'),'-CLI','-Silent','-SkipExplorerRestart','-Language','zh-TW','-LogPath',$log,'-AppRemovalTarget','AllUsers','-RemoveApps','-Apps',($apps -join ','))
   foreach($feature in $profile.Features){$arguments+=('-'+$feature)}
@@ -112,7 +112,7 @@ function Invoke-SetupDebloat {
   if($extra.Count){$missingResult=Invoke-SetupDebloatMissingApps -AppIds $extra}
  }
  $readbackErrors=New-Object System.Collections.Generic.List[string];$installedReadbackOK=$true;$provisionedReadbackOK=$true
- try{$after=@(Get-AppxPackage -AllUsers -ErrorAction Stop|Where-Object {@($_.PackageUserInformation|Where-Object InstallState -eq 'Installed').Count -gt 0}|Select-Object -ExpandProperty Name -Unique)}catch{$installedReadbackOK=$false;$after=@();$readbackErrors.Add('讀取已安裝套件失敗：'+$_.Exception.Message)}
+ try{$after=@(Get-AppxPackage -AllUsers -PackageTypeFilter Main,Bundle,Framework -ErrorAction Stop|Where-Object {@($_.PackageUserInformation|Where-Object InstallState -eq 'Installed').Count -gt 0}|Select-Object -ExpandProperty Name -Unique)}catch{$installedReadbackOK=$false;$after=@();$readbackErrors.Add('讀取已安裝套件失敗：'+$_.Exception.Message)}
  $remaining=@($after|Where-Object {$_ -in $apps})
  try{$provisioned=@(Get-AppxProvisionedPackage -Online -ErrorAction Stop|Where-Object DisplayName -in $apps|Select-Object -ExpandProperty DisplayName)}catch{$provisionedReadbackOK=$false;$provisioned=@();$readbackErrors.Add('讀取預佈建套件失敗：'+$_.Exception.Message)}
  $features=Test-SetupDebloatFeatures -ModuleRoot $ModuleRoot

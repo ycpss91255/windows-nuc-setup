@@ -4,7 +4,7 @@ $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 . (Join-Path $root 'modules/debloat/debloat_library.ps1')
 function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Value}|ConvertTo-Json -Compress));if(-not $Value){throw $Name}}
 $script:installed=@();$script:provisioned=@();$script:removed=@();$script:fail='';$script:removeBundleChildren=$false
-function Get-AppxPackage {param([switch]$AllUsers,$PackageTypeFilter) if(-not $AllUsers){throw 'all users required'};if($script:fail -eq 'query_installed' -and $PackageTypeFilter){throw 'fixture query failed'};if($script:fail -eq 'readback_installed' -and -not $PackageTypeFilter){$script:readbackCalls++;if($script:readbackCalls -gt 1){throw 'fixture readback failed'}};$script:installed}
+function Get-AppxPackage {param([switch]$AllUsers,$PackageTypeFilter) if(-not $AllUsers){throw 'all users required'};if($script:fail -eq 'query_installed' -and 'Framework' -notin $PackageTypeFilter){throw 'fixture query failed'};if($script:fail -eq 'readback_installed' -and 'Framework' -in $PackageTypeFilter){$script:readbackCalls++;if($script:readbackCalls -gt 1){throw 'fixture readback failed'}};if(-not $PackageTypeFilter -or 'Bundle' -notin $PackageTypeFilter){return @($script:installed|Where-Object {-not $_.IsBundle})};$script:installed}
 function Get-AppxProvisionedPackage {param([switch]$Online) if(-not $Online){throw 'online required'};if($script:fail -eq 'query_provisioned'){throw 'fixture query failed'};$script:provisioned}
 function Remove-AppxPackage {param($Package,[switch]$AllUsers) if(-not $AllUsers){throw 'all users required'};$script:removed+=('installed:'+ $Package);if($script:fail -eq 'remove_installed'){throw 'fixture remove failed'};if($script:removeBundleChildren){$script:installed=@()}}
 function Remove-AppxProvisionedPackage {param($PackageName,[switch]$Online) if(-not $Online){throw 'online required'};$script:removed+=('provisioned:'+ $PackageName);if($script:fail -eq 'remove_provisioned'){throw 'fixture remove failed'}}
@@ -73,6 +73,15 @@ try {
  try{Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report|Out-Null}catch{$failed=$true}
  $saved=Get-Content -LiteralPath $report -Raw -Encoding UTF8|ConvertFrom-Json
  Assert ($failed -and -not $saved.Success -and $target -in $saved.SelectedRemaining) '移除後仍存在仍失敗'
+ $bundleOnly=[pscustomobject]@{Name=$target;PackageFullName=($target+'_5.0.0.0_neutral_~_fixture');PackageFamilyName=($target+'_fixture');IsBundle=$true;PackageUserInformation=@([pscustomobject]@{InstallState='Installed'})}
+ $script:installed=@($bundleOnly);$script:removed=@();$calls=$script:nativeCalls;$failed=$false
+ try{Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report -VerifyOnly|Out-Null}catch{$failed=$true}
+ $saved=Get-Content -LiteralPath $report -Raw -Encoding UTF8|ConvertFrom-Json
+ Assert ($failed -and -not $saved.Success -and $target -in $saved.SelectedRemaining -and $script:nativeCalls -eq $calls -and $script:removed.Count -eq 0) 'VerifyOnly 必須發現只剩 bundle 並拒絕成功'
+ $script:installed=@($bundleOnly);$script:removed=@();$script:removeBundleChildren=$false;$failed=$false
+ try{Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report|Out-Null}catch{$failed=$true}
+ $saved=Get-Content -LiteralPath $report -Raw -Encoding UTF8|ConvertFrom-Json
+ Assert ($failed -and -not $saved.Success -and $target -in $saved.SelectedRemaining -and $target -notin $saved.RemovedApps) '套用後只剩 bundle 仍失敗且不冒稱已移除'
  $calls=$script:nativeCalls;$script:removed=@();$script:installed=@();$v=Invoke-SetupDebloat -ModuleRoot $module -ReportPath $report -VerifyOnly
  Assert ($v.Success -and $script:nativeCalls -eq $calls -and $script:removed.Count -eq 0 -and $null -eq $v.AdditionalApps) 'VerifyOnly 不呼叫清理或移除'
 } finally {
