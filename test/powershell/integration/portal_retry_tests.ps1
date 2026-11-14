@@ -6,6 +6,7 @@ New-Item -ItemType Directory $parent|Out-Null
 $oldTool=$env:WINDOWS_SETUP_ARTIFACT_DOWNLOAD_TOOL
 $env:WINDOWS_SETUP_ARTIFACT_DOWNLOAD_TOOL='Invoke-ArtifactFixture'
 $global:portalRetryDownloadCalls=0
+function Assert([bool]$Value,[string]$Name){Write-Host ('@@ASSERT@@'+(@{Name=$Name;Passed=$Value}|ConvertTo-Json -Compress));if(-not $Value){throw $Name}}
 function global:gh {
  $global:LASTEXITCODE=0
  $vector=$args -join ' '
@@ -13,8 +14,10 @@ function global:gh {
  if($vector -like 'api repos/example/repo/commits/main*'){return 'abc'}
  if($vector -like 'api --paginate repos/example/repo/actions/runs/123/artifacts*'){
   $row='{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expired":false}'
-  if($global:portalRetryDuplicate){return @($row,$row)}
-  return $row
+  # gh --paginate emits each page's selected objects as consecutive JSON lines.
+  $firstPage=@(1..100|ForEach-Object {'{"id":1,"name":"unrelated","expired":false}'})
+  if($global:portalRetryDuplicate){return @($row)+$firstPage+@($row)}
+  return $firstPage+@($row)
  }
  if($vector -like 'api repos/example/repo/actions/runs/123*'){return '{"id":123,"run_attempt":1,"head_sha":"abc","head_branch":"main","event":"push"}'}
  throw "Unexpected gh command: $vector"
@@ -29,11 +32,11 @@ function global:Invoke-ArtifactFixture {
 }
 try {
  & (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository 'example/repo' -OutputDirectory (Join-Path $parent 'out') -MainRunId 123|Out-Null
- if($global:portalRetryDownloadCalls -ne 1){throw 'Expected one identity-bound helper invocation'}
+ Assert ($global:portalRetryDownloadCalls -eq 1) '第二頁唯一工件傳遞身分'
  $global:portalRetryDuplicate=$true
  $rejected=$false
  try {& (Join-Path $root 'script/report/get_portal_inputs.ps1') -Repository 'example/repo' -OutputDirectory (Join-Path $parent 'duplicate') -MainRunId 123|Out-Null} catch {$rejected=$true}
- if(-not $rejected -or $global:portalRetryDownloadCalls -ne 1){throw 'Duplicate artifacts must fail before download'}
+ Assert ($rejected -and $global:portalRetryDownloadCalls -eq 1) '跨頁重複工件下載前拒絕'
 } finally {
  $env:WINDOWS_SETUP_ARTIFACT_DOWNLOAD_TOOL=$oldTool
  Remove-Variable portalRetryDuplicate,portalRetryDownloadCalls -Scope Global -ErrorAction SilentlyContinue
