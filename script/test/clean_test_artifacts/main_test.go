@@ -57,6 +57,9 @@ func TestOwnedArtifactsRequireSelectionCompletionAndExpiry(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "active")); err != nil {
 		t.Fatal("active fixture removed", err)
 	}
+	if receipts, err := filepath.Glob(filepath.Join(root, ".windows_setup_cleanup_recovery_*")); err != nil || len(receipts) != 0 {
+		t.Fatalf("receipt remains after successful deletion: %v %v", receipts, err)
+	}
 }
 
 func TestRejectExistingRootTraversalAndFutureExpiry(t *testing.T) {
@@ -259,6 +262,8 @@ func TestConcurrentChildCreationPreservesNewData(t *testing.T) {
 		matches, e := filepath.Glob(filepath.Join(root, ".windows_setup_cleanup_recovery_*"))
 		if e != nil || len(matches) != 1 {
 			t.Errorf("missing persistent recovery receipt: %v %v", matches, e)
+		} else if data, readErr := os.ReadFile(matches[0]); readErr != nil || !bytes.Contains(data, []byte(`"name":"item"`)) || !bytes.Contains(data, []byte(`"nonce":`)) {
+			t.Errorf("invalid recovery receipt: %s %v", data, readErr)
 		}
 	}
 }

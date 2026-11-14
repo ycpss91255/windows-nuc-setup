@@ -350,6 +350,32 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 			return errors.New("manifest entry changed")
 		}
 	}
+	if len(m.Nonce) != 64 {
+		return errors.New("invalid nonce")
+	}
+	if _, err := hex.DecodeString(m.Nonce); err != nil {
+		return errors.New("invalid nonce")
+	}
+	receiptPath := filepath.Join(abs, ".windows_setup_cleanup_recovery_"+m.Nonce)
+	rp, err := syscall.UTF16PtrFromString(receiptPath)
+	if err != nil {
+		return err
+	}
+	receipt, err := syscall.CreateFile(rp, syscall.GENERIC_READ|syscall.GENERIC_WRITE|deleteAccess, syscall.FILE_SHARE_READ, nil, syscall.CREATE_NEW, syscall.FILE_ATTRIBUTE_NORMAL|openReparse, 0)
+	if err != nil {
+		return fmt.Errorf("create recovery receipt: %w", err)
+	}
+	defer syscall.CloseHandle(receipt)
+	var written uint32
+	if err = syscall.WriteFile(receipt, b, &written, nil); err != nil {
+		return fmt.Errorf("write recovery receipt: %w", err)
+	}
+	if int(written) != len(b) {
+		return errors.New("short recovery receipt write")
+	}
+	if err = syscall.FlushFileBuffers(receipt); err != nil {
+		return fmt.Errorf("flush recovery receipt: %w", err)
+	}
 	if beforeDeleteHook != nil {
 		beforeDeleteHook()
 	}
@@ -369,6 +395,11 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 		if i == 1 {
 			markerRemoved = true
 		}
+	}
+	flag := byte(1)
+	ok, _, callErr := setFileInformationByHandle.Call(uintptr(receipt), 4, uintptr(unsafe.Pointer(&flag)), 1)
+	if ok == 0 {
+		return fmt.Errorf("remove recovery receipt: %w", callErr)
 	}
 	return nil
 }
