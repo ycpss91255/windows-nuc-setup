@@ -182,3 +182,42 @@ func TestReplacedItemWithSameNameDoesNotInheritOwnership(t *testing.T) {
 		t.Fatal("replacement removed", err)
 	}
 }
+
+func TestDeleteRejectsReplacementAfterValidation(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "owned")
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}} {
+		if err := run(a, &out, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := filepath.Join(root, "item")
+	replacement := filepath.Join(root, "replacement")
+	if err := os.Mkdir(replacement, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(replacement, "keep"), []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var swapErr error
+	beforeDeleteHook = func() {
+		if swapErr = os.Rename(path, filepath.Join(root, "moved")); swapErr != nil {
+			return
+		}
+		swapErr = os.Rename(replacement, path)
+	}
+	defer func() { beforeDeleteHook = nil }()
+	err := run([]string{"clean", root, "item", "--delete"}, &out, now)
+	if swapErr == nil {
+		if err == nil {
+			t.Error("replacement accepted during deletion")
+		}
+		if _, e := os.Stat(filepath.Join(path, "keep")); e != nil {
+			t.Errorf("replacement data removed: %v", e)
+		}
+	} else if _, e := os.Stat(filepath.Join(replacement, "keep")); e != nil {
+		t.Errorf("unmoved replacement data removed: %v", e)
+	}
+}
