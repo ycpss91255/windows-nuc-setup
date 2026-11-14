@@ -193,3 +193,13 @@ func TestDecodeRejectsMissingJobStepsInventory(t *testing.T) {
 		t.Fatal("accepted absent job steps inventory")
 	}
 }
+
+func TestRejectsUnrepresentableElapsedInsteadOfSaturating(t *testing.T) {
+	x := fixture()
+	x.Pages[0].Jobs[0].CreatedAt = ptr("2000-01-01T00:00:00Z")
+	x.Pages[0].Jobs[0].StartedAt = ptr("2000-01-01T00:00:00Z")
+	x.Pages[0].Jobs[0].CompletedAt = ptr("2400-01-01T00:00:00Z")
+	if _, err := Analyze(x); err == nil {
+		t.Fatal("accepted saturated 400-year elapsed as valid milliseconds")
+	}
+}
