@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -266,5 +267,46 @@ func TestTimingPackRejectsMissingOrNullRequiredFields(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+type countedTimingReader struct{ remaining, read int64 }
+
+func (r *countedTimingReader) Read(p []byte) (int, error) {
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	n := int64(len(p))
+	if n > r.remaining {
+		n = r.remaining
+	}
+	r.remaining -= n
+	r.read += n
+	for i := 0; i < int(n); i++ {
+		p[i] = 'x'
+	}
+	return int(n), nil
+}
+
+func TestTimingReadsAreBoundedBeforeAndDuringRead(t *testing.T) {
+	reader := &countedTimingReader{remaining: 1 << 30}
+	if _, err := readTimingBounded(reader, 64); err == nil {
+		t.Fatal("accepted oversized stream")
+	}
+	if reader.read > 65 {
+		t.Fatalf("read %d bytes past bound", reader.read)
+	}
+	path := filepath.Join(t.TempDir(), "timing.json")
+	if err := os.WriteFile(path, bytes.Repeat([]byte("x"), 65), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readTimingRegular(path, 64); err == nil {
+		t.Fatal("accepted oversized regular file")
+	}
+	if err := os.WriteFile(path, []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := readTimingRegular(path, 64); err != nil || string(b) != "ok" {
+		t.Fatalf("valid file: %q %v", b, err)
 	}
 }

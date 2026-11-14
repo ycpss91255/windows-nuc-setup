@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	rc "windows_setup/script/test/repo_coverage"
@@ -58,12 +60,9 @@ func validateTimingRoster(expected []rc.PowerShellWorkerContext, receipts []timi
 func readWorkerTimings(dir string, expected []rc.PowerShellWorkerContext) ([]timingReceipt, error) {
 	receipts := make([]timingReceipt, 0, len(expected))
 	for i := range expected {
-		b, err := readShardRegular(filepath.Join(dir, fmt.Sprintf("worker_%d.timing.json", i)))
+		b, err := readTimingRegular(filepath.Join(dir, fmt.Sprintf("worker_%d.timing.json", i)), 16384)
 		if err != nil {
 			return nil, err
-		}
-		if len(b) > 16384 {
-			return nil, fmt.Errorf("timing receipt too large")
 		}
 		var receipt timingReceipt
 		if err := decodeTiming(b, &receipt); err != nil {
@@ -75,6 +74,37 @@ func readWorkerTimings(dir string, expected []rc.PowerShellWorkerContext) ([]tim
 		return nil, err
 	}
 	return receipts, nil
+}
+
+func readTimingBounded(r io.Reader, limit int64) ([]byte, error) {
+	if limit < 0 {
+		return nil, fmt.Errorf("invalid timing size limit")
+	}
+	b, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > limit {
+		return nil, fmt.Errorf("timing receipt too large")
+	}
+	return b, nil
+}
+
+func readTimingRegular(path string, limit int64) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, fmt.Errorf("timing must be a bounded regular file")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	opened, err := f.Stat()
+	if err != nil || !opened.Mode().IsRegular() || opened.Size() > limit || !os.SameFile(info, opened) {
+		return nil, fmt.Errorf("timing file changed before reading")
+	}
+	return readTimingBounded(f, limit)
 }
 
 // Reject duplicate object members before decoding to typed values.

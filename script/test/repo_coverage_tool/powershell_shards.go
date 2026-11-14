@@ -518,7 +518,7 @@ func powershellShardMerge(args []string, out io.Writer) error {
 			if e != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 				return fmt.Errorf("invalid timing artifact directory")
 			}
-			b, e = readShardRegular(filepath.Join(timingDir, "timing.json"))
+			b, e = readTimingRegular(filepath.Join(timingDir, "timing.json"), int64(len(m.Workers))*16384+4096)
 			if e != nil {
 				return e
 			}
