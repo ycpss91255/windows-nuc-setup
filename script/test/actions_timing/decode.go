@@ -15,6 +15,25 @@ type Expected struct {
 	HeadSHA, CheckoutSHA string
 }
 
+func (j *Job) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for name, raw := range fields {
+		if strings.EqualFold(name, "head_sha") && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return fmt.Errorf("job head cannot be null when supplied")
+		}
+	}
+	type plainJob Job
+	var value plainJob
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*j = Job(value)
+	return nil
+}
+
 // Decode validates shape and internal consistency of caller-supplied data;
 // independently obtained Expected values do not authenticate the data origin.
 func Decode(data []byte, expected Expected) (Output, error) {
