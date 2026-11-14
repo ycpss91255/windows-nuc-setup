@@ -3,16 +3,32 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	a "windows_setup/script/test/acceptance"
+	rc "windows_setup/script/test/repo_coverage"
 )
+
+func requireRuntimeCoverage(report a.Report) error {
+	e := report.RepoCoverage
+	if e == nil || e.SchemaVersion != rc.RuntimeSchemaVersion || e.Metric != rc.RuntimeMetric || e.Scope != rc.RuntimeScope || !e.Result.Complete || e.Result.Executable <= 0 {
+		return fmt.Errorf("缺少完整 PowerShell／C# runtime 覆蓋率")
+	}
+	covered := new(big.Int).Mul(big.NewInt(int64(e.Result.Covered)), big.NewInt(100))
+	minimum := new(big.Int).Mul(big.NewInt(int64(e.Result.Executable)), big.NewInt(80))
+	if covered.Cmp(minimum) < 0 {
+		return fmt.Errorf("runtime 覆蓋率未達精確 80%%")
+	}
+	return nil
+}
 
 func run() error {
 	dir := flag.String("artifact-dir", "", "report directory")
 	root := flag.String("source-root", "", "repository")
 	sha := flag.String("expected-sha", "", "expected commit")
 	run := flag.String("expected-run-url", "", "expected run")
+	runtimeScope := flag.Bool("require-runtime", false, "require complete runtime coverage")
 	flag.Parse()
 	provided := map[string]bool{}
 	flag.Visit(func(f *flag.Flag) { provided[f.Name] = true })
@@ -23,8 +39,12 @@ func run() error {
 		return e
 	}
 	read := func(n string) ([]byte, error) { return os.ReadFile(filepath.Join(*dir, n)) }
-	if _, e := a.ValidateReport(read, *sha, *run, false); e != nil {
+	report, e := a.ValidateReport(read, *sha, *run, false)
+	if e != nil {
 		return e
+	}
+	if *runtimeScope {
+		return requireRuntimeCoverage(report)
 	}
 	files, e := a.OwnedGoFiles(*root)
 	if e != nil {
