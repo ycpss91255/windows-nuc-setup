@@ -129,3 +129,24 @@ func TestActualCheckoutSource(t *testing.T) {
 		})
 	}
 }
+func TestRejectStaleMainRef(t *testing.T) {
+	d := t.TempDir()
+	event := filepath.Join(d, "event.json")
+	authority := filepath.Join(d, "authority.json")
+	base := strings.Repeat("a", 40)
+	head := strings.Repeat("b", 40)
+	liveMain := strings.Repeat("c", 40)
+	identity := map[string]any{"number": 1, "state": "open", "base": map[string]any{"ref": "main", "sha": base, "repo": map[string]string{"full_name": "fixture/repo"}}, "head": map[string]string{"sha": head}}
+	eventData, _ := json.Marshal(map[string]any{"number": 1, "pull_request": identity})
+	authorityData, _ := json.Marshal(identity)
+	if err := os.WriteFile(event, eventData, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(authority, authorityData, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PREFLIGHT_MAIN_SHA", liveMain)
+	if err := authorityCheck(event, authority); err == nil {
+		t.Fatal("accepted stale PR base despite advanced main ref")
+	}
+}
