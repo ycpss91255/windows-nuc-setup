@@ -58,7 +58,25 @@ func run() error {
 		}
 		return a.ValidateGoCoverageReport(read, files, *sha, *run, false)
 	}
-	return requireRuntimeCoverage(report)
+	if err := requireRuntimeCoverage(report); err != nil {
+		return err
+	}
+	summary, err := read("summary.json")
+	if err != nil {
+		return err
+	}
+	evidence, err := a.ValidateRepoCoverageReport(read, summary, *sha, *run, true)
+	if err != nil {
+		return err
+	}
+	if err = requireRuntimeCoverage(a.Report{RepoCoverage: evidence}); err != nil {
+		return err
+	}
+	inventory, err := read("coverage_inventory.json")
+	if err != nil {
+		return err
+	}
+	return rc.ValidateRuntimeInventory(*root, inventory)
 }
 func main() {
 	if e := run(); e != nil {
