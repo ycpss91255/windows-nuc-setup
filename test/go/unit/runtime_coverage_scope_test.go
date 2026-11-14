@@ -41,7 +41,7 @@ func TestRuntimeCoverageInventoryScopeAndUnknownExecutable(t *testing.T) {
 	if len(inv.Blockers) != 0 {
 		t.Fatalf("valid scope blocked: %v", inv.Blockers)
 	}
-	for _, name := range []string{"core/native/new.cs", "modules/demo/new.py", "core/new.go", "modules/demo/new.exe"} {
+	for _, name := range []string{"core/native/new.cs", "modules/demo/new.py", "core/new.go", "modules/demo/new.exe", "modules/demo/new.wsf", "modules/demo/new.vbe", "modules/demo/new.jar", "modules/demo/new.wasm", "modules/demo/new.msi"} {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			t.Fatal(err)

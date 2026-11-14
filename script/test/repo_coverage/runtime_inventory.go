@@ -34,12 +34,13 @@ func ScanRuntimeInventory(root string) (Inventory, error) {
 			inv.Blockers = append(inv.Blockers, s.Path+": runtime executable requires explicit scope decision")
 		}
 	}
+	executable := map[string]bool{".exe": true, ".dll": true, ".com": true, ".wsf": true, ".wsh": true, ".vbe": true, ".jse": true, ".hta": true, ".msi": true, ".msp": true, ".jar": true, ".wasm": true, ".pyw": true}
 	for _, e := range all.Excluded {
 		if e.Reason != "non-executable data, documentation, or dependency artifact" || !isRuntime(e.Path) {
 			continue
 		}
 		ext := strings.ToLower(path.Ext(e.Path))
-		if (ext == ".exe" || ext == ".dll" || ext == ".com") && !strings.EqualFold(e.Path, "modules/accounts/Autologon64.exe") {
+		if executable[ext] && !strings.EqualFold(e.Path, "modules/accounts/Autologon64.exe") {
 			inv.Blockers = append(inv.Blockers, e.Path+": runtime executable requires explicit scope decision")
 		}
 	}
