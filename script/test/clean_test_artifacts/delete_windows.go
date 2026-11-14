@@ -234,7 +234,7 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 		return fmt.Errorf("open item root: %w", e)
 	}
 	defer itemRoot.Close()
-	mark, _, e := openLockedMode(filepath.Join(p, itemMarker), true, finish != "")
+	mark, _, e := openLocked(filepath.Join(p, itemMarker), true)
 	if e != nil {
 		return e
 	}
@@ -252,6 +252,27 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 	var m metadata
 	if json.Unmarshal(b, &m) != nil || m.Kind != "windows_setup_disposable_v1" || m.Name != name || m.ID != id {
 		return errors.New("item marker changed")
+	}
+	receiptData := b
+	if finish == "" {
+		finished, _, err := openLocked(filepath.Join(p, finishMarker), true)
+		if err != nil {
+			return err
+		}
+		entries = append(entries, finished)
+		if finished.dir {
+			return errors.New("invalid finished manifest")
+		}
+		if err = rejectNamedStreams(finished.h); err != nil {
+			return err
+		}
+		receiptData, err = readLocked(finished.h)
+		if err != nil {
+			return err
+		}
+		if json.Unmarshal(receiptData, &m) != nil || m.Kind != "windows_setup_disposable_v1" || m.Name != name || m.ID != id {
+			return errors.New("invalid finished manifest")
+		}
 	}
 	markerRemoved := false
 	defer func() {
@@ -303,7 +324,7 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 			afterEnumerateHook()
 		}
 		for _, child := range children {
-			if dir == p && child.name == itemMarker {
+			if dir == p && (child.name == itemMarker || child.name == finishMarker) {
 				continue
 			}
 			q := filepath.Join(dir, child.name)
@@ -368,25 +389,32 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 		if len(encoded) > 65536 {
 			return errors.New("manifest too large")
 		}
-		if _, err = syscall.Seek(mark.h, 0, 0); err != nil {
+		fp, err := syscall.UTF16PtrFromString(filepath.Join(p, finishMarker))
+		if err != nil {
 			return err
 		}
-		if err = syscall.SetEndOfFile(mark.h); err != nil {
+		fh, err := syscall.CreateFile(fp, syscall.GENERIC_WRITE, syscall.FILE_SHARE_READ, nil, syscall.CREATE_NEW, syscall.FILE_ATTRIBUTE_NORMAL|openReparse, 0)
+		if err != nil {
 			return err
 		}
+		defer syscall.CloseHandle(fh)
+		var n uint32
 		if finishWriteTestHook != nil {
+			if err = syscall.WriteFile(fh, encoded[:1], &n, nil); err != nil {
+				return err
+			}
 			if err = finishWriteTestHook(); err != nil {
 				return err
 			}
+			return errors.New("unexpected test hook success")
 		}
-		var n uint32
-		if err = syscall.WriteFile(mark.h, encoded, &n, nil); err != nil {
+		if err = syscall.WriteFile(fh, encoded, &n, nil); err != nil {
 			return err
 		}
 		if int(n) != len(encoded) {
 			return errors.New("short marker write")
 		}
-		return syscall.FlushFileBuffers(mark.h)
+		return syscall.FlushFileBuffers(fh)
 	}
 	if len(snapshot) != len(m.Manifest) {
 		return errors.New("manifest entry count changed")
@@ -420,10 +448,10 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 	}
 	defer syscall.CloseHandle(receipt)
 	var written uint32
-	if err = syscall.WriteFile(receipt, b, &written, nil); err != nil {
+	if err = syscall.WriteFile(receipt, receiptData, &written, nil); err != nil {
 		return fmt.Errorf("write recovery receipt: %w", err)
 	}
-	if int(written) != len(b) {
+	if int(written) != len(receiptData) {
 		return errors.New("short recovery receipt write")
 	}
 	if err = syscall.FlushFileBuffers(receipt); err != nil {

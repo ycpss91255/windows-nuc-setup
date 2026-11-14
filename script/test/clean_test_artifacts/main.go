@@ -13,6 +13,7 @@ import (
 
 const rootMarker = ".windows_setup_cleanup_root_v1"
 const itemMarker = ".windows_setup_cleanup_item_v1"
+const finishMarker = ".windows_setup_cleanup_finished_v1"
 const rootContent = "windows_setup disposable artifacts root v1\n"
 
 type metadata struct {
@@ -108,8 +109,10 @@ func item(root, name string) (string, error) {
 	return p, nil
 }
 func readMetadata(p string) (metadata, error) {
+	return readMetadataFile(filepath.Join(p, itemMarker))
+}
+func readMetadataFile(f string) (metadata, error) {
 	var m metadata
-	f := filepath.Join(p, itemMarker)
 	if e := regular(f); e != nil {
 		return m, e
 	}
@@ -207,7 +210,11 @@ func run(args []string, out io.Writer, now time.Time) error {
 		if len(args) != 3 && !(len(args) == 4 && args[3] == "--delete") {
 			return errors.New("invalid clean arguments")
 		}
-		expiry, e := time.Parse(time.RFC3339, m.Expires)
+		finished, e := readMetadataFile(filepath.Join(p, finishMarker))
+		if e != nil || finished.Name != name || finished.ID != id {
+			return errors.New("invalid finished manifest")
+		}
+		expiry, e := time.Parse(time.RFC3339, finished.Expires)
 		if e != nil || now.Before(expiry) {
 			return errors.New("item is active or not expired")
 		}

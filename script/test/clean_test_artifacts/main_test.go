@@ -468,7 +468,7 @@ func TestManifestRejectsReplacementWithSimulatedReusedID(t *testing.T) {
 	if e := run([]string{"finish", root, "item", "2026-01-02T00:00:00Z"}, &out, now); e != nil {
 		t.Fatal(e)
 	}
-	meta, e := readMetadata(filepath.Join(root, "item"))
+	meta, e := readMetadataFile(filepath.Join(root, "item", finishMarker))
 	if e != nil || len(meta.Manifest) != 1 {
 		t.Fatalf("manifest: %v %v", meta, e)
 	}
