@@ -59,6 +59,9 @@ func TestReadWorkerTimingsUsesOnlyExpectedFilesAndRejectsTampering(t *testing.T)
 			t.Fatal("accepted tampered input")
 		}
 	}
+	 oversized:=append(append([]byte{},raw...),bytes.Repeat([]byte(" "), 16385)...)
+ if err:=os.WriteFile(path,oversized,0600);err!=nil {t.Fatal(err)}
+ if _,err:=readWorkerTimings(dir,[]rc.PowerShellWorkerContext{c});err==nil {t.Fatal("accepted oversized timing input")}
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
