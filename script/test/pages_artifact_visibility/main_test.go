@@ -194,3 +194,12 @@ func TestRESTPaginationAndDuplicateAcrossPages(t *testing.T) {
 		})
 	}
 }
+
+func TestNullRuntimeResponseIsNotMissingArtifact(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `null`) }))
+	defer server.Close()
+	_, err := runtimeVisible(context.Background(), options{client: server.Client(), runtimeURL: server.URL, runtimeToken: fixtureToken(), name: "github-pages-123-2", artifactID: "456"}, "fixture-run", "fixture-job")
+	if err == nil {
+		t.Fatal("null response accepted as empty artifact list")
+	}
+}
