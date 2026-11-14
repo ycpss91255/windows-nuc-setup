@@ -97,7 +97,11 @@ func interval(start, end *time.Time, enabled bool) (*int64, error) {
 	if end.Before(*start) {
 		return nil, fmt.Errorf("timestamp order invalid")
 	}
-	n := end.Sub(*start).Milliseconds()
+	delta := end.Sub(*start)
+	if !start.Add(delta).Equal(*end) {
+		return nil, fmt.Errorf("timestamp interval exceeds duration range")
+	}
+	n := delta.Milliseconds()
 	return &n, nil
 }
 func Analyze(in Input) (Output, error) {
