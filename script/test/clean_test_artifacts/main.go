@@ -260,7 +260,7 @@ func run(args []string, out io.Writer, now time.Time) error {
 			return e
 		}
 		if len(args) == 3 {
-			_, e = fmt.Fprintln(out, "預覽：", p)
+			_, e = fmt.Fprintln(out, "候選預覽（尚未核對清單與控制代碼）：", p)
 			return e
 		}
 		return safeDelete(root, name, m.ID, now)
