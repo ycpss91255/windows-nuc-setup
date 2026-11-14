@@ -150,13 +150,19 @@ func readLocked(h syscall.Handle) ([]byte, error) {
 	return buf[:n], nil
 }
 
-func safeDelete(root, name, expectedID string, now time.Time, anchor tempAnchor) error {
-	return safeProcess(root, name, expectedID, now, "", anchor)
+func safeDelete(root, name, expectedID, token string, now time.Time, anchor tempAnchor) error {
+	return safeProcess(root, name, expectedID, token, now, "", anchor, false)
 }
-func safeFinish(root, name, expectedID, expiry string, anchor tempAnchor) error {
-	return safeProcess(root, name, expectedID, time.Time{}, expiry, anchor)
+func safeFinish(root, name, expectedID, token, expiry string, anchor tempAnchor) error {
+	return safeProcess(root, name, expectedID, token, time.Time{}, expiry, anchor, false)
 }
-func safeProcess(root, name, expectedID string, now time.Time, finish string, temp tempAnchor) (result error) {
+func safePreview(root, name, expectedID, token string, now time.Time, anchor tempAnchor) error {
+	return safeProcess(root, name, expectedID, token, now, "", anchor, true)
+}
+func safeProcess(root, name, expectedID, expectedToken string, now time.Time, finish string, temp tempAnchor, preview bool) (result error) {
+	if beforeProcessLockHook != nil {
+		beforeProcessLockHook()
+	}
 	abs, e := filepath.Abs(root)
 	if e != nil {
 		return e
@@ -253,7 +259,7 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string, te
 		return e
 	}
 	var m metadata
-	if json.Unmarshal(b, &m) != nil || m.Kind != "windows_setup_disposable_v1" || m.Name != name || m.ID != id {
+	if json.Unmarshal(b, &m) != nil || m.Kind != "windows_setup_disposable_v1" || m.Name != name || m.ID != id || (expectedToken != "" && m.CreateToken != expectedToken) {
 		return errors.New("item marker changed")
 	}
 	receiptData := b
@@ -273,7 +279,7 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string, te
 		if err != nil {
 			return err
 		}
-		if json.Unmarshal(receiptData, &m) != nil || m.Kind != "windows_setup_disposable_v1" || m.Name != name || m.ID != id {
+		if json.Unmarshal(receiptData, &m) != nil || m.Kind != "windows_setup_disposable_v1" || m.Name != name || m.ID != id || (expectedToken != "" && m.CreateToken != expectedToken) {
 			return errors.New("invalid finished manifest")
 		}
 	}
@@ -439,6 +445,9 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string, te
 	}
 	if _, err := hex.DecodeString(m.Nonce); err != nil {
 		return errors.New("invalid nonce")
+	}
+	if preview {
+		return nil
 	}
 	receiptPath := filepath.Join(abs, ".windows_setup_cleanup_recovery_"+m.Nonce)
 	rp, err := syscall.UTF16PtrFromString(receiptPath)
