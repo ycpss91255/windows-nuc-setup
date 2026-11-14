@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -90,5 +91,78 @@ func TestShardPackExportsTimingOnlyAfterWorkerIdentityValidation(t *testing.T) {
 	}
 	if _, err = os.Stat(filepath.Join(output, "timing.json")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTimingMergeRejectsIncompleteOrCrossAttemptArtifacts(t *testing.T) {
+	for _, kind := range []string{"missing_artifact", "duplicate_suite", "wrong_attempt", "unknown_field"} {
+		t.Run(kind, func(t *testing.T) {
+			root, manifest, sha := shardCLIFixture(t)
+			parts := t.TempDir()
+			timings := t.TempDir()
+			for i := 0; i < 2; i++ {
+				dir := filepath.Join(parts, fmt.Sprintf("part_%d", i))
+				writeShardCLIProof(t, root, dir, 123+i, true)
+				bindShardCLIProof(t, root, dir, sha, i, 2, 1)
+				b, err := os.ReadFile(filepath.Join(dir, "worker_0.json"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var w struct{ Context rc.PowerShellWorkerContext }
+				if err = json.Unmarshal(b, &w); err != nil {
+					t.Fatal(err)
+				}
+				private := t.TempDir()
+				receipt := timingReceipt{1, w.Context, []timingPhase{{"startup", 1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}
+				b, _ = json.Marshal(receipt)
+				if err = os.WriteFile(filepath.Join(private, "worker_0.timing.json"), b, 0600); err != nil {
+					t.Fatal(err)
+				}
+				timingDir := filepath.Join(timings, fmt.Sprintf("powershell-timing-123-1-%d", i))
+				args := append(shardCLIArgs(root, manifest, sha), "--shard-index", fmt.Sprint(i), "--evidence-dir", dir, "--timing-input-dir", private, "--timing-output-dir", timingDir)
+				if err = powershellShardPack(args, &bytes.Buffer{}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			first := filepath.Join(timings, "powershell-timing-123-1-0", "timing.json")
+			second := filepath.Join(timings, "powershell-timing-123-1-1", "timing.json")
+			b, err := os.ReadFile(second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch kind {
+			case "missing_artifact":
+				if err = os.RemoveAll(filepath.Dir(second)); err != nil {
+					t.Fatal(err)
+				}
+			case "duplicate_suite":
+				b, err = os.ReadFile(first)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err = os.WriteFile(second, b, 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "wrong_attempt":
+				b = bytes.Replace(b, []byte(`"RunAttempt": 1`), []byte(`"RunAttempt": 2`), 1)
+				if err = os.WriteFile(second, b, 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "unknown_field":
+				b = bytes.Replace(b, []byte(`"SchemaVersion": 1`), []byte(`"SchemaVersion": 1, "private": "secret"`), 1)
+				if err = os.WriteFile(second, b, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			output := filepath.Join(t.TempDir(), "coverage")
+			timingOutput := filepath.Join(t.TempDir(), "timing")
+			args := append(shardCLIArgs(root, manifest, sha), "--input-dir", parts, "--output-dir", output, "--timing-input-dir", timings, "--timing-output-dir", timingOutput)
+			if err = powershellShardMerge(args, &bytes.Buffer{}); err == nil {
+				t.Fatalf("accepted %s", kind)
+			}
+			if _, err = os.Stat(filepath.Join(timingOutput, "timing.json")); !os.IsNotExist(err) {
+				t.Fatal("published invalid timing")
+			}
+		})
 	}
 }
