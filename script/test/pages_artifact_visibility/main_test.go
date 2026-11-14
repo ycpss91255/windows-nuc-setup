@@ -27,6 +27,7 @@ func TestVisibilityPreflight(t *testing.T) {
 		{"runtime missing deadline", "valid", "missing", false, 0},
 		{"runtime duplicate", "valid", "duplicate", false, 1},
 		{"runtime wrong id", "valid", "wrong", false, 1},
+		{"runtime unauthorized", "valid", "unauthorized", false, 1},
 		{"rest duplicate", "duplicate", "valid", false, 0},
 		{"rest expired", "expired", "valid", false, 0},
 		{"rest wrong id", "wrong", "valid", false, 0},
@@ -70,6 +71,10 @@ func TestVisibilityPreflight(t *testing.T) {
 			defer rest.Close()
 			runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				n := atomic.AddInt32(&runtimeCalls, 1)
+				if tc.runtimeMode == "unauthorized" {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
 				if tc.runtimeMode == "omitted" && n == 1 {
 					fmt.Fprint(w, `{}`)
 					return
@@ -109,6 +114,51 @@ func TestVisibilityPreflight(t *testing.T) {
 			}
 			if tc.restMode == "unauthorized" && atomic.LoadInt32(&restCalls) != 1 {
 				t.Error("401 retried")
+			}
+		})
+	}
+}
+
+func TestConfigurationFailsClosed(t *testing.T) {
+	for _, token := range []string{"", "a.b.c", "e30.e30.sig", "e30." + base64.RawURLEncoding.EncodeToString([]byte(`{"scp":"Actions.Results:r:j Actions.Results:x:y"}`)) + ".sig"} {
+		if _, _, err := runtimeScope(token); err == nil {
+			t.Fatal("invalid runtime scope accepted")
+		}
+	}
+	t.Setenv("GITHUB_RUN_ATTEMPT", "0")
+	if err := run(); err == nil {
+		t.Fatal("zero attempt accepted")
+	}
+	t.Setenv("GITHUB_RUN_ATTEMPT", "1")
+	t.Setenv("ACTIONS_RESULTS_URL", "http://example.com")
+	if err := run(); err == nil {
+		t.Fatal("insecure runtime URL accepted")
+	}
+	t.Setenv("ACTIONS_RESULTS_URL", "https://user@example.com")
+	if err := run(); err == nil {
+		t.Fatal("runtime URL userinfo accepted")
+	}
+	if err := observe(context.Background(), options{}); err == nil {
+		t.Fatal("empty configuration accepted")
+	}
+}
+
+func TestResponseSizeAndRedirectRejected(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		handler http.HandlerFunc
+	}{
+		{"oversize", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, strings.Repeat("x", maxResponse+1)) }},
+		{"redirect", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "https://example.com", http.StatusFound)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(tc.handler)
+			defer server.Close()
+			err := getJSON(context.Background(), options{client: server.Client()}, http.MethodGet, server.URL, "fixture-secret", nil, &struct{}{})
+			if err == nil || strings.Contains(err.Error(), "fixture-secret") {
+				t.Fatalf("unsafe response result: %v", err)
 			}
 		})
 	}
