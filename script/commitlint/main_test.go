@@ -77,3 +77,13 @@ func TestInstallAndCommit(t *testing.T) {
 		t.Fatalf("valid commit rejected: %v %s", err, out)
 	}
 }
+
+func TestOversizedMessageFailsClosed(t *testing.T) {
+ p := filepath.Join(t.TempDir(), "message")
+ secret := "token=fixturesecretvalue"
+ if err := os.WriteFile(p, []byte("測試："+strings.Repeat("a", 1024*1024)+secret), 0600); err != nil { t.Fatal(err) }
+ out, err := run(t, "lint", p)
+ if err == nil { t.Fatal("超過限制的訊息不可接受") }
+ if !strings.Contains(out, "過大") { t.Fatalf("必須因大小拒絕，而非其他原因：%s", out) }
+ if strings.Contains(out, secret) { t.Fatal("不得輸出機密") }
+}
