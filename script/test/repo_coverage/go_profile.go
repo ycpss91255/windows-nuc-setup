@@ -126,9 +126,19 @@ func NormalizeGo(profiles [][]byte, sources map[string][]byte, module string) (R
 	}
 	for name, source := range parsed {
 		var invalid error
+		communications := map[ast.Stmt]bool{}
+		ast.Inspect(source.file, func(node ast.Node) bool {
+			if clause, ok := node.(*ast.CommClause); ok && clause.Comm != nil {
+				communications[clause.Comm] = true
+			}
+			return true
+		})
 		ast.Inspect(source.file, func(node ast.Node) bool {
 			if invalid != nil {
 				return false
+			}
+			if stmt, ok := node.(ast.Stmt); ok && communications[stmt] {
+				return true
 			}
 			if !executableStatement(node) {
 				return true
