@@ -8,6 +8,7 @@ $fixture = Join-Path $temp ('windows_setup_wrapper_test_' + [guid]::NewGuid().To
 [void][IO.Directory]::CreateDirectory($fixture)
 $root = Join-Path $fixture 'owned root'
 $ps = (Get-Process -Id $PID).Path
+function Assert([bool]$Value, [string]$Name) { Write-Host ('@@ASSERT@@' + (@{Name=$Name;Passed=$Value} | ConvertTo-Json -Compress)); if (-not $Value) { throw $Name } }
 function Invoke-Wrapper([string[]]$Arguments, [int]$Expected) {
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -24,10 +25,13 @@ try {
     [IO.File]::WriteAllText($payload, 'owned fixture')
     [void](Invoke-Wrapper @('finish', $root, 'item', '2000-01-01T00:00:00Z') 0)
     $preview = Invoke-Wrapper @('clean', $root, 'item') 0
-    if ($preview -notmatch ([string][char]0x5019 + [char]0x9078) -or -not [IO.File]::Exists($payload)) { throw 'Preview must identify candidate and retain file' }
+    Assert (($preview -match ([string][char]0x5019 + [char]0x9078)) -and [IO.File]::Exists($payload)) 'Preview identifies candidate and retains data'
     [void](Invoke-Wrapper @('clean', $root, 'item', '--invalid') 1)
-    if (-not [IO.File]::Exists($payload)) { throw 'Invalid option deleted data' }
+    Assert ([IO.File]::Exists($payload)) 'Invalid option retains data'
     [void](Invoke-Wrapper @('clean', $root, 'item', '--delete') 0)
-    if ([IO.Directory]::Exists((Join-Path $root 'item'))) { throw 'Explicit deletion left item' }
+    Assert (-not [IO.Directory]::Exists((Join-Path $root 'item'))) 'Explicit deletion removes item'
+    $savedPath = $env:PATH
+    try { $env:PATH = $fixture; [void](Invoke-Wrapper @('clean', $root, 'item') 1) } finally { $env:PATH = $savedPath }
+    Assert $true 'Missing Go exits nonzero'
     Write-Output 'PASS: PS5 wrapper, preview, options and owned data'
 } finally { Pop-Location }
