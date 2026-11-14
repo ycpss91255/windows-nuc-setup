@@ -298,6 +298,41 @@ func TestEnumeratedChildReplacementIsNotDeleted(t *testing.T) {
 	}
 }
 
+func TestFinishedManifestRejectsChangedAndUnknownFiles(t *testing.T) {
+	for _, change := range []string{"changed", "unknown"} {
+		t.Run(change, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "owned")
+			now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+			var out bytes.Buffer
+			for _, a := range [][]string{{"init", root}, {"create", root, "item"}} {
+				if e := run(a, &out, now); e != nil {
+					t.Fatal(e)
+				}
+			}
+			p := filepath.Join(root, "item")
+			if e := os.WriteFile(filepath.Join(p, "original"), []byte("original"), 0600); e != nil {
+				t.Fatal(e)
+			}
+			if e := run([]string{"finish", root, "item", "2026-01-02T00:00:00Z"}, &out, now); e != nil {
+				t.Fatal(e)
+			}
+			name := "original"
+			if change == "unknown" {
+				name = "new"
+			}
+			if e := os.WriteFile(filepath.Join(p, name), []byte("new data"), 0600); e != nil {
+				t.Fatal(e)
+			}
+			if e := run([]string{"clean", root, "item", "--delete"}, &out, now); e == nil {
+				t.Error("changed or unknown data accepted")
+			}
+			if b, e := os.ReadFile(filepath.Join(p, name)); e != nil || string(b) != "new data" {
+				t.Errorf("new data lost: %q %v", b, e)
+			}
+		})
+	}
+}
+
 func TestConcurrentChildReplacementCannotEscape(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "owned")
