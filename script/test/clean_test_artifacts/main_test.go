@@ -2,12 +2,41 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestFinishWriteFailurePreservesOwnership(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "owned")
+	now := time.Now()
+	var out bytes.Buffer
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}} {
+		if e := run(a, &out, now); e != nil {
+			t.Fatal(e)
+		}
+	}
+	marker := filepath.Join(root, "item", itemMarker)
+	before, e := os.ReadFile(marker)
+	if e != nil {
+		t.Fatal(e)
+	}
+	finishWriteTestHook = func() error { return errors.New("injected write failure") }
+	defer func() { finishWriteTestHook = nil }()
+	if e := run([]string{"finish", root, "item", "2026-01-02T00:00:00Z"}, &out, now); e == nil || !strings.Contains(e.Error(), "injected") {
+		t.Fatalf("expected injected failure: %v", e)
+	}
+	after, e := os.ReadFile(marker)
+	if e != nil || !bytes.Equal(after, before) {
+		t.Fatalf("ownership marker lost: %q %v", after, e)
+	}
+	if e := run([]string{"clean", root, "item", "--delete"}, &out, now); e == nil {
+		t.Fatal("incomplete finish accepted")
+	}
+}
 
 func TestOwnedArtifactsRequireSelectionCompletionAndExpiry(t *testing.T) {
 	parent := t.TempDir()
