@@ -65,11 +65,14 @@ if($MainRunId){
  if($MainRunId -notmatch '^[0-9]+$'){throw 'Run ID 不合法。'}
  $run=(& gh api ('repos/'+$Repository+'/actions/runs/'+$MainRunId))|ConvertFrom-Json
  if($LASTEXITCODE -ne 0 -or ($run.id -isnot [int] -and $run.id -isnot [long]) -or [string]$run.id -cne $MainRunId -or ($run.run_attempt -isnot [int] -and $run.run_attempt -isnot [long]) -or $run.run_attempt -lt 1 -or $run.head_sha -cne $mainSha -or $run.head_branch -cne 'main' -or $run.event -cne $ExpectedMainEvent -or ($ExpectedMainEvent -ceq 'workflow_dispatch' -and $ExpectedMainAttempt -lt 1) -or ($ExpectedMainAttempt -gt 0 -and $run.run_attempt -ne $ExpectedMainAttempt)){throw 'main run 來源不符。'}
- $artifacts=(& gh api ('repos/'+$Repository+'/actions/runs/'+$MainRunId+'/artifacts'))|ConvertFrom-Json
- $artifact=@($artifacts.artifacts|Where-Object {$_.name -eq ('windows-test-reports-'+$MainRunId+'-'+$run.run_attempt) -and -not $_.expired})
- if($artifact.Count -eq 1){
-  $mainDir=Join-Path $out 'main';New-Item -ItemType Directory $mainDir|Out-Null
-  & gh run download $MainRunId --repo $Repository --name $artifact[0].name --dir $mainDir
+ $artifactLines=& gh api --paginate ('repos/'+$Repository+'/actions/runs/'+$MainRunId+'/artifacts?per_page=100') --jq '.artifacts[] | @json'
+ if($LASTEXITCODE -ne 0){throw '無法列出 main 品質工件。'}
+ $artifact=@($artifactLines|ForEach-Object {$_|ConvertFrom-Json}|Where-Object {$_.name -ceq ('windows-test-reports-'+$MainRunId+'-'+$run.run_attempt)})
+ if($artifact.Count -eq 1 -and $artifact[0].expired -ceq $false){
+  $mainDir=Join-Path $out 'main'
+  $helper=$env:WINDOWS_SETUP_ARTIFACT_DOWNLOAD_TOOL
+  if(-not $helper){throw '未設定品質工件下載工具。'}
+  & $helper --repo $Repository --run $MainRunId --attempt $run.run_attempt --id $artifact[0].id --digest $artifact[0].digest --dest $mainDir
   if($LASTEXITCODE -ne 0){throw 'main 品質快照下載失敗。'}
   $snapshot=Get-Content (Join-Path $mainDir 'summary.json') -Raw -Encoding UTF8|ConvertFrom-Json
   if($snapshot.Commit -cne $mainSha){throw 'main 快照提交不符。'}

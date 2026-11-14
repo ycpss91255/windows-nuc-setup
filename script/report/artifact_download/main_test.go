@@ -1,0 +1,130 @@
+package main
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestDownloadRetryAndValidation(t *testing.T) {
+	data := []byte("artifact bytes")
+	sum := sha256.Sum256(data)
+	for _, tc := range []struct {
+		name         string
+		status, want int
+		digest       string
+		truncate     bool
+		ok           bool
+	}{
+		{"503 then success", 503, 2, hex.EncodeToString(sum[:]), false, true},
+		{"unauthorized", 401, 1, hex.EncodeToString(sum[:]), false, false},
+		{"missing", 404, 1, hex.EncodeToString(sum[:]), false, false},
+		{"wrong digest", 200, 1, fmt.Sprintf("%064d", 0), false, false},
+		{"incomplete", 200, 1, hex.EncodeToString(sum[:]), true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			count := 0
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				count++
+				if count == 1 && tc.status != 200 {
+					w.WriteHeader(tc.status)
+					return
+				}
+				if tc.truncate {
+					w.Header().Set("Content-Length", "100")
+				}
+				_, _ = w.Write(data)
+			}))
+			defer s.Close()
+			result, err := download(context.Background(), s.Client(), s.URL, "", tc.digest, 3, time.Millisecond)
+			if (err == nil) != tc.ok || count != tc.want || (tc.ok && !bytes.Equal(result, data)) {
+				t.Fatalf("calls=%d err=%v", count, err)
+			}
+		})
+	}
+}
+
+func TestDownloadDeadline(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	defer s.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := download(ctx, s.Client(), s.URL, "", fmt.Sprintf("%064d", 0), 3, time.Millisecond)
+	if err == nil || ctx.Err() == nil {
+		t.Fatalf("deadline not honored: %v", err)
+	}
+}
+
+func TestArchiveRejectsUnsafeEntries(t *testing.T) {
+	if err := unpack([]byte("not zip"), t.TempDir()); err == nil {
+		t.Fatal("invalid archive accepted")
+	}
+	_ = io.EOF
+}
+
+func TestMetadataIdentity(t *testing.T) {
+	const digest = "sha256:abc"
+	for _, tc := range []struct {
+		name, payload string
+		ok            bool
+	}{
+		{"correct", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:abc","expired":false,"workflow_run":{"id":123}}`, true},
+		{"wrong id", `{"id":457,"name":"windows-test-reports-123-1","digest":"sha256:abc","expired":false,"workflow_run":{"id":123}}`, false},
+		{"wrong run", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:abc","expired":false,"workflow_run":{"id":124}}`, false},
+		{"wrong attempt", `{"id":456,"name":"windows-test-reports-123-2","digest":"sha256:abc","expired":false,"workflow_run":{"id":123}}`, false},
+		{"wrong digest", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:def","expired":false,"workflow_run":{"id":123}}`, false},
+		{"expired", `{"id":456,"name":"windows-test-reports-123-1","digest":"sha256:abc","expired":true,"workflow_run":{"id":123}}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateMetadata(strings.NewReader(tc.payload), "456", "123", 1, digest)
+			if (err == nil) != tc.ok {
+				t.Fatalf("identity validation: %v", err)
+			}
+		})
+	}
+}
+
+func TestArchiveRejectsTraversalAndSymlinks(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mode os.FileMode
+	}{{"../escape", 0600}, {"dir/../../escape", 0600}, {"link", os.ModeSymlink | 0777}} {
+		t.Run(tc.name, func(t *testing.T) {
+			var b bytes.Buffer
+			zw := zip.NewWriter(&b)
+			header := &zip.FileHeader{Name: tc.name}
+			header.SetMode(tc.mode)
+			w, err := zw.CreateHeader(header)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = w.Write([]byte("content"))
+			if err = zw.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err = unpack(b.Bytes(), t.TempDir()); err == nil {
+				t.Fatal("unsafe entry accepted")
+			}
+		})
+	}
+}
+
+func TestDownloadExhaustsBoundedAttempts(t *testing.T) {
+	count := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { count++; w.WriteHeader(503) }))
+	defer s.Close()
+	_, err := download(context.Background(), s.Client(), s.URL, "", fmt.Sprintf("%064d", 0), 3, time.Millisecond)
+	if err == nil || count != 3 {
+		t.Fatalf("calls=%d err=%v", count, err)
+	}
+}
