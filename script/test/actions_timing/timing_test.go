@@ -170,3 +170,26 @@ func TestInProgressJobRetainsKnownPendingWithoutInventingElapsed(t *testing.T) {
 		t.Fatalf("known pending lost or elapsed invented: %+v", out.Jobs[0])
 	}
 }
+
+func TestDecodeRejectsMissingJobStepsInventory(t *testing.T) {
+	x := fixture()
+	wire := struct {
+		Run   Run    `json:"run"`
+		Pages []Page `json:"pages"`
+	}{x.Run, x.Pages}
+	data, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err = json.Unmarshal(data, &root); err != nil {
+		t.Fatal(err)
+	}
+	job := root["pages"].([]any)[0].(map[string]any)["jobs"].([]any)[0].(map[string]any)
+	delete(job, "steps")
+	data, _ = json.Marshal(root)
+	expected := Expected{Repository: x.Repository, RunID: x.RunID, Attempt: x.Attempt, HeadSHA: x.HeadSHA}
+	if _, err = Decode(data, expected); err == nil {
+		t.Fatal("accepted absent job steps inventory")
+	}
+}
