@@ -518,7 +518,7 @@ func powershellShardMerge(args []string, out io.Writer) error {
 				return e
 			}
 			var shardReceipts []timingReceipt
-			if e = decodeShardManifest(b, &shardReceipts); e != nil {
+			if e = decodeTiming(b, &shardReceipts); e != nil {
 				return e
 			}
 			receipts = append(receipts, shardReceipts...)

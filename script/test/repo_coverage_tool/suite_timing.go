@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	rc "windows_setup/script/test/repo_coverage"
@@ -59,7 +61,7 @@ func readWorkerTimings(dir string, expected []rc.PowerShellWorkerContext) ([]tim
 			return nil, err
 		}
 		var receipt timingReceipt
-		if err := decodeShardManifest(b, &receipt); err != nil {
+		if err := decodeTiming(b, &receipt); err != nil {
 			return nil, err
 		}
 		receipts = append(receipts, receipt)
@@ -68,4 +70,54 @@ func readWorkerTimings(dir string, expected []rc.PowerShellWorkerContext) ([]tim
 		return nil, err
 	}
 	return receipts, nil
+}
+
+// Reject duplicate object members before decoding to typed values.
+func decodeTiming(data []byte, target any) error {
+	d := json.NewDecoder(bytes.NewReader(data))
+	var value func() error
+	value = func() error {
+		token, err := d.Token()
+		if err != nil {
+			return err
+		}
+		delim, ok := token.(json.Delim)
+		if !ok {
+			return nil
+		}
+		switch delim {
+		case '{':
+			names := map[string]bool{}
+			for d.More() {
+				k, err := d.Token()
+				if err != nil {
+					return err
+				}
+				name, ok := k.(string)
+				if !ok || names[name] {
+					return fmt.Errorf("duplicate timing field")
+				}
+				names[name] = true
+				if err = value(); err != nil {
+					return err
+				}
+			}
+			_, err = d.Token()
+			return err
+		case '[':
+			for d.More() {
+				if err = value(); err != nil {
+					return err
+				}
+			}
+			_, err = d.Token()
+			return err
+		default:
+			return fmt.Errorf("invalid timing value")
+		}
+	}
+	if err := value(); err != nil {
+		return err
+	}
+	return decodeShardManifest(data, target)
 }
