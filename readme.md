@@ -834,6 +834,8 @@ Pages 部署後匿名讀取首頁、main 報表、JSON／Markdown／JUnit、整�
 
 維護者可用 Go 執行 `go run ./script/test/clean_test_artifacts` 管理本工具新建的拋棄式測試資料夾。先以 `init <新根目錄>` 建立不存在的專用根目錄，再用 `create <根目錄> <名稱>` 建立單項。僅在資料確定可拋棄、無續跑或私人證據需求後，以 `finish <根目錄> <名稱> <RFC3339到期時間>` 標記完成。`clean <根目錄> <名稱>` 預設只預覽；明確加上 `--delete` 才刪除選定且已到期的單項。範例：
 
+刪除不是交易：失敗前已刪除的子項不會還原；若同時新增檔案，該檔案不會被本次刪除。工具在移除標記後遇到失敗會嘗試以原內容重建標記，若重建失敗會回報錯誤；突然中止程序或儲存裝置錯誤可能使標記無法重建。請停止其他寫入後檢查剩餘資料與錯誤訊息，不要自行認領未知資料。
+
 ```powershell
 go run ./script/test/clean_test_artifacts init C:\scratch\disposable_test_root
 go run ./script/test/clean_test_artifacts create C:\scratch\disposable_test_root sample

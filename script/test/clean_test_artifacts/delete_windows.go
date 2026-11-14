@@ -65,7 +65,7 @@ func readLocked(h syscall.Handle) ([]byte, error) {
 	return buf[:n], nil
 }
 
-func safeDelete(root, name, expectedID string, now time.Time) error {
+func safeDelete(root, name, expectedID string, now time.Time) (result error) {
 	abs, e := filepath.Abs(root)
 	if e != nil {
 		return e
@@ -156,6 +156,22 @@ func safeDelete(root, name, expectedID string, now time.Time) error {
 	if json.Unmarshal(b, &m) != nil || m.Kind != "windows_setup_disposable_v1" || m.Name != name || m.ID != id {
 		return errors.New("item marker changed")
 	}
+	markerRemoved := false
+	defer func() {
+		if result == nil || !markerRemoved {
+			return
+		}
+		f, err := os.OpenFile(filepath.Join(p, itemMarker), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err == nil {
+			_, err = f.Write(b)
+			if closeErr := f.Close(); err == nil {
+				err = closeErr
+			}
+		}
+		if err != nil {
+			result = fmt.Errorf("%w; restore ownership marker: %v", result, err)
+		}
+	}()
 	expiry, e := time.Parse(time.RFC3339, m.Expires)
 	if e != nil || now.Before(expiry) {
 		return errors.New("item active or not expired")
@@ -215,6 +231,9 @@ func safeDelete(root, name, expectedID string, now time.Time) error {
 			return e
 		}
 		entries[i].h = syscall.InvalidHandle
+		if i == 1 {
+			markerRemoved = true
+		}
 	}
 	return nil
 }
