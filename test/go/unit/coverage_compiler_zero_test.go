@@ -79,7 +79,7 @@ func TestCompilerZeroStatementBlocksRemainCanonical(t *testing.T) {
 		if err = os.WriteFile(filepath.Join(root, "coverage.json"), data, 0600); err != nil {
 			t.Fatal(err)
 		}
-		script := `$ErrorActionPreference='Stop'; . $env:FIXTURE_GO_HELPER; $c=Get-Content -Raw -Encoding UTF8 -LiteralPath $env:FIXTURE_GO_JSON|ConvertFrom-Json; Assert-GoCoverageProfile -Coverage $c -Directory $env:FIXTURE_GO_DIR; Write-Host '@@ASSERT@@{"Name":"compiler profile accepted by PowerShell","Passed":true}'`
+		script := `$ErrorActionPreference='Stop'; $env:PSModulePath=(Join-Path $PSHOME 'Modules')+';'+$env:PSModulePath; . $env:FIXTURE_GO_HELPER; $c=Get-Content -Raw -Encoding UTF8 -LiteralPath $env:FIXTURE_GO_JSON|ConvertFrom-Json; Assert-GoCoverageProfile -Coverage $c -Directory $env:FIXTURE_GO_DIR; Write-Host '@@ASSERT@@{"Name":"compiler profile accepted by PowerShell","Passed":true}'`
 		ps := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
 		ps.Env = append(os.Environ(), "FIXTURE_GO_HELPER="+helper, "FIXTURE_GO_JSON="+filepath.Join(root, "coverage.json"), "FIXTURE_GO_DIR="+root)
 		if output, err := ps.CombinedOutput(); err != nil {
