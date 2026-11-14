@@ -77,7 +77,9 @@ func EvaluateCoverage(profiles [][]byte, expectedFiles []string) (CoverageMeasur
 				count = 1
 			}
 			blocks[id] = block{match[1], n, count}
-			files[match[1]] = true
+			if n > 0 {
+				files[match[1]] = true
+			}
 			packages[path.Dir(match[1])] = true
 		}
 	}
