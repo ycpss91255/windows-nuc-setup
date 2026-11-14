@@ -49,6 +49,10 @@ func TestRunDownloadsOfficialRedirectWithoutToken(t *testing.T) {
 		case "/repos/example/repo/actions/artifacts/456":
 			fmt.Fprintf(w, `{"id":456,"name":"windows-test-reports-123-1","digest":%q,"size_in_bytes":100,"expired":false,"workflow_run":{"id":123}}`, digest)
 		case "/repos/example/repo/actions/artifacts/456/zip":
+			if calls == 2 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
 			http.Redirect(w, r, "https://storage.example.test/content", http.StatusFound)
 		case "/content":
 			leaked = r.Header.Get("Authorization") != ""
@@ -72,7 +76,7 @@ func TestRunDownloadsOfficialRedirectWithoutToken(t *testing.T) {
 	if err := run(); err != nil {
 		t.Fatalf("production run rejected redirect: %v", err)
 	}
-	if leaked || calls != 3 {
+	if leaked || calls != 4 {
 		t.Fatalf("calls=%d leaked=%v", calls, leaked)
 	}
 	if got, err := os.ReadFile(filepath.Join(dest, "summary.json")); err != nil || strings.TrimSpace(string(got)) != "{}" {
