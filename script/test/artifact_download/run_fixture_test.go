@@ -79,3 +79,31 @@ func TestRunDownloadsOfficialRedirectWithoutToken(t *testing.T) {
 		t.Fatalf("output invalid: %v", err)
 	}
 }
+
+func TestRunRejectsOversizeMetadataBeforeDownload(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+	zipCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/zip") {
+			zipCalls++
+			w.WriteHeader(500)
+			return
+		}
+		fmt.Fprintf(w, `{"id":456,"name":"windows-test-reports-123-1","digest":%q,"size_in_bytes":%d,"expired":false,"workflow_run":{"id":123}}`, digest, maxArchive+1)
+	}))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = fixtureTransport{u, server.Client().Transport}
+	defer func() { http.DefaultTransport = oldTransport }()
+	oldFlags, oldArgs := flag.CommandLine, os.Args
+	defer func() { flag.CommandLine = oldFlags; os.Args = oldArgs }()
+	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+	flag.CommandLine.SetOutput(io.Discard)
+	os.Args = []string{"artifact_download", "--repo", "example/repo", "--run", "123", "--attempt", "1", "--id", "456", "--digest", digest, "--dest", filepath.Join(t.TempDir(), "result")}
+	t.Setenv("GH_TOKEN", "fixture-token")
+	err := run()
+	if err == nil || zipCalls != 0 {
+		t.Fatalf("expected metadata size rejection before download; calls=%d err=%v", zipCalls, err)
+	}
+}
