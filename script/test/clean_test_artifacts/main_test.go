@@ -38,6 +38,19 @@ func TestFinishWriteFailurePreservesOwnership(t *testing.T) {
 	}
 }
 
+func TestCreateWithoutNewDirectoryAPI(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "owned")
+	testCreateDirectory2Unavailable = true
+	defer func() { testCreateDirectory2Unavailable = false }()
+	var out bytes.Buffer
+	if e := run([]string{"init", root}, &out, time.Now()); e != nil {
+		t.Fatalf("safe creation requires newer optional API: %v", e)
+	}
+	if e := run([]string{"create", root, "item"}, &out, time.Now()); e != nil {
+		t.Fatalf("safe item creation requires newer optional API: %v", e)
+	}
+}
+
 func TestOwnedArtifactsRequireSelectionCompletionAndExpiry(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "owned")

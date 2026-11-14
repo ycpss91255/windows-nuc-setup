@@ -60,6 +60,9 @@ func createOwnedDirectory(path, name string, root bool) error {
 			return errors.New("invalid root marker")
 		}
 	}
+	if testCreateDirectory2Unavailable {
+		return errors.New("atomic directory creation unavailable")
+	}
 	if e := createDirectory2.Find(); e != nil {
 		return fmt.Errorf("atomic directory creation unavailable: %w", e)
 	}
