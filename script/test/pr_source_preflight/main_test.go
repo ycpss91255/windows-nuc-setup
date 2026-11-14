@@ -161,3 +161,53 @@ func TestRejectStaleMainRef(t *testing.T) {
 		t.Fatal("accepted stale PR base despite advanced main ref")
 	}
 }
+
+func TestWorkflowRejectsFailedMainQuery(t *testing.T) {
+	workflow, err := os.ReadFile(filepath.Join("..", "..", "..", ".github", "workflows", "windows_tests.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var commands []string
+	recording := false
+	for _, line := range strings.Split(string(workflow), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "set -euo pipefail" {
+			recording = true
+		}
+		if recording {
+			commands = append(commands, line)
+		}
+		if recording && strings.HasPrefix(line, "go run ./script/test/pr_source_preflight ") {
+			break
+		}
+	}
+	if len(commands) < 3 || !strings.HasPrefix(commands[len(commands)-1], "go run ") {
+		t.Fatal("preflight workflow commands not found")
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		bash = `C:\Program Files\Git\bin\bash.exe`
+		if _, err = os.Stat(bash); err != nil {
+			t.Fatal("bash required for workflow behavior test")
+		}
+	}
+	for _, tc := range []struct {
+		name        string
+		exit        string
+		wantSuccess bool
+	}{{"success", "0", true}, {"failure after valid output", "1", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			script := "gh() { if [[ $2 == */git/ref/heads/main ]]; then printf '%040d\\n' 1; return " + tc.exit + "; fi; printf '{}\\n'; }\ngit() { printf 'fixture\\n'; }\ngo() { printf 'reached-go\\n'; }\n" + strings.Join(commands, "\n")
+			c := exec.Command(bash, "-c", script)
+			c.Dir = t.TempDir()
+			c.Env = append(os.Environ(), "RUNNER_TEMP=.", "GITHUB_REPOSITORY=fixture/repo", "PR_NUMBER=1", "GITHUB_EVENT_PATH=event", "GITHUB_SHA=fixture", "EVENT_BASE=fixture", "EVENT_HEAD=fixture")
+			out, err := c.CombinedOutput()
+			if (err == nil) != tc.wantSuccess {
+				t.Fatalf("want success=%v, got %v: %s", tc.wantSuccess, err, out)
+			}
+			if strings.Contains(string(out), "reached-go") != tc.wantSuccess {
+				t.Fatalf("unexpected preflight invocation: %s", out)
+			}
+		})
+	}
+}
