@@ -800,6 +800,41 @@ func TestRuntimeReleaseReportDoesNotRequireGoCoverage(t *testing.T) {
 	if err := validateReports(options{source: source, version: "v0.1.0", commit: sha, run: runURL, attempt: 1}, native, container); err != nil {
 		t.Fatalf("runtime release without Go coverage rejected: %v", err)
 	}
+	base := t.TempDir()
+	nativeDir, containerDir := filepath.Join(base, "windows-test-reports-1-1"), filepath.Join(base, "docker-test-reports-1-1")
+	for _, pair := range []struct {
+		dir   string
+		files map[string][]byte
+	}{{nativeDir, native}, {containerDir, container}} {
+		if err := os.Mkdir(pair.dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		for name, data := range pair.files {
+			if err := os.WriteFile(filepath.Join(pair.dir, name), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	archive := filepath.Join(base, "windows_setup_report_v0.1.0.zip")
+	if err := export(options{native: nativeDir, container: containerDir, source: source, version: "v0.1.0", commit: sha, run: runURL, attempt: 1, output: archive}); err != nil {
+		t.Fatalf("runtime bundle export: %v", err)
+	}
+	z, err := zip.OpenReader(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range z.File {
+		if strings.HasPrefix(f.Name, "native/go_coverage.") {
+			t.Errorf("runtime bundle includes Go coverage: %s", f.Name)
+		}
+	}
+	if err = z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	verified := filepath.Join(t.TempDir(), "verified")
+	if err := verify([]string{"--archive", archive, "--source-root", source, "--version", "v0.1.0", "--commit", sha, "--run-url", runURL, "--run-attempt", "1", "--output-dir", verified}); err != nil {
+		t.Fatalf("runtime bundle verify: %v", err)
+	}
 }
 func TestOutputParentComparisonRespectsPlatform(t *testing.T) {
 	if sameOutputParent("/tmp/A", "/tmp/a", "linux") {

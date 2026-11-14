@@ -27,6 +27,7 @@ import (
 )
 
 var nativeNames = []string{"index.html", "summary.json", "summary.md", "junit.xml", "unit.svg", "integration.svg", "coverage.svg", "repo_coverage.json", "coverage_inventory.json", "coverage.xml", "go_coverage.json", "go_coverage.out", "go_coverage.svg"}
+var nativeRuntimeNames = []string{"index.html", "summary.json", "summary.md", "junit.xml", "unit.svg", "integration.svg", "coverage.svg", "repo_coverage.json", "coverage_inventory.json", "coverage.xml"}
 var containerNames = []string{"index.html", "summary.json", "summary.md", "junit.xml", "unit.svg", "integration.svg", "coverage.svg"}
 
 const provenanceNote = "CI selects exact run and attempt artifacts; this manifest records supplied context and is not an independent provenance attestation."
@@ -41,6 +42,7 @@ type fileRecord struct {
 }
 type bundleManifest struct {
 	SchemaVersion int          `json:"schema_version"`
+	Scope         string       `json:"scope,omitempty"`
 	Version       string       `json:"version"`
 	Commit        string       `json:"commit"`
 	RunURL        string       `json:"run_url"`
@@ -386,9 +388,24 @@ func export(o options) error {
 	if e = sourceClean(o); e != nil {
 		return e
 	}
-	native, e := loadReport(o.native, nativeNames)
+	entries, e := os.ReadDir(o.native)
 	if e != nil {
 		return e
+	}
+	namesForNative := nativeNames
+	if len(entries) == len(nativeRuntimeNames) {
+		namesForNative = nativeRuntimeNames
+	}
+	native, e := loadReport(o.native, namesForNative)
+	if e != nil {
+		return e
+	}
+	var header struct{ RepoCoverage struct{ SchemaVersion int } }
+	if e = json.Unmarshal(native["summary.json"], &header); e != nil {
+		return e
+	}
+	if (header.RepoCoverage.SchemaVersion == c.RuntimeSchemaVersion) != (len(namesForNative) == len(nativeRuntimeNames)) {
+		return errors.New("native report scope and file set differ")
 	}
 	container, e := loadReport(o.container, containerNames)
 	if e != nil {
@@ -411,6 +428,10 @@ func export(o options) error {
 	}
 	sort.Strings(names)
 	m := bundleManifest{SchemaVersion: 1, Version: o.version, Commit: o.commit, RunURL: o.run, RunAttempt: o.attempt, Provenance: provenanceNote}
+	if header.RepoCoverage.SchemaVersion == c.RuntimeSchemaVersion {
+		m.SchemaVersion = 2
+		m.Scope = c.RuntimeScope
+	}
 	for _, n := range names {
 		sum := sha256.Sum256(files[n])
 		m.Files = append(m.Files, fileRecord{Path: n, Size: int64(len(files[n])), SHA256: hex.EncodeToString(sum[:])})
@@ -551,7 +572,11 @@ func verify(args []string) error {
 		return e
 	}
 	allowed := map[string]bool{"index.html": true, "report_scope.md": true, "manifest.json": true}
-	for _, n := range nativeNames {
+	namesForNative := nativeNames
+	if len(z.File) == 3+len(nativeRuntimeNames)+len(containerNames) {
+		namesForNative = nativeRuntimeNames
+	}
+	for _, n := range namesForNative {
 		allowed["native/"+n] = true
 	}
 	for _, n := range containerNames {
@@ -608,7 +633,8 @@ func verify(args []string) error {
 			return e
 		}
 	}
-	if m.SchemaVersion != 1 || m.Version != o.version || m.Commit != o.commit || m.RunURL != o.run || m.RunAttempt != o.attempt || m.Provenance != provenanceNote || len(m.Files) != len(allowed)-1 {
+	validScope := m.SchemaVersion == 1 && m.Scope == "" && len(namesForNative) == len(nativeNames) || m.SchemaVersion == 2 && m.Scope == c.RuntimeScope && len(namesForNative) == len(nativeRuntimeNames)
+	if !validScope || m.Version != o.version || m.Commit != o.commit || m.RunURL != o.run || m.RunAttempt != o.attempt || m.Provenance != provenanceNote || len(m.Files) != len(allowed)-1 {
 		return errors.New("manifest identity mismatch")
 	}
 	manifestSeen := map[string]bool{}
@@ -624,11 +650,18 @@ func verify(args []string) error {
 		}
 	}
 	native, container := map[string][]byte{}, map[string][]byte{}
-	for _, n := range nativeNames {
+	for _, n := range namesForNative {
 		native[n] = files["native/"+n]
 	}
 	for _, n := range containerNames {
 		container[n] = files["windows_container/"+n]
+	}
+	var reportHeader struct{ RepoCoverage struct{ SchemaVersion int } }
+	if e = json.Unmarshal(native["summary.json"], &reportHeader); e != nil {
+		return e
+	}
+	if (m.SchemaVersion == 2) != (reportHeader.RepoCoverage.SchemaVersion == c.RuntimeSchemaVersion) {
+		return errors.New("manifest and report scope differ")
 	}
 	if e = validateReports(o, native, container); e != nil {
 		return e
@@ -689,7 +722,11 @@ func writeVerifiedOutput(output string, archive []byte, files map[string][]byte,
 	}
 	digest := sha256.Sum256(archive)
 	summary := sha256.Sum256(files["native/summary.json"])
-	profile := sha256.Sum256(files["native/go_coverage.out"])
+	profileHash := ""
+	if profileBytes, ok := files["native/go_coverage.out"]; ok {
+		profile := sha256.Sum256(profileBytes)
+		profileHash = hex.EncodeToString(profile[:])
+	}
 	metadata := struct {
 		ContextOrigin string `json:"context_origin"`
 		ArchiveSHA256 string `json:"archive_sha256"`
@@ -699,8 +736,8 @@ func writeVerifiedOutput(output string, archive []byte, files map[string][]byte,
 		RunURL        string `json:"run_url"`
 		RunAttempt    int    `json:"run_attempt"`
 		SummarySHA256 string `json:"summary_sha256"`
-		ProfileSHA256 string `json:"profile_sha256"`
-	}{origin, hex.EncodeToString(digest[:]), int64(len(archive)), o.version, o.commit, o.run, o.attempt, hex.EncodeToString(summary[:]), hex.EncodeToString(profile[:])}
+		ProfileSHA256 string `json:"profile_sha256,omitempty"`
+	}{origin, hex.EncodeToString(digest[:]), int64(len(archive)), o.version, o.commit, o.run, o.attempt, hex.EncodeToString(summary[:]), profileHash}
 	data, err := json.Marshal(metadata)
 	if err != nil {
 		return err
