@@ -756,7 +756,7 @@ $newVersion = Read-Host '輸入尚未使用的新版本（vX.Y.Z 或 vX.Y.Z-rcN�
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\script\release\prepare_release.ps1 -Version $newVersion
 ```
 
-此命令將 Unreleased 區段提升為指定版本、寫入 `.version`，不提交、不建立標籤也不推送。審查版本內容後，以中文提交並開啟 Pull Request。主分支要求 `ci-rollup` 通過；使用保留各階段提交的 rebase merge，或儲存庫允許時使用 merge commit，不以 squash 抹掉 TDD 證據。版本必須符合 `vX.Y.Z` 或 `vX.Y.Z-rcN`。
+此命令將 Unreleased 區段提升為指定版本、寫入 `.version`，不提交、不建立標籤也不推送。審查版本內容後，以中文提交並開啟 Pull Request。主分支要求 `ci-rollup` 通過；只使用標題為「合併：…」的 merge commit，禁止 squash 與 rebase merge。版本必須符合 `vX.Y.Z` 或 `vX.Y.Z-rcN`。
 
 ### 標籤與發布門檻
 
@@ -828,9 +828,9 @@ PR 與 main 的 `requirements-gate` 讀取同一次 PS5.1 測試產物，驗證�
 
 Pages 部署後匿名讀取首頁、main 報表、JSON／Markdown／JUnit、整體及分層 SVG、README 的原生 CI／整體 coverage 徽章，以及歷史版本頁。驗收會重算 `repo_coverage.json`、`coverage_inventory.json`、`coverage.xml`，核對本次提交、Actions 來源與實際 checkout 的自有原始碼清單；整體量測必須完整，且 `Covered × 100 >= Executable × 80` 才能通過。分項資訊保留在報表與 Actions 摘要，不要求 README 顯示分項徽章。CDN 只有限重試，舊證據或不一致會失敗，無需 agent 代替腳本處理。
 
-實作、freeze、主代理與未參與實作的獨立代理完整審查流程見 [維護規範](agents.md)。發現問題必須修正後重新全需求審查，不能把上次 PASS 沿用到修改後版本。
+審查以本次變更、實際驗證及最新提交為準；發現問題後修正並重新核對受影響需求，不將先前提交的通過結果套用到修改後版本。具體代理分工依當次授權安排；儲存庫契約見 [維護規範](agents.md)，維護者偏好見 [工作方式](doc/maintainer_workflow.md)。
 
-每個問題／功能採嚴格 TDD，以獨立中文提交保留「測試（紅）→ 修改（綠）→ 優化（綠，可選）」及實跑命令、原因與結果；最終必要 CI 全綠才合併，歷史紅燈提交保留。純文件修改只記錄真實文件核對，不偽造失敗測試；既有歷史不追造 TDD。完整規則集中於 [維護規範](agents.md#嚴格-tdd-與中文提交證據)。
+每個問題／功能先實際執行紅燈測試並在 PR 記錄命令、預期原因、實際輸出與退出碼；測試與修正同一綠色提交，重構另成綠色提交。每個提交以獨立 detached 快照驗證；純文件不偽造紅燈。最終必要 CI 通過後只以 merge commit 合併；舊歷史不重寫。以 `git log --first-parent` 看主線 PR 總覽，以 `git log` 看完整歷史。完整契約見 [維護規範](agents.md)，維護者偏好另見 [工作方式](doc/maintainer_workflow.md)。
 
 ### 提交訊息輔助檢查
 
