@@ -8,9 +8,50 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
+
+func TestNativeCreateRejectsIncompleteResults(t *testing.T) {
+	for _, tc := range []struct {
+		name                          string
+		status, ioStatus, information uintptr
+		valid                         bool
+	}{
+		{"pending", 0x103, 0x103, 0, false},
+		{"invalid handle", 0, 0, 2, false},
+		{"incomplete io", 0, 0x103, 2, true},
+		{"not created", 0, 0, 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var held lockedEntry
+			if tc.valid {
+				var e error
+				held, _, e = openLocked(t.TempDir(), false)
+				if e != nil {
+					t.Fatal(e)
+				}
+			}
+			ntCreateFileTestHook = func(h *syscall.Handle, ios *ioStatusBlock) uintptr {
+				*h = syscall.InvalidHandle
+				if tc.valid {
+					*h = held.h
+				}
+				ios.Status, ios.Information = tc.ioStatus, tc.information
+				return tc.status
+			}
+			defer func() { ntCreateFileTestHook = nil }()
+			h, err := createRelativeDirectory(0, "child")
+			if err == nil {
+				if tc.valid {
+					syscall.CloseHandle(h)
+				}
+				t.Fatalf("accepted incomplete native result: %#x", tc.status)
+			}
+		})
+	}
+}
 
 func TestFinishWriteFailurePreservesOwnership(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "owned")
