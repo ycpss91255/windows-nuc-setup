@@ -7,6 +7,17 @@ $json='{"SchemaVersion":2,"Metric":"runtime-powershell-csharp-executable-lines-v
 $coverage=$json|ConvertFrom-Json
 Assert-RepoCoverage -Coverage $coverage
 Assert ((Get-RepoCoverageScopeLabel $coverage) -eq 'PowerShell/C# runtime') 'Runtime scope is explicit'
-$coverage.Scope='all-owned'
+$temp=Join-Path ([IO.Path]::GetTempPath()) ('windows_setup_runtime_schema_'+[guid]::NewGuid().ToString('N'))
+[void][IO.Directory]::CreateDirectory($temp)
+[IO.File]::WriteAllText((Join-Path $temp 'repo_coverage.json'),($coverage|ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
+$tool=Join-Path $temp 'verify.cmd';$capture=Join-Path $temp 'arguments.txt'
+[IO.File]::WriteAllText($tool,"@echo off`r`necho %* > `"%RUNTIME_SCHEMA_ARGS%`"`r`nexit /b 0`r`n",[Text.Encoding]::ASCII)
+$previous=$env:RUNTIME_SCHEMA_ARGS;$env:RUNTIME_SCHEMA_ARGS=$capture
+try {
+ $report=[pscustomobject]@{SchemaVersion=2;Commit=$coverage.Commit;RunUrl=$coverage.RunUrl;SourceState='Clean';RepoCoverage=$coverage}
+ Assert-RepoCoverageArtifacts -Report $report -Directory $temp -CoverageToolPath $tool -RequireComplete
+ Assert ([IO.File]::ReadAllText($capture).Contains('--runtime')) 'Runtime verifier mode is required'
+} finally {$env:RUNTIME_SCHEMA_ARGS=$previous}
+$coverage.Scope='all-owned' 
 $rejected=$false;try{Assert-RepoCoverage -Coverage $coverage}catch{$rejected=$true}
 Assert $rejected 'Altered scope rejected'

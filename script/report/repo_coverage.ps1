@@ -52,6 +52,7 @@ function Assert-RepoCoverageArtifacts {
  if(($published|ConvertTo-Json -Depth 20 -Compress) -cne ($Report.RepoCoverage|ConvertTo-Json -Depth 20 -Compress)){throw '摘要與整體覆蓋率附件不一致。'}
  if(-not $CoverageToolPath){$CoverageToolPath='repo_coverage_tool.exe'}
  $arguments=@('verify','--artifact-dir',$Directory,'--expected-sha',$Report.Commit,'--expected-run-url',$Report.RunUrl)
+ if($Report.RepoCoverage.SchemaVersion -eq 2){$arguments+=@('--runtime')}
  if($SourceRoot){$arguments+=@('--source-root',$SourceRoot)}
  if($RequireComplete){$arguments+=@('--require-complete','--minimum-percent','80')}
  & $CoverageToolPath @arguments | Write-Host
