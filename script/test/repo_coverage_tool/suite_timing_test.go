@@ -15,7 +15,7 @@ func TestTimingRosterRequiresEveryActualWorkerOnce(t *testing.T) {
 		{Commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", RunUrl: "https://github.com/example/repo/actions/runs/123", RunAttempt: 1, GlobalIndex: 0, TestFile: "test/a.ps1", TestSHA256: "a", ProcessId: 10},
 		{Commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", RunUrl: "https://github.com/example/repo/actions/runs/123", RunAttempt: 1, GlobalIndex: 1, TestFile: "test/b.ps1", TestSHA256: "b", ProcessId: 11},
 	}
-	phases := []timingPhase{{"startup", 1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}
+	phases := []timingPhase{{"worker_setup", 1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}
 	good := []timingReceipt{{1, contexts[0], phases}, {1, contexts[1], phases}}
 	if err := validateTimingRoster(contexts, good); err != nil {
 		t.Fatal(err)
@@ -24,8 +24,8 @@ func TestTimingRosterRequiresEveryActualWorkerOnce(t *testing.T) {
 		"missing": good[:1], "duplicate": {good[0], good[0]},
 		"wrong_attempt":   {good[0], {1, rc.PowerShellWorkerContext{RunAttempt: 2, GlobalIndex: 1}, phases}},
 		"wrong_suite":     {good[0], {1, rc.PowerShellWorkerContext{GlobalIndex: 1, TestFile: "other"}, phases}},
-		"negative":        {good[0], {1, contexts[1], []timingPhase{{"startup", -1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}},
-		"duplicate_phase": {good[0], {1, contexts[1], []timingPhase{{"startup", 1}, {"startup", 2}, {"serialization", 3}}}},
+		"negative":        {good[0], {1, contexts[1], []timingPhase{{"worker_setup", -1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}},
+		"duplicate_phase": {good[0], {1, contexts[1], []timingPhase{{"worker_setup", 1}, {"worker_setup", 2}, {"serialization", 3}}}},
 	}
 	for name, receipts := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -39,7 +39,7 @@ func TestTimingRosterRequiresEveryActualWorkerOnce(t *testing.T) {
 func TestReadWorkerTimingsUsesOnlyExpectedFilesAndRejectsTampering(t *testing.T) {
 	dir := t.TempDir()
 	c := rc.PowerShellWorkerContext{Commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", RunUrl: "https://github.com/example/repo/actions/runs/123", RunAttempt: 1, GlobalIndex: 0, TestFile: "test/a.ps1", TestSHA256: "a", ProcessId: 10}
-	good := timingReceipt{1, c, []timingPhase{{"startup", 1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}
+	good := timingReceipt{1, c, []timingPhase{{"worker_setup", 1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}
 	raw, _ := json.Marshal(good)
 	path := filepath.Join(dir, "worker_0.timing.json")
 	if err := os.WriteFile(path, raw, 0600); err != nil {
@@ -79,7 +79,7 @@ func TestShardPackExportsTimingOnlyAfterWorkerIdentityValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	private := t.TempDir()
-	timing := timingReceipt{1, worker.Context, []timingPhase{{"startup", 1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}
+	timing := timingReceipt{1, worker.Context, []timingPhase{{"worker_setup", 1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}
 	data, _ = json.Marshal(timing)
 	if err = os.WriteFile(filepath.Join(private, "worker_0.timing.json"), data, 0600); err != nil {
 		t.Fatal(err)
@@ -113,7 +113,7 @@ func TestTimingMergeRejectsIncompleteOrCrossAttemptArtifacts(t *testing.T) {
 					t.Fatal(err)
 				}
 				private := t.TempDir()
-				receipt := timingReceipt{1, w.Context, []timingPhase{{"startup", 1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}
+				receipt := timingReceipt{1, w.Context, []timingPhase{{"worker_setup", 1}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}
 				b, _ = json.Marshal(receipt)
 				if err = os.WriteFile(filepath.Join(private, "worker_0.timing.json"), b, 0600); err != nil {
 					t.Fatal(err)
