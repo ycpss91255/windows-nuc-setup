@@ -153,6 +153,9 @@ func Analyze(in Input) (Output, error) {
 				return Output{}, e
 			}
 			executed := j.Status == "completed" && j.Conclusion != "skipped" && j.Conclusion != ""
+			if _, e := interval(created, end, j.Conclusion != "skipped"); e != nil {
+				return Output{}, e
+			}
 			pending, e := interval(created, start, j.Conclusion != "skipped")
 			if e != nil {
 				return Output{}, e
