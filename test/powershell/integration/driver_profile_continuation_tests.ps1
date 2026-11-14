@@ -13,10 +13,10 @@ foreach($entry in @('configure_nuc.ps1','verify_after_restart.ps1')){
  foreach($name in @('package.json','manifest.json')){[IO.File]::WriteAllText((Join-Path $DriverPackagePath $name),'{}')}
  $hardware=Get-SetupHardwareProfile -BoardProduct SYNTHETIC-BOARD -ProfilesRoot $registry -DriverPackagePath $DriverPackagePath
  $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root ('core/'+$entry)),[ref]$tokens,[ref]$errors)
- $selection=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Extent.Text.Contains('New-SetupDriverSelection')},$true))
- Assert ($errors.Count -eq 0 -and $selection.Count -eq 1) ('正式入口有唯一保存選擇路由 '+$entry)
- # Execute the actual selection statement without source replacement; no elevation or system modules.
- . ([scriptblock]::Create($selection[0].Extent.Text))
+ $selection=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -ceq 'Set-SetupDriverContinuation'},$true))
+ $prerequisite=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Resolve-NucPath' -and $node.Extent.Text -match 'test_setup_prerequisites[.]ps1'},$true))
+ Assert ($errors.Count -eq 0 -and $selection.Count -eq 1 -and $prerequisite.Count -eq 1 -and $prerequisite[0].Extent.EndOffset -lt $selection[0].Extent.StartOffset) ('正式入口在先決條件後唯一保存選擇 '+$entry)
+ Set-SetupDriverContinuation -Hardware $hardware -PackageRoot $script:NucPackageRoot -DriverPackagePath $DriverPackagePath
  Assert ($null -ne $hardware.DriverSelection -and $hardware.DriverSelection.RelativePath -and -not $hardware.IsNuc8) ('第二profile保留雜湊及相對續跑位置 '+$entry)
  $result=Join-Path $case 'result.json';@{Computer=$env:COMPUTERNAME;UserSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;HardwareProfile=$hardware}|ConvertTo-Json -Depth 6|Set-Content $result -Encoding UTF8
  foreach($path in @($source,$moved)){if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($path)) -cne [IO.Path]::GetFullPath($case)){throw 'fixture move outside case'}}
@@ -32,4 +32,20 @@ foreach($entry in @('configure_nuc.ps1','verify_after_restart.ps1')){
   $rejected=$false;try{Get-SetupSavedDriverSelection -ResultPath $result -PackageRoot $relocatedRoot|Out-Null}catch{$rejected=$_.Exception.Message -like '驅動包身分與原選擇不同*'}
   Assert $rejected ('移動後仍拒絕manifest雜湊改動 '+$entry)
  }finally{Remove-PSDrive -Name ([string]$letter)}
+}
+
+& {
+ function New-SetupDriverSelection {throw '未選包或不適用不得讀取選擇'}
+ foreach($case in @(@{DriverProfileId='';IsNuc8=$false;Path='fixture'},@{DriverProfileId='synthetic';IsNuc8=$false;Path=''},@{DriverProfileId='';IsNuc8=$true;Path=''})){
+  $item=[pscustomobject]@{DriverProfileId=$case.DriverProfileId;IsNuc8=$case.IsNuc8}
+  Set-SetupDriverContinuation -Hardware $item -PackageRoot $env:TEMP -DriverPackagePath $case.Path
+  Assert (-not $item.PSObject.Properties['DriverSelection']) '未選包或不適用不讀取也不添加續跑選擇'
+ }
+}
+
+& {
+ function New-SetupDriverSelection {param($PackageRoot,$DriverPackagePath) [pscustomobject]@{RelativePath=$DriverPackagePath}}
+ $item=[pscustomobject]@{DriverProfileId='';IsNuc8=$true}
+ Set-SetupDriverContinuation -Hardware $item -PackageRoot $env:TEMP -DriverPackagePath 'fixture'
+ Assert ($item.DriverSelection.RelativePath -ceq 'fixture') 'NUC selection retained'
 }
