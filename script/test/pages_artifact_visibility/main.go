@@ -148,20 +148,23 @@ func restVisible(ctx context.Context, o options) (bool, error) {
 func runtimeVisible(ctx context.Context, o options, run, job string) (bool, error) {
 	body, _ := json.Marshal(map[string]string{"workflow_run_backend_id": run, "workflow_job_run_backend_id": job})
 	var result struct {
-		Artifacts []struct {
-			ID   string `json:"database_id"`
-			Name string `json:"name"`
-		} `json:"artifacts"`
+		Artifacts json.RawMessage `json:"artifacts"`
 	}
 	if err := getJSON(ctx, o, http.MethodPost, o.runtimeURL+"/twirp/github.actions.results.api.v1.ArtifactService/ListArtifacts", o.runtimeToken, body, &result); err != nil {
 		return false, err
 	}
-	if result.Artifacts == nil {
-		return false, errors.New("missing runtime artifact list")
+	if len(result.Artifacts) == 0 {
+		return false, nil
 	}
-	count := 0
-	id := ""
-	for _, a := range result.Artifacts {
+	var artifacts []struct {
+		ID   string `json:"database_id"`
+		Name string `json:"name"`
+	}
+	if string(result.Artifacts) == "null" || json.Unmarshal(result.Artifacts, &artifacts) != nil {
+		return false, errors.New("invalid runtime artifact list")
+	}
+	count, id := 0, ""
+	for _, a := range artifacts {
 		if a.Name == o.name {
 			count++
 			id = a.ID
