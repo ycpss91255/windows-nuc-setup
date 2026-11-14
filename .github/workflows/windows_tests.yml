@@ -452,6 +452,7 @@ jobs:
           test -z "$(git status --porcelain)"
           test ! -e "$GOCACHE"
           go build -mod=vendor ./...
+          du -sb "$GOCACHE"
       - name: 保存本次隔離建置快取
         uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684
         with:
@@ -515,6 +516,7 @@ jobs:
           GOCACHE: ${{ runner.temp }}/cache_restore
           CACHE_HIT: ${{ steps.diagnostic_restore_1.outputs.cache-hit }}
         run: |
+          echo "cache_hit=$CACHE_HIT"
           test "$CACHE_HIT" = true
           "$RUNNER_TEMP/cache_diagnostic" --native "$RUNNER_TEMP/diagnostic-native/report" --report "$RUNNER_TEMP/diagnostic-report" --fixture "$RUNNER_TEMP/diagnostic-fixture" --root "$GITHUB_WORKSPACE" --sha "$GITHUB_SHA" --run-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sample warm_1 --output "$RUNNER_TEMP/cache_diagnostic_results/warm_1.json"
       - name: 隔離已使用快取
@@ -533,6 +535,7 @@ jobs:
           GOCACHE: ${{ runner.temp }}/cache_restore
           CACHE_HIT: ${{ steps.diagnostic_restore_2.outputs.cache-hit }}
         run: |
+          echo "cache_hit=$CACHE_HIT"
           test "$CACHE_HIT" = true
           "$RUNNER_TEMP/cache_diagnostic" --native "$RUNNER_TEMP/diagnostic-native/report" --report "$RUNNER_TEMP/diagnostic-report" --fixture "$RUNNER_TEMP/diagnostic-fixture" --root "$GITHUB_WORKSPACE" --sha "$GITHUB_SHA" --run-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --sample warm_2 --output "$RUNNER_TEMP/cache_diagnostic_results/warm_2.json"
       - name: 冷樣本 cold_2
