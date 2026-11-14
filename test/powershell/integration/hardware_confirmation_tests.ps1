@@ -13,11 +13,12 @@ Assert ((Get-SetupSavedHardwareConfirmation -ResultPath $resultPath -UserSID dif
 Assert ((Get-SetupSavedHardwareConfirmation -ResultPath $resultPath -UserSID fixture_sid -Computer different).Count -eq 0) '續跑不沿用其他電腦確認'
 foreach($file in @('core/configure_nuc.ps1','core/run_module.ps1','modules/drivers/install_drivers.ps1')){
  $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root $file),[ref]$tokens,[ref]$errors)
- $elevation=$ast.Find({param($a) $a -is [Management.Automation.Language.IfStatementAst] -and $a.Extent.Text -match 'Start-Process powershell.exe -Verb RunAs'},$true)
+ $elevation=$ast.Find({param($a) $a -is [Management.Automation.Language.IfStatementAst] -and $a.Extent.Text -match 'Start-Process powershell.exe -Verb RunAs|Start-SetupEntryElevated'},$true)
  $fakeEntry=Join-Path $fixture 'target.ps1'
  [IO.File]::WriteAllText($fakeEntry,'param($Module,$ExpectedUserSID,$DriverPackagePath,$ConfirmedBoard,$ConfirmationComputer,[switch]$NonInteractive);[pscustomobject]@{Board=$ConfirmedBoard;Computer=$ConfirmationComputer}',[Text.UTF8Encoding]::new($true))
  $capturedState=@{Args=''}
  function Start-Process {param($FilePath,$Verb,$ArgumentList);$capturedState.Args=$ArgumentList}
+ if($file -eq 'core/configure_nuc.ps1'){. (Join-Path $root 'core/entry_os_boundary.ps1')}
  $ConfirmedBoard='NUC8i7HVB';$ConfirmationComputer=$env:COMPUTERNAME;$DriverPackagePath='';$currentSID='fixture';$sid=$currentSID;$Module='Install-Drivers';$VerifyOnly=$false;$SyncOnly=$false;$Mode='All'
  $body=$elevation.Clauses[0].Item2.Statements|Where-Object {$_ -isnot [Management.Automation.Language.ExitStatementAst] -and $_ -isnot [Management.Automation.Language.ReturnStatementAst]}|ForEach-Object {$_.Extent.Text}
  & ([scriptblock]::Create(($body -join "`n").Replace('$PSCommandPath','$fakeEntry')))
