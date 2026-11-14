@@ -105,8 +105,8 @@ func TestRejectReparseWithinSelectedArtifact(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "linked", "link")); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	if err := run([]string{"finish", root, "linked", "2026-01-02T00:00:00Z"}, &out, now); err != nil {
-		t.Fatal(err)
+	if err := run([]string{"finish", root, "linked", "2026-01-02T00:00:00Z"}, &out, now); err == nil {
+		t.Fatal("finish accepted reparse")
 	}
 	if err := run([]string{"clean", root, "linked", "--delete"}, &out, now); err == nil {
 		t.Fatal("reparse accepted")
@@ -345,13 +345,16 @@ func TestConcurrentChildReplacementCannotEscape(t *testing.T) {
 	if e := os.WriteFile(filepath.Join(outside, "keep"), []byte("fixture"), 0600); e != nil {
 		t.Fatal(e)
 	}
-	for _, a := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}} {
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}} {
 		if e := run(a, &out, now); e != nil {
 			t.Fatal(e)
 		}
 	}
 	child := filepath.Join(root, "item", "child")
 	if e := os.Mkdir(child, 0700); e != nil {
+		t.Fatal(e)
+	}
+	if e := run([]string{"finish", root, "item", "2026-01-02T00:00:00Z"}, &out, now); e != nil {
 		t.Fatal(e)
 	}
 	var swapErr error

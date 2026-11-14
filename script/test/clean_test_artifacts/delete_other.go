@@ -10,3 +10,7 @@ import (
 func safeDelete(root, name, id string, now time.Time) error {
 	return errors.New("deletion unsupported on this platform")
 }
+
+func safeFinish(root, name, id, expiry string) error {
+	return errors.New("finish unsupported on this platform")
+}

@@ -16,10 +16,20 @@ const itemMarker = ".windows_setup_cleanup_item_v1"
 const rootContent = "windows_setup disposable artifacts root v1\n"
 
 type metadata struct {
-	Kind    string `json:"kind"`
-	Name    string `json:"name"`
-	ID      string `json:"id"`
-	Expires string `json:"expires"`
+	Kind     string          `json:"kind"`
+	Name     string          `json:"name"`
+	ID       string          `json:"id"`
+	Expires  string          `json:"expires"`
+	Nonce    string          `json:"nonce,omitempty"`
+	Manifest []manifestEntry `json:"manifest,omitempty"`
+}
+
+type manifestEntry struct {
+	Path   string `json:"path"`
+	ID     string `json:"id"`
+	Dir    bool   `json:"dir"`
+	Size   int64  `json:"size,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 func plainPath(p string) (string, error) {
@@ -199,8 +209,7 @@ func run(args []string, out io.Writer, now time.Time) error {
 		if e != nil {
 			return e
 		}
-		m.Expires = expiry.UTC().Format(time.RFC3339)
-		return writeMetadata(p, m)
+		return safeFinish(root, name, id, expiry.UTC().Format(time.RFC3339))
 	case "clean":
 		if len(args) != 3 && !(len(args) == 4 && args[3] == "--delete") {
 			return errors.New("invalid clean arguments")

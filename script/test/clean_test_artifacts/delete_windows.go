@@ -3,6 +3,9 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,6 +72,9 @@ func enumerateIDs(h syscall.Handle) ([]enumeratedEntry, error) {
 }
 
 func openLocked(path string, deletable bool) (lockedEntry, string, error) {
+	return openLockedMode(path, deletable, false)
+}
+func openLockedMode(path string, deletable, writable bool) (lockedEntry, string, error) {
 	var x lockedEntry
 	p, e := syscall.UTF16PtrFromString(path)
 	if e != nil {
@@ -79,6 +85,9 @@ func openLocked(path string, deletable bool) (lockedEntry, string, error) {
 	if deletable {
 		access = deleteAccess | syscall.GENERIC_READ
 		share = syscall.FILE_SHARE_READ
+	}
+	if writable {
+		access |= syscall.GENERIC_WRITE
 	}
 	h, e := syscall.CreateFile(p, access, share, nil, syscall.OPEN_EXISTING, syscall.FILE_FLAG_BACKUP_SEMANTICS|openReparse, 0)
 	if e != nil {
@@ -108,7 +117,13 @@ func readLocked(h syscall.Handle) ([]byte, error) {
 	return buf[:n], nil
 }
 
-func safeDelete(root, name, expectedID string, now time.Time) (result error) {
+func safeDelete(root, name, expectedID string, now time.Time) error {
+	return safeProcess(root, name, expectedID, now, "")
+}
+func safeFinish(root, name, expectedID, expiry string) error {
+	return safeProcess(root, name, expectedID, time.Time{}, expiry)
+}
+func safeProcess(root, name, expectedID string, now time.Time, finish string) (result error) {
 	abs, e := filepath.Abs(root)
 	if e != nil {
 		return e
@@ -183,7 +198,7 @@ func safeDelete(root, name, expectedID string, now time.Time) (result error) {
 		return fmt.Errorf("open item root: %w", e)
 	}
 	defer itemRoot.Close()
-	mark, _, e := openLocked(filepath.Join(p, itemMarker), true)
+	mark, _, e := openLockedMode(filepath.Join(p, itemMarker), true, finish != "")
 	if e != nil {
 		return e
 	}
@@ -215,13 +230,18 @@ func safeDelete(root, name, expectedID string, now time.Time) (result error) {
 			result = fmt.Errorf("%w; restore ownership marker: %v", result, err)
 		}
 	}()
-	expiry, e := time.Parse(time.RFC3339, m.Expires)
-	if e != nil || now.Before(expiry) {
-		return errors.New("item active or not expired")
+	if finish == "" {
+		expiry, err := time.Parse(time.RFC3339, m.Expires)
+		if err != nil || now.Before(expiry) || m.Nonce == "" {
+			return errors.New("item active, expired invalid, or no manifest")
+		}
+	} else if m.Expires != "" {
+		return errors.New("item already finished")
 	}
 	if afterMarkerReadHook != nil {
 		afterMarkerReadHook()
 	}
+	var snapshot []manifestEntry
 	var collect func(string) error
 	collect = func(dir string) error {
 		rel, e := filepath.Rel(p, dir)
@@ -254,6 +274,28 @@ func safeDelete(root, name, expectedID string, now time.Time) (result error) {
 				return errors.New("enumerated child identity changed")
 			}
 			entries = append(entries, ent)
+			rel, err := filepath.Rel(p, q)
+			if err != nil {
+				return err
+			}
+			entry := manifestEntry{Path: filepath.ToSlash(rel), ID: childID, Dir: ent.dir}
+			if !ent.dir {
+				hash := sha256.New()
+				buf := make([]byte, 65536)
+				for {
+					var n uint32
+					if err := syscall.ReadFile(ent.h, buf, &n, nil); err != nil {
+						return err
+					}
+					if n == 0 {
+						break
+					}
+					entry.Size += int64(n)
+					hash.Write(buf[:n])
+				}
+				entry.SHA256 = hex.EncodeToString(hash.Sum(nil))
+			}
+			snapshot = append(snapshot, entry)
 			if ent.dir {
 				if e = collect(q); e != nil {
 					return e
@@ -264,6 +306,49 @@ func safeDelete(root, name, expectedID string, now time.Time) (result error) {
 	}
 	if e = collect(p); e != nil {
 		return e
+	}
+	if finish != "" {
+		var nonce [32]byte
+		if _, e = rand.Read(nonce[:]); e != nil {
+			return e
+		}
+		m.Expires, m.Nonce, m.Manifest = finish, hex.EncodeToString(nonce[:]), snapshot
+		encoded, err := json.Marshal(m)
+		if err != nil {
+			return err
+		}
+		if len(encoded) > 65536 {
+			return errors.New("manifest too large")
+		}
+		if _, err = syscall.Seek(mark.h, 0, 0); err != nil {
+			return err
+		}
+		if err = syscall.SetEndOfFile(mark.h); err != nil {
+			return err
+		}
+		var n uint32
+		if err = syscall.WriteFile(mark.h, encoded, &n, nil); err != nil {
+			return err
+		}
+		if int(n) != len(encoded) {
+			return errors.New("short marker write")
+		}
+		return syscall.FlushFileBuffers(mark.h)
+	}
+	if len(snapshot) != len(m.Manifest) {
+		return errors.New("manifest entry count changed")
+	}
+	want := make(map[string]manifestEntry, len(m.Manifest))
+	for _, v := range m.Manifest {
+		if _, exists := want[v.Path]; exists {
+			return errors.New("duplicate manifest entry")
+		}
+		want[v.Path] = v
+	}
+	for _, v := range snapshot {
+		if expected, ok := want[v.Path]; !ok || expected != v {
+			return errors.New("manifest entry changed")
+		}
 	}
 	if beforeDeleteHook != nil {
 		beforeDeleteHook()
