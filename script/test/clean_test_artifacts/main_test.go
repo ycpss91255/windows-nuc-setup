@@ -115,3 +115,35 @@ func TestRejectReparseWithinSelectedArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestCopiedMarkerDoesNotAuthorizeAnotherDirectory(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "owned")
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	for _, args := range [][]string{{"init", root}, {"create", root, "original"}, {"finish", root, "original", "2026-01-02T00:00:00Z"}} {
+		if err := run(args, &out, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	copied := filepath.Join(root, "unowned")
+	if err := os.Mkdir(copied, 0700); err != nil {
+		t.Fatal(err)
+	}
+	marker, err := os.ReadFile(filepath.Join(root, "original", itemMarker))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(copied, itemMarker), marker, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(copied, "keep"), []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"clean", root, "unowned", "--delete"}, &out, now); err == nil {
+		t.Fatal("copied marker authorized an unowned directory")
+	}
+	if _, err := os.Stat(filepath.Join(copied, "keep")); err != nil {
+		t.Fatal("unowned data removed", err)
+	}
+}
