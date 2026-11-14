@@ -78,6 +78,7 @@ func TestZeroBlocksDoNotRelaxCoverageConstraints(t *testing.T) {
 	file := "windows_setup/script/test/fixture/fixture.go"
 	valid := "mode: set\n" + file + ":1.1,2.1 4 1\n" + file + ":3.1,4.1 1 0\n" + file + ":5.1,5.1 0 1\n"
 	for name, profiles := range map[string][][]byte{
+		"empty cli":           {[]byte(valid), []byte("mode: set\n")},
 		"negative statements": {[]byte(strings.Replace(valid, " 0 1", " -1 1", 1))},
 		"negative count":      {[]byte(strings.Replace(valid, " 0 1", " 0 -1", 1))},
 		"new cli block":       {[]byte(valid), []byte("mode: set\n" + file + ":6.1,6.1 0 1\n")},
