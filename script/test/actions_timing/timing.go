@@ -115,6 +115,16 @@ func Analyze(in Input) (Output, error) {
 	if total < 0 || per < 1 || per > 100 {
 		return Output{}, fmt.Errorf("invalid page size")
 	}
+	expectedPages := total / per
+	if total%per != 0 {
+		expectedPages++
+	}
+	if expectedPages == 0 {
+		expectedPages = 1
+	}
+	if len(in.Pages) != expectedPages {
+		return Output{}, fmt.Errorf("incomplete or extra job pages")
+	}
 	seen := map[int64]bool{}
 	for i, page := range in.Pages {
 		if page.PageNumber != i+1 || page.PerPage != per || page.TotalCount != total || len(page.Jobs) > per || i < len(in.Pages)-1 && len(page.Jobs) != per {
