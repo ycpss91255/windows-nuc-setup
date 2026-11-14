@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	rc "windows_setup/script/test/repo_coverage"
 )
 
@@ -94,10 +95,10 @@ func decodeTiming(data []byte, target any) error {
 					return err
 				}
 				name, ok := k.(string)
-				if !ok || names[name] {
+				if !ok || names[strings.ToLower(name)] {
 					return fmt.Errorf("duplicate timing field")
 				}
-				names[name] = true
+				names[strings.ToLower(name)] = true
 				if err = value(); err != nil {
 					return err
 				}
