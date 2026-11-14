@@ -1,0 +1,146 @@
+package main
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func run(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	cmd := exec.Command("go", append([]string{"run", "."}, args...)...)
+	cmd.Env = os.Environ()
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+func TestLint(t *testing.T) {
+	for _, tc := range []struct {
+		name, msg string
+		valid     bool
+	}{
+		{"中文", "修正：避免重複執行\n\n測試：通過", true},
+		{"英文", "fix: correct execution", false},
+		{"私密路徑", "修正：設定 C:\\Users\\alice\\secret", false},
+		{"憑證", "修正：token=abcdefghijklmnop", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "message")
+			if err := os.WriteFile(p, []byte(tc.msg), 0600); err != nil {
+				t.Fatal(err)
+			}
+			out, err := run(t, "lint", p)
+			if (err == nil) != tc.valid {
+				t.Fatalf("valid=%v err=%v output=%s", tc.valid, err, out)
+			}
+			if !tc.valid && strings.Contains(out, tc.msg) {
+				t.Fatal("不得輸出完整訊息")
+			}
+		})
+	}
+}
+func TestInstallPreservesExistingHook(t *testing.T) {
+	repo := t.TempDir()
+	init := exec.Command("git", "init", "-q", repo)
+	if out, err := init.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	hook := filepath.Join(repo, ".git", "hooks", "commit-msg")
+	if err := os.WriteFile(hook, []byte("existing"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, "install", repo); err == nil {
+		t.Fatal("existing hook should block installation")
+	}
+	data, err := os.ReadFile(hook)
+	if err != nil || string(data) != "existing" {
+		t.Fatalf("existing hook changed: %v", err)
+	}
+}
+func TestInstallAndCommit(t *testing.T) {
+	repo := t.TempDir()
+	for _, args := range [][]string{{"init", "-q", repo}, {"-C", repo, "config", "user.name", "Fixture"}, {"-C", repo, "config", "user.email", "fixture@example.invalid"}} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git: %v %s", err, out)
+		}
+	}
+	if out, err := run(t, "install", repo); err != nil {
+		t.Fatalf("install: %v %s", err, out)
+	}
+	cmd := exec.Command("git", "-C", repo, "commit", "--allow-empty", "-m", "english only")
+	if out, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("invalid commit accepted: %s", out)
+	}
+	cmd = exec.Command("git", "-C", repo, "commit", "--allow-empty", "-m", "測試：隔離提交")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("valid commit rejected: %v %s", err, out)
+	}
+}
+
+func TestOversizedMessageFailsClosed(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "message")
+	secret := "token=fixturesecretvalue"
+	if err := os.WriteFile(p, []byte("測試："+strings.Repeat("a", 1024*1024)+secret), 0600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := run(t, "lint", p)
+	if err == nil {
+		t.Fatal("超過限制的訊息不可接受")
+	}
+	if !strings.Contains(out, "過大") {
+		t.Fatalf("必須因大小拒絕，而非其他原因：%s", out)
+	}
+	if strings.Contains(out, secret) {
+		t.Fatal("不得輸出機密")
+	}
+}
+
+func TestDirectLintAndInstall(t *testing.T) {
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	if err := install(repo); err != nil {
+		t.Fatal(err)
+	}
+	if err := install(repo); err == nil {
+		t.Fatal("不得覆蓋既有 hook")
+	}
+	p := filepath.Join(repo, "message")
+	for _, tc := range []struct {
+		msg string
+		ok  bool
+	}{
+		{"修正：測試", true}, {"english", false}, {"修正：C:\\Users\\fixture\\x", false}, {"修正：token=fixturesecretvalue", false}, {"修正：" + strings.Repeat("x", 65536), false},
+	} {
+		if err := os.WriteFile(p, []byte(tc.msg), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := lint(p); (err == nil) != tc.ok {
+			t.Fatalf("ok=%v err=%v", tc.ok, err)
+		}
+	}
+	if err := lint(filepath.Join(repo, "absent")); err == nil {
+		t.Fatal("缺少訊息檔應拒絕")
+	}
+}
+
+func TestCLIEntry(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "message")
+	if err := os.WriteFile(p, []byte("修正：測試"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	for _, tc := range []struct {
+		args []string
+		code int
+	}{
+		{nil, 2}, {[]string{"unknown", p}, 1}, {[]string{"lint", p}, 0}, {[]string{"lint", p + "missing"}, 1}, {[]string{"install", p}, 1},
+	} {
+		output.Reset()
+		if got := runCLI(tc.args, &output); got != tc.code {
+			t.Fatalf("args=%v code=%d", tc.args, got)
+		}
+	}
+}
