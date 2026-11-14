@@ -24,9 +24,10 @@ Push-Location $root
 try{& go.exe build -mod=vendor -o $tool ./script/test/repo_coverage_tool;if($LASTEXITCODE -ne 0){throw 'cannot build coverage CLI'}}finally{Pop-Location}
 $parts=Join-Path $temp 'parts';[void][IO.Directory]::CreateDirectory($parts)
 foreach($index in @(0,1)){
- $part=Join-Path $parts ('shard_'+$index);$private=Join-Path $temp ('private_'+$index)
- & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $producer -SourceRoot $source -OutputDirectory $part -PrivateDirectory $private -ShardIndex $index -ShardCount 2 -Commit $commit -RunUrl $run -RunAttempt 1 -CoverageToolPath $tool *> (Join-Path $temp ('shard_'+$index+'.private.log'))
+ $part=Join-Path $parts ('shard_'+$index);$private=Join-Path $temp ('private_'+$index);$timing=Join-Path $temp ('timing_'+$index)
+ & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $producer -SourceRoot $source -OutputDirectory $part -PrivateDirectory $private -TimingDirectory $timing -ShardIndex $index -ShardCount 2 -Commit $commit -RunUrl $run -RunAttempt 1 -CoverageToolPath $tool *> (Join-Path $temp ('shard_'+$index+'.private.log'))
  Assert ($LASTEXITCODE -eq 0) ('真Pester原始來源分片成功：'+$index)
+ Assert (Test-Path -LiteralPath (Join-Path $timing 'timing.json')) '真實分片安全匯出獨立計時收據'
  $proof=Get-Content -LiteralPath (Join-Path $part 'shard.json') -Raw -Encoding UTF8|ConvertFrom-Json
  Assert ($proof.Workers.Count -eq 1 -and $proof.Tests.Count -eq 2 -and $proof.Sources.Count -eq 1) '每片保留完整canonical清單但僅執行自己的suite'
  Assert (-not ((Get-ChildItem -LiteralPath $part -Recurse -File|ForEach-Object {[IO.File]::ReadAllText($_.FullName)}) -join "`n").Contains($source)) '上傳證據沒有絕對來源路徑或私有stdout'
