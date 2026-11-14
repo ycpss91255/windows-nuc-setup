@@ -31,10 +31,10 @@ func openLocked(path string, deletable bool) (lockedEntry, string, error) {
 	if e != nil {
 		return x, "", e
 	}
-	access := uint32(0)
+	access := uint32(syscall.GENERIC_READ)
 	share := uint32(syscall.FILE_SHARE_READ | syscall.FILE_SHARE_WRITE)
 	if deletable {
-		access = deleteAccess
+		access = deleteAccess | syscall.GENERIC_READ
 		share = syscall.FILE_SHARE_READ
 	}
 	h, e := syscall.CreateFile(p, access, share, nil, syscall.OPEN_EXISTING, syscall.FILE_FLAG_BACKUP_SEMANTICS|openReparse, 0)
@@ -53,6 +53,18 @@ func openLocked(path string, deletable bool) (lockedEntry, string, error) {
 	x = lockedEntry{h: h, path: path, dir: i.FileAttributes&syscall.FILE_ATTRIBUTE_DIRECTORY != 0}
 	return x, fmt.Sprintf("%08x:%08x%08x", i.VolumeSerialNumber, i.FileIndexHigh, i.FileIndexLow), nil
 }
+func readLocked(h syscall.Handle) ([]byte, error) {
+	buf := make([]byte, 65537)
+	var n uint32
+	if err := syscall.ReadFile(h, buf, &n, nil); err != nil {
+		return nil, err
+	}
+	if n > 65536 {
+		return nil, errors.New("marker too large")
+	}
+	return buf[:n], nil
+}
+
 func safeDelete(root, name, expectedID string, now time.Time) error {
 	abs, e := filepath.Abs(root)
 	if e != nil {
@@ -94,7 +106,15 @@ func safeDelete(root, name, expectedID string, now time.Time) error {
 		return e
 	}
 	defer anchor.Close()
-	b, e := anchor.ReadFile(rootMarker)
+	rootMark, _, e := openLocked(filepath.Join(abs, rootMarker), true)
+	if e != nil {
+		return e
+	}
+	defer syscall.CloseHandle(rootMark.h)
+	if rootMark.dir {
+		return errors.New("invalid root marker")
+	}
+	b, e := readLocked(rootMark.h)
 	if e != nil || string(b) != rootContent {
 		return errors.New("invalid root marker")
 	}
@@ -120,7 +140,15 @@ func safeDelete(root, name, expectedID string, now time.Time) error {
 		return fmt.Errorf("open item root: %w", e)
 	}
 	defer itemRoot.Close()
-	b, e = itemRoot.ReadFile(itemMarker)
+	mark, _, e := openLocked(filepath.Join(p, itemMarker), true)
+	if e != nil {
+		return e
+	}
+	entries = append(entries, mark)
+	if mark.dir {
+		return errors.New("invalid item marker")
+	}
+	b, e = readLocked(mark.h)
 	if e != nil {
 		return e
 	}
@@ -151,6 +179,9 @@ func safeDelete(root, name, expectedID string, now time.Time) error {
 			return fmt.Errorf("enumerate: %w", e)
 		}
 		for _, child := range children {
+			if dir == p && child.Name() == itemMarker {
+				continue
+			}
 			q := filepath.Join(dir, child.Name())
 			ent, _, e := openLocked(q, true)
 			if e != nil {
