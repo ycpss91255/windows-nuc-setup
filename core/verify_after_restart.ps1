@@ -1,7 +1,8 @@
 ﻿#Requires -Version 5.1
 param([string]$ExpectedUserSID)
 $ErrorActionPreference='Stop'
-$currentSID=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+. (Join-Path $PSScriptRoot 'entry_os_boundary.ps1')
+$currentSID=Get-SetupEntryIdentity
 if($ExpectedUserSID -and $ExpectedUserSID -ne $currentSID){throw '提權後帳號已改變，請使用原帳號的管理員權限。'}
 . (Join-Path $PSScriptRoot 'paths.ps1')
 Initialize-NucReports
