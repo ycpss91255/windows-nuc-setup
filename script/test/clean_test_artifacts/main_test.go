@@ -226,3 +226,32 @@ func TestDeleteRejectsReplacementAfterValidation(t *testing.T) {
 		t.Errorf("unmoved replacement data removed: %v", e)
 	}
 }
+
+func TestConcurrentChildCreationPreservesNewData(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "owned")
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	for _, a := range [][]string{{"init", root}, {"create", root, "item"}, {"finish", root, "item", "2026-01-02T00:00:00Z"}} {
+		if e := run(a, &out, now); e != nil {
+			t.Fatal(e)
+		}
+	}
+	path := filepath.Join(root, "item", "new")
+	var createErr error
+	called := false
+	beforeDeleteHook = func() { called = true; createErr = os.WriteFile(path, []byte("fixture"), 0600) }
+	defer func() { beforeDeleteHook = nil }()
+	err := run([]string{"clean", root, "item", "--delete"}, &out, now)
+	if !called {
+		t.Fatalf("hook not reached: %v", err)
+	}
+	if createErr == nil {
+		if err == nil {
+			t.Error("accepted concurrent new child")
+		}
+		if _, e := os.Stat(path); e != nil {
+			t.Errorf("concurrent child lost: %v", e)
+		}
+	}
+}
