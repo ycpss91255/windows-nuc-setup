@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	a "windows_setup/script/test/acceptance"
+	rc "windows_setup/script/test/repo_coverage"
 )
 
 func TestCompilerZeroStatementBlocksRemainCanonical(t *testing.T) {
@@ -67,6 +68,11 @@ func TestCompilerZeroStatementBlocksRemainCanonical(t *testing.T) {
 	}
 	if _, err = a.ValidateCoverageEvidence(data, canonical, scope, provenance.Commit, provenance.RunUrl); err != nil {
 		t.Fatalf("consumer rejected canonical profile: %v", err)
+	}
+	source := []byte(files[filepath.Join(dir, "fixture.go")])
+	lineReport, catalogs, err := rc.NormalizeGo([][]byte{canonical}, map[string][]byte{"script/test/fixture/fixture.go": source}, "windows_setup")
+	if err != nil || len(catalogs) != 1 || len(catalogs[0].Lines) != 1 || !lineReport.Files["script/test/fixture/fixture.go"][2] {
+		t.Fatalf("zero block changed executable-line mapping: %v %+v", err, catalogs)
 	}
 	if runtime.GOOS == "windows" {
 		helper, err := filepath.Abs("../../../script/test/go_coverage.ps1")
