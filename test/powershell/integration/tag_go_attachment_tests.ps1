@@ -92,11 +92,8 @@ $global:tagGoPublisherReached=$false
 function gh {$global:tagGoPublisherReached=$true;throw 'LOCAL_GH_BOUNDARY_ONLY'}
 Assert ((Get-Command gh).CommandType -eq 'Function') '本機發布邊界必須使用 mock gh'
 $boundary=$false
-try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $flow.Public -Version v1.2.3 -Commit ('a'*40) -NotesPath (Join-Path $flow.Public 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $emptyDrivers}catch{$boundary=$_.Exception.Message -ceq 'LOCAL_GH_BOUNDARY_ONLY'}finally{Remove-Item Function:\gh}
-Assert ($boundary -and $global:tagGoPublisherReached) 'actual publisher passes local repo and Go verification and stops at a fixture GitHub boundary'
-$manifest=Get-Content -LiteralPath (Join-Path $flow.Public 'quality-manifest.json') -Raw|ConvertFrom-Json
-$profileRecord=@($manifest.Files|Where-Object Name -ceq 'go_coverage.out')
-Assert ($profileRecord.Count -eq 1 -and $profileRecord[0].SHA256 -ceq $joined.GoCoverage.ProfileSHA256) 'publisher local manifest includes the exact original Go profile digest'
+try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $flow.Public -Version v1.2.3 -Commit ('a'*40) -NotesPath (Join-Path $flow.Public 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $emptyDrivers}catch{$boundary=$_.Exception.Message -like '*舊口徑僅供歷史讀取*'}finally{Remove-Item Function:\gh}
+Assert ($boundary -and -not $global:tagGoPublisherReached) 'current publisher rejects historical coverage before the GitHub boundary'
 # Exercise the previously missing official requirements gate, not just the PS
 # attachment and publisher. This synthetic profile inventories every owned Go
 # file so the real CLI's denominator guard remains active; it is not CI data.
@@ -134,6 +131,6 @@ $global:tagGoPublisherReached=$false
 function gh {$global:tagGoPublisherReached=$true;throw 'LOCAL_TAG_GATE_GH_BOUNDARY_ONLY'}
 Assert ((Get-Command gh).CommandType -eq 'Function') 'Tag 發布邊界必須使用 mock gh'
 $boundary=$false
-try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $gatePublic -Version v1.2.3 -Commit ('a'*40) -NotesPath (Join-Path $gatePublic 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $emptyDrivers}catch{$boundary=$_.Exception.Message -ceq 'LOCAL_TAG_GATE_GH_BOUNDARY_ONLY'}finally{Remove-Item Function:\gh}
-Assert ($boundary -and $global:tagGoPublisherReached) 'fresh Tag report passes official Go gate and strict publisher up to the mocked external boundary'
+try{& (Join-Path $root 'script/report/publish_quality_release.ps1') -PublicDirectory $gatePublic -Version v1.2.3 -Commit ('a'*40) -NotesPath (Join-Path $gatePublic 'summary.md') -Repository example/repo -CoverageToolPath $tool -DriverAssetManifestPath $emptyDrivers}catch{$boundary=$_.Exception.Message -like '*舊口徑僅供歷史讀取*'}finally{Remove-Item Function:\gh}
+Assert ($boundary -and -not $global:tagGoPublisherReached) 'historical evidence cannot become a new release even when its former gate passes'
 $global:LASTEXITCODE=0

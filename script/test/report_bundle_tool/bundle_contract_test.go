@@ -780,11 +780,7 @@ func TestRuntimeReleaseReportDoesNotRequireGoCoverage(t *testing.T) {
 	if err = json.Unmarshal(native["summary.json"], &summary); err != nil {
 		t.Fatal(err)
 	}
-	var evidence any
-	if err = json.Unmarshal(art.Summary, &evidence); err != nil {
-		t.Fatal(err)
-	}
-	summary["RepoCoverage"], summary["RefType"], summary["RefName"], summary["Version"], summary["Environment"] = evidence, "Release", "v0.1.0", "v0.1.0", "Windows synthetic native fixture"
+	summary["RepoCoverage"], summary["RefType"], summary["RefName"], summary["Version"], summary["Environment"] = json.RawMessage(art.Summary), "Release", "v0.1.0", "v0.1.0", "Windows synthetic native fixture"
 	summary["Changes"] = []string{"Synthetic fixture"}
 	for _, check := range summary["Checks"].([]any) {
 		check.(map[string]any)["ExitCode"] = 0
