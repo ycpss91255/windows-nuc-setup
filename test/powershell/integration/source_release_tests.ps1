@@ -54,6 +54,8 @@ Assert ((Get-Content $result.NotesPath -Raw -Encoding UTF8).Contains('通用 Win
 $original=Get-ReleaseNotes v1.2.3 ([IO.File]::ReadAllText((Join-Path $repo 'doc/changelog/changelog.md')))
 $expected=(Get-ReleaseDownloadGuide v1.2.3) + "`n`n" + $original
 $actual=[IO.File]::ReadAllText($result.NotesPath)
+Assert ($actual.Contains('https://github.com/ycpss91255/windows_setup/archive/refs/tags/v1.2.3.zip') -and $actual.Contains('https://github.com/ycpss91255/windows_setup/blob/v1.2.3/readme.md') -and -not $actual.Contains('/blob/main/readme.md')) '真實 builder 提供該版來源 ZIP 及同標籤 README'
+Assert ($actual.Contains('驅動為可選') -and $actual.Contains('NUC') -and $actual.Contains('略過')) '所有機型包含 NUC 均可略過驅動'
 Assert ($actual.Contains('Windows') -and $actual.Contains('GitHub') -and $actual.Contains('校驗檔') -and $actual.Contains('一般不需下載') -and $actual.Contains('可選')) '下載指引解釋 Windows 來源 ZIP、可選報表及 GitHub 校驗檔'
 Assert ($actual.Contains('Source code') -and $actual.Contains('Autologon') -and $actual.Contains('Assets') -and -not $actual.Contains('[此版本測試報表]')) '使用者說明指出來源與附件而不重複報表連結'
 Assert ($actual -ceq $expected) '正式版本包含下載指引並原樣保留說明'
