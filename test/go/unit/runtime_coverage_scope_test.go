@@ -78,3 +78,33 @@ func TestRuntimeCoverageInventoryActualSource(t *testing.T) {
 		t.Fatalf("actual runtime inventory blocked or empty: %v", inv.Blockers)
 	}
 }
+
+func TestRuntimeInventoryDoesNotExcludeOwnedNamedDirectories(t *testing.T) {
+	root := t.TempDir()
+	paths := []string{"core/win11debloat/owned.ps1", "modules/demo/win11debloat/owned.ps1", "core/vendor/owned.ps1", "modules/demo/test/owned.psm1", "core/docs/owned.ps1", "modules/demo/reports/owned.ps1", "modules/demo/coverage/owned.ps1"}
+	for _, name := range append(append([]string{}, paths...), "modules/debloat/win11debloat/upstream.ps1") {
+		p := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("Write-Output 1\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	inv, err := rc.ScanRuntimeInventory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, source := range inv.Sources {
+		got[source.Path] = true
+	}
+	for _, name := range paths {
+		if !got[name] {
+			t.Errorf("owned source silently excluded: %s", name)
+		}
+	}
+	if got["modules/debloat/win11debloat/upstream.ps1"] {
+		t.Fatal("actual pinned third-party source included")
+	}
+}

@@ -3,8 +3,6 @@ package repo_coverage
 import (
 	"encoding/json"
 	"fmt"
-	"path"
-	"strings"
 )
 
 const RuntimeSchemaVersion = 2
@@ -21,11 +19,7 @@ type RuntimeEvidence struct {
 
 func validateRuntimeSources(inv Inventory) error {
 	for _, source := range inv.Sources {
-		parts := strings.Split(source.Path, "/")
-		ext := strings.ToLower(path.Ext(source.Path))
-		ps := (strings.HasPrefix(source.Path, "core/") || strings.HasPrefix(source.Path, "modules/")) && source.Language == "powershell" && (ext == ".ps1" || ext == ".psm1")
-		native := len(parts) == 4 && parts[0] == "modules" && parts[2] == "native" && source.Language == "csharp" && ext == ".cs"
-		if !ps && !native {
+		if !approvedRuntimeSource(source.Path, source.Language) {
 			return fmt.Errorf("source outside runtime scope: %s", source.Path)
 		}
 	}

@@ -6,10 +6,25 @@ import (
 	"strings"
 )
 
+func runtimeThirdParty(name string) bool {
+	return strings.HasPrefix(strings.ToLower(name), "modules/debloat/win11debloat/")
+}
+
+func approvedRuntimeSource(name, language string) bool {
+	if runtimeThirdParty(name) {
+		return false
+	}
+	parts := strings.Split(name, "/")
+	ext := strings.ToLower(path.Ext(name))
+	ps := (strings.HasPrefix(name, "core/") || strings.HasPrefix(name, "modules/")) && language == "powershell" && (ext == ".ps1" || ext == ".psm1")
+	native := len(parts) == 4 && parts[0] == "modules" && parts[2] == "native" && language == "csharp" && ext == ".cs"
+	return ps || native
+}
+
 // ScanRuntimeInventory leaves the historical all-owned inventory unchanged.
 // Only approved PowerShell and managed native sources contribute to runtime coverage.
 func ScanRuntimeInventory(root string) (Inventory, error) {
-	all, err := ScanInventory(root)
+	all, err := scanInventory(root, true)
 	if err != nil {
 		return Inventory{}, err
 	}
@@ -22,9 +37,7 @@ func ScanRuntimeInventory(root string) (Inventory, error) {
 		}
 	}
 	for _, s := range all.Sources {
-		parts := strings.Split(s.Path, "/")
-		native := len(parts) == 4 && parts[0] == "modules" && parts[2] == "native" && s.Language == "csharp"
-		approved := isRuntime(s.Path) && (s.Language == "powershell" || native)
+		approved := approvedRuntimeSource(s.Path, s.Language)
 		if approved {
 			inv.Sources = append(inv.Sources, s)
 			continue
