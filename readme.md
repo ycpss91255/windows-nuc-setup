@@ -844,4 +844,4 @@ go run ./script/test/clean_test_artifacts clean C:\scratch\disposable_test_root 
 go run ./script/test/clean_test_artifacts clean C:\scratch\disposable_test_root sample --delete
 ```
 
-此工具不掃描系統 TEMP，也不認領或清理舊的 `windows-setup-*` 目錄；既有產生器尚未整合此標記。請勿把正式程式碼、未提交工作、私人資料或需保留的證據放入拋棄式目錄。操作期間不得有其他程序修改目錄，因檢查和刪除之間無法防止並行替換。工具拒絕含連結或重解析點的路徑及項目。Go 是維護工具需求，不是一般 Windows 執行環境的需求。
+此工具不掃描系統 TEMP，也不認領或清理舊的 `windows-setup-*` 目錄。請勿把正式程式碼、未提交工作、私人資料或需保留的證據放入拋棄式目錄。工具會比對列舉及開啟時的檔案識別，並以控制代碼鎖定已開啟項目；檔案識別可能重用，操作期間仍應停止其他程序修改目錄。工具拒絕含連結或重解析點的路徑及項目。Go 是維護工具需求，不是一般 Windows 執行環境的需求。
