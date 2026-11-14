@@ -22,6 +22,20 @@ type timingReceipt struct {
 	Phases        []timingPhase
 }
 
+// A receipt is at most 16 KiB before decoding. JSON encoding may expand each
+// byte to at most six bytes (for example '&' becomes '\u0026'); 4 KiB per
+// record covers this fixed schema's indentation and delimiters, and another
+// 4 KiB covers the surrounding array. The roster cap keeps multiplication and
+// allocation bounded even for untrusted artifact metadata.
+func timingShardLimit(workers int) (int64, error) {
+	const maxWorkers = 4096
+	const maxWireRecord = int64(6*16384 + 4096)
+	if workers < 1 || workers > maxWorkers {
+		return 0, fmt.Errorf("invalid timing roster size")
+	}
+	return int64(workers)*maxWireRecord + 4096, nil
+}
+
 // The expected contexts must come from validated actual worker evidence, not the receipt.
 func validateTimingRoster(expected []rc.PowerShellWorkerContext, receipts []timingReceipt) error {
 	if len(expected) == 0 || len(receipts) != len(expected) {

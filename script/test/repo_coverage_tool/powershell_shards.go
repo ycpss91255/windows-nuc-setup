@@ -412,6 +412,9 @@ func powershellShardPack(args []string, out io.Writer) error {
 		}
 	}
 	if o.timingInput != "" {
+		if _, e := timingShardLimit(len(contexts)); e != nil {
+			return e
+		}
 		root, _, _, e := trustedShardCatalog(o)
 		if e != nil {
 			return e
@@ -518,7 +521,11 @@ func powershellShardMerge(args []string, out io.Writer) error {
 			if e != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 				return fmt.Errorf("invalid timing artifact directory")
 			}
-			b, e = readTimingRegular(filepath.Join(timingDir, "timing.json"), int64(len(m.Workers))*16384+4096)
+			limit, e := timingShardLimit(len(m.Workers))
+			if e != nil {
+				return e
+			}
+			b, e = readTimingRegular(filepath.Join(timingDir, "timing.json"), limit)
 			if e != nil {
 				return e
 			}

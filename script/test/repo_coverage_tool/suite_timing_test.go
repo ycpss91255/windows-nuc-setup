@@ -165,7 +165,7 @@ func TestTimingMergeRejectsIncompleteOrCrossAttemptArtifacts(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "oversized_timing":
-				b = append(b, bytes.Repeat([]byte(" "), 21000)...)
+				b = append(b, bytes.Repeat([]byte(" "), 110000)...)
 				if err = os.WriteFile(second, b, 0600); err != nil {
 					t.Fatal(err)
 				}
@@ -313,7 +313,7 @@ func TestTimingReadsAreBoundedBeforeAndDuringRead(t *testing.T) {
 }
 
 func TestTimingPackMergeRoundTripEscapedValidPath(t *testing.T) {
-	path := "test/" + strings.Repeat(strings.Repeat("&", 100)+"/", 60) + "suite.ps1"
+	path := "test/" + strings.Repeat(strings.Repeat("&", 100)+"/", 60) + "a\u2028\u2029suite.ps1"
 	if canonical, err := rc.RelativePath(path); err != nil || canonical != path {
 		t.Fatalf("not a valid relative path: %v", err)
 	}
@@ -325,11 +325,12 @@ func TestTimingPackMergeRoundTripEscapedValidPath(t *testing.T) {
 	if err := encoder.Encode(receipt); err != nil {
 		t.Fatal(err)
 	}
+	rawBytes := bytes.ReplaceAll(bytes.ReplaceAll(raw.Bytes(), []byte(`\u2028`), []byte("\u2028")), []byte(`\u2029`), []byte("\u2029"))
 	if raw.Len() >= 16384 {
 		t.Fatalf("raw receipt exceeds pack limit: %d", raw.Len())
 	}
 	private := t.TempDir()
-	if err := os.WriteFile(filepath.Join(private, "worker_0.timing.json"), raw.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(private, "worker_0.timing.json"), rawBytes, 0600); err != nil {
 		t.Fatal(err)
 	}
 	packed, err := readWorkerTimings(private, []rc.PowerShellWorkerContext{c})
@@ -340,7 +341,11 @@ func TestTimingPackMergeRoundTripEscapedValidPath(t *testing.T) {
 	if err := writeShardJSON(output, packed); err != nil {
 		t.Fatal(err)
 	}
-	wire, err := readTimingRegular(output, 16384+4096)
+	limit, err := timingShardLimit(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire, err := readTimingRegular(output, limit)
 	if err != nil {
 		t.Fatalf("pack output rejected by merge limit: %v", err)
 	}
@@ -350,5 +355,16 @@ func TestTimingPackMergeRoundTripEscapedValidPath(t *testing.T) {
 	}
 	if err := validateTimingRoster([]rc.PowerShellWorkerContext{c}, merged); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTimingShardLimitRejectsInvalidRoster(t *testing.T) {
+	for _, count := range []int{-1, 0, 4097, int(^uint(0) >> 1)} {
+		if _, err := timingShardLimit(count); err == nil {
+			t.Fatalf("accepted roster %d", count)
+		}
+	}
+	if limit, err := timingShardLimit(4096); err != nil || limit <= 0 {
+		t.Fatalf("valid maximum roster: %d %v", limit, err)
 	}
 }
