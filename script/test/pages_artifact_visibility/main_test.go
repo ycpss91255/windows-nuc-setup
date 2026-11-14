@@ -163,3 +163,34 @@ func TestResponseSizeAndRedirectRejected(t *testing.T) {
 		})
 	}
 }
+
+func TestRESTPaginationAndDuplicateAcrossPages(t *testing.T) {
+	for _, duplicate := range []bool{false, true} {
+		t.Run(fmt.Sprintf("duplicate=%t", duplicate), func(t *testing.T) {
+			calls := 0
+			name := "github-pages-123-2"
+			digest := "sha256:" + strings.Repeat("a", 64)
+			row := fmt.Sprintf(`{"id":456,"name":%q,"digest":%q,"size_in_bytes":100,"expired":false,"workflow_run":{"id":123}}`, name, digest)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if r.URL.Query().Get("page") == "1" {
+					rows := make([]string, 100)
+					for i := range rows {
+						rows[i] = `{"name":"other"}`
+					}
+					if duplicate {
+						rows[0] = row
+					}
+					fmt.Fprintf(w, `{"artifacts":[%s]}`, strings.Join(rows, ","))
+					return
+				}
+				fmt.Fprintf(w, `{"artifacts":[%s]}`, row)
+			}))
+			defer server.Close()
+			ok, err := restVisible(context.Background(), options{client: server.Client(), restURL: server.URL, token: "fixture", repo: "example/repo", runID: "123", artifactID: "456", name: name})
+			if calls != 2 || ok == duplicate || (err != nil) != duplicate {
+				t.Fatalf("calls=%d ok=%t err=%v", calls, ok, err)
+			}
+		})
+	}
+}
