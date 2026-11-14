@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	rc "windows_setup/script/test/repo_coverage"
 )
@@ -308,5 +309,46 @@ func TestTimingReadsAreBoundedBeforeAndDuringRead(t *testing.T) {
 	}
 	if b, err := readTimingRegular(path, 64); err != nil || string(b) != "ok" {
 		t.Fatalf("valid file: %q %v", b, err)
+	}
+}
+
+func TestTimingPackMergeRoundTripEscapedValidPath(t *testing.T) {
+	path := "test/" + strings.Repeat(strings.Repeat("&", 100)+"/", 60) + "suite.ps1"
+	if canonical, err := rc.RelativePath(path); err != nil || canonical != path {
+		t.Fatalf("not a valid relative path: %v", err)
+	}
+	c := rc.PowerShellWorkerContext{Commit: strings.Repeat("a", 40), RunUrl: "https://github.com/example/repo/actions/runs/123", RunAttempt: 1, ShardIndex: 0, ShardCount: 1, GlobalIndex: 0, ProcessId: 10, TestFile: path, TestSHA256: strings.Repeat("b", 64), WrapperFile: "test/safe.ps1", WrapperSHA256: strings.Repeat("c", 64)}
+	receipt := timingReceipt{1, c, []timingPhase{{"worker_setup", 0}, {"pester_instrumentation_and_test", 2}, {"serialization", 3}}}
+	var raw bytes.Buffer
+	encoder := json.NewEncoder(&raw)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(receipt); err != nil {
+		t.Fatal(err)
+	}
+	if raw.Len() >= 16384 {
+		t.Fatalf("raw receipt exceeds pack limit: %d", raw.Len())
+	}
+	private := t.TempDir()
+	if err := os.WriteFile(filepath.Join(private, "worker_0.timing.json"), raw.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+	packed, err := readWorkerTimings(private, []rc.PowerShellWorkerContext{c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "timing.json")
+	if err := writeShardJSON(output, packed); err != nil {
+		t.Fatal(err)
+	}
+	wire, err := readTimingRegular(output, 16384+4096)
+	if err != nil {
+		t.Fatalf("pack output rejected by merge limit: %v", err)
+	}
+	var merged []timingReceipt
+	if err := decodeTiming(wire, &merged); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateTimingRoster([]rc.PowerShellWorkerContext{c}, merged); err != nil {
+		t.Fatal(err)
 	}
 }
