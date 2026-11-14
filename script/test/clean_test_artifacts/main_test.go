@@ -253,6 +253,9 @@ func TestConcurrentChildCreationPreservesNewData(t *testing.T) {
 		if _, e := os.Stat(path); e != nil {
 			t.Errorf("concurrent child lost: %v", e)
 		}
+		if _, e := os.Stat(filepath.Join(root, "item", itemMarker)); e != nil {
+			t.Errorf("ownership marker lost after partial deletion: %v", e)
+		}
 	}
 }
 
