@@ -9,6 +9,7 @@
   "taskbar.cs": "modules/taskbar/native/taskbar.cs",
   "taskbar_stage_library.ps1": "modules/taskbar/taskbar_stage_library.ps1",
   "start_menu_settings_library.ps1": "modules/start_menu/start_menu_settings_library.ps1",
+  "start_menu_dispatch.ps1": "core/start_menu_dispatch.ps1",
   "theme_settings_library.ps1": "modules/theme/theme_settings_library.ps1",
   "terminal_hotkey_library.ps1": "modules/terminal/terminal_hotkey_library.ps1",
   "start_pins_policy_library.ps1": "modules/start_menu/start_pins_policy_library.ps1",
