@@ -34,6 +34,39 @@ type enumeratedEntry struct {
 	id   uint64
 }
 
+func rejectNamedStreams(h syscall.Handle) error {
+	buf := make([]uint64, 8192)
+	ok, _, err := getFileInformationByHandleEx.Call(uintptr(h), 7, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)*8))
+	if ok == 0 {
+		if err == syscall.Errno(38) {
+			return nil
+		} // no streams
+		return fmt.Errorf("enumerate streams: %w", err)
+	}
+	data := unsafe.Slice((*byte)(unsafe.Pointer(&buf[0])), len(buf)*8)
+	for off := 0; ; {
+		if off+24 > len(data) {
+			return errors.New("invalid stream record")
+		}
+		next := *(*uint32)(unsafe.Pointer(&data[off]))
+		n := *(*uint32)(unsafe.Pointer(&data[off+4]))
+		if n%2 != 0 || int(n) > len(data)-off-24 {
+			return errors.New("invalid stream name")
+		}
+		name := syscall.UTF16ToString(unsafe.Slice((*uint16)(unsafe.Pointer(&data[off+24])), int(n)/2))
+		if name != "" && name != "::$DATA" {
+			return errors.New("named data stream rejected")
+		}
+		if next == 0 {
+			return nil
+		}
+		if next%8 != 0 || int(next) > len(data)-off-24 {
+			return errors.New("invalid stream offset")
+		}
+		off += int(next)
+	}
+}
+
 func enumerateIDs(h syscall.Handle) ([]enumeratedEntry, error) {
 	var result []enumeratedEntry
 	buf := make([]uint64, 8192) // FILE_ID_BOTH_DIR_INFO requires eight-byte alignment.
@@ -193,6 +226,9 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 			}
 		}
 	}()
+	if e = rejectNamedStreams(first.h); e != nil {
+		return e
+	}
 	itemRoot, e := anchor.OpenRoot(name)
 	if e != nil {
 		return fmt.Errorf("open item root: %w", e)
@@ -203,6 +239,9 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 		return e
 	}
 	entries = append(entries, mark)
+	if e = rejectNamedStreams(mark.h); e != nil {
+		return e
+	}
 	if mark.dir {
 		return errors.New("invalid item marker")
 	}
@@ -277,6 +316,9 @@ func safeProcess(root, name, expectedID string, now time.Time, finish string) (r
 				return errors.New("enumerated child identity changed")
 			}
 			entries = append(entries, ent)
+			if e = rejectNamedStreams(ent.h); e != nil {
+				return e
+			}
 			rel, err := filepath.Rel(p, q)
 			if err != nil {
 				return err
