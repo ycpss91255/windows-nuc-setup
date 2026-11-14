@@ -129,3 +129,30 @@ func TestDecodeRejectsNullJobHeadWhenPresent(t *testing.T) {
 		t.Fatal("accepted explicit null job head")
 	}
 }
+
+func TestDecodeRejectsMissingPaginationEvidence(t *testing.T) {
+	x := fixture()
+	wire := struct {
+		Run   Run    `json:"run"`
+		Pages []Page `json:"pages"`
+	}{x.Run, x.Pages}
+	data, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]any
+	if err = json.Unmarshal(data, &root); err != nil {
+		t.Fatal(err)
+	}
+	page := root["pages"].([]any)[0].(map[string]any)
+	page["total_count"] = nil
+	data, _ = json.Marshal(root)
+	expected := Expected{Repository: x.Repository, RunID: x.RunID, Attempt: x.Attempt, HeadSHA: x.HeadSHA}
+	if _, err = Decode(data, expected); err == nil {
+		t.Fatal("accepted null total_count")
+	}
+	empty := `{"run":{"id":123,"run_attempt":2,"head_sha":"` + x.HeadSHA + `","repository":{"full_name":"example/repo"}},"pages":[{"page_number":1,"per_page":100}]}`
+	if _, err = Decode([]byte(empty), expected); err == nil {
+		t.Fatal("accepted absent page total and jobs")
+	}
+}
