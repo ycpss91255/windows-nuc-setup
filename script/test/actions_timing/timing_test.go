@@ -12,7 +12,7 @@ func fixture() Input {
 	sha := strings.Repeat("a", 40)
 	return Input{Repository: "example/repo", RunID: 123, Attempt: 2, HeadSHA: sha, CheckoutSHA: strings.Repeat("b", 40), Run: Run{ID: 123, RunAttempt: 2, HeadSHA: sha, Repository: Repository{FullName: "example/repo"}}, Pages: []Page{{PageNumber: 1, PerPage: 2, TotalCount: 2, Jobs: []Job{
 		{ID: 10, RunID: 123, RunAttempt: 2, Name: "build", Status: "completed", Conclusion: "success", CreatedAt: ptr("2026-11-14T00:00:00Z"), StartedAt: ptr("2026-11-14T00:00:02Z"), CompletedAt: ptr("2026-11-14T00:00:08Z"), Steps: []Step{{Number: 1, Name: "test", Status: "completed", Conclusion: "success", StartedAt: ptr("2026-11-14T00:00:03Z"), CompletedAt: ptr("2026-11-14T00:00:07Z")}}},
-		{ID: 11, RunID: 123, RunAttempt: 2, Name: "skipped", Status: "completed", Conclusion: "skipped", StartedAt: ptr("2026-11-14T00:00:04Z"), CompletedAt: ptr("2026-11-14T00:00:03Z")},
+		{ID: 11, RunID: 123, RunAttempt: 2, Name: "skipped", Status: "completed", Conclusion: "skipped", StartedAt: ptr("2026-11-14T00:00:04Z"), CompletedAt: ptr("2026-11-14T00:00:03Z"), Steps: []Step{}},
 	}}}}
 }
 func TestSameRunTimingPreservesUnknownAndSkipped(t *testing.T) {

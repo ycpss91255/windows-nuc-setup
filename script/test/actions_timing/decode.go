@@ -20,6 +20,10 @@ func (j *Job) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
+	steps, ok := fields["steps"]
+	if !ok || bytes.Equal(bytes.TrimSpace(steps), []byte("null")) {
+		return fmt.Errorf("missing job steps inventory")
+	}
 	for name, raw := range fields {
 		if strings.EqualFold(name, "head_sha") && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			return fmt.Errorf("job head cannot be null when supplied")
