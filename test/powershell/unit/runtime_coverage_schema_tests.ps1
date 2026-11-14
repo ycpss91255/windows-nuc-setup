@@ -21,9 +21,14 @@ try {
 . (Join-Path $root 'script/test/test_report.ps1')
 $checks=@([pscustomobject]@{Name='u';Layer='Unit';Status='Passed';Executed=$true;Passed=$true;ExitCode=0;DurationSeconds=0;Assertions=@([pscustomobject]@{Name='u';Passed=$true})},[pscustomobject]@{Name='i';Layer='Integration';Status='Passed';Executed=$true;Passed=$true;ExitCode=0;DurationSeconds=0;Assertions=@([pscustomobject]@{Name='i';Passed=$true})})
 $view=Join-Path $temp 'view'
-Write-TestReports -Checks $checks -OutputDirectory $view -Layer All -Commit $coverage.Commit -RunUrl $coverage.RunUrl -SourceState Clean -MeasuredAt $coverage.MeasuredAt -RepoCoverage $coverage | Out-Null
+Write-TestReports -Checks $checks -OutputDirectory $view -Layer All -Commit $coverage.Commit -RunUrl $coverage.RunUrl -SourceState Clean -RefName main -MeasuredAt $coverage.MeasuredAt -RepoCoverage $coverage | Out-Null
 Assert ([IO.File]::ReadAllText((Join-Path $view 'index.html')).Contains('PowerShell/C# runtime')) 'Report page identifies runtime scope'
 Assert ([IO.File]::ReadAllText((Join-Path $view 'summary.md')).Contains('PowerShell/C# runtime')) 'Report summary identifies runtime scope'
+foreach($name in @('repo_coverage.json','coverage_inventory.json','coverage.xml')){if($name -eq 'repo_coverage.json'){$value=$coverage|ConvertTo-Json -Depth 20}else{$value='fixture'};[IO.File]::WriteAllText((Join-Path $view $name),$value)}
+$catalog=Join-Path $temp 'catalog.json';[IO.File]::WriteAllText($catalog,'[]')
+$portal=Join-Path $temp 'portal';$env:RUNTIME_SCHEMA_ARGS=$capture
+try { & (Join-Path $root 'script/report/build_portal.ps1') -Preview -CatalogPath $catalog -MainSnapshotPath (Join-Path $view 'summary.json') -OutputDirectory $portal -CoverageToolPath $tool | Out-Null } finally {$env:RUNTIME_SCHEMA_ARGS=$previous}
+Assert ([IO.File]::ReadAllText((Join-Path $portal 'index.html')).Contains('PowerShell/C# runtime')) 'Portal identifies runtime scope'
 $coverage.Scope='all-owned'
 $rejected=$false;try{Assert-RepoCoverage -Coverage $coverage}catch{$rejected=$true}
 Assert $rejected 'Altered scope rejected'
