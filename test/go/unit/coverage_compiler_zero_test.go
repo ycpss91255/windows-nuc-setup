@@ -237,3 +237,46 @@ func TestCompilerSelectClauseEntriesStayInLineCoverage(t *testing.T) {
 		})
 	}
 }
+
+func TestCompilerSameLineSelectUsesConservativeUnion(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "script", "test", "same_fixture")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	source := "package samefixture\nfunc Choose(a,b <-chan int) { select { case <-a: case <-b: } }\n"
+	inputs := map[string]string{filepath.Join(root, "go.mod"): "module windows_setup\n\ngo 1.27.3\n", filepath.Join(dir, "same.go"): source, filepath.Join(dir, "same_test.go"): "package samefixture\nimport \"testing\"\nfunc TestChoose(t *testing.T) { a:=make(chan int,1);a<-1;Choose(a,nil) }\n"}
+	for p, s := range inputs {
+		if err := os.WriteFile(p, []byte(s), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("GOTOOLCHAIN", "local")
+	t.Setenv("GOPROXY", "off")
+	t.Setenv("GOSUMDB", "off")
+	t.Setenv("GOWORK", "off")
+	t.Setenv("GOFLAGS", "-mod=mod")
+	out := filepath.Join(root, "coverage.out")
+	goexe := filepath.Join(runtime.GOROOT(), "bin", "go")
+	if runtime.GOOS == "windows" {
+		goexe += ".exe"
+	}
+	cmd := exec.Command(goexe, "test", "-count=1", "-coverprofile="+out, "./script/test/same_fixture")
+	cmd.Dir = root
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("compiler fixture: %v\n%s", err, b)
+	}
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "script/test/same_fixture/same.go"
+	report, _, err := rc.NormalizeGo([][]byte{raw}, map[string][]byte{path: []byte(source)}, "windows_setup")
+	if err != nil {
+		t.Fatalf("same-line select: %v\n%s", err, raw)
+	}
+	hit, ok := report.Files[path][2]
+	if !ok || hit {
+		t.Fatalf("same-line unselected case should conservatively keep line uncovered: %v", report.Files[path])
+	}
+}
